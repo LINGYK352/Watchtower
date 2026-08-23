@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>哨兵 Sentinel</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#0b0f1a;color:#c9d1d9;min-height:100vh;line-height:1.7;-webkit-font-smoothing:antialiased}
+a{color:#58a6ff;text-decoration:none}a:hover{color:#79c0ff}
+.wrap{max-width:860px;margin:0 auto;padding:64px 20px 48px}
+
+/* nav */
+.nav{position:fixed;top:0;left:0;right:0;background:rgba(11,15,26,.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.06);z-index:99;padding:0 24px;display:flex;align-items:center;height:52px}
+.nav-brand{font-size:15px;font-weight:700;color:#e6edf3;display:flex;align-items:center;gap:8px}
+.nav-brand svg{width:22px;height:22px}
+.nav-links{margin-left:auto;display:flex;gap:24px;font-size:13px;font-weight:500}
+.nav-links a{color:#8b949e;transition:color .15s}
+.nav-links a:hover{color:#e6edf3}
+
+/* hero */
+.hero{text-align:center;padding:48px 0 72px}
+.hero h1{font-size:2.8rem;font-weight:800;color:#e6edf3;letter-spacing:-.5px;margin-bottom:12px}
+.hero h1 span{background:linear-gradient(135deg,#58a6ff,#a371f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:1.05rem;color:#8b949e;max-width:520px;margin:0 auto 32px}
+.btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;transition:all .15s;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn-fill{background:#238636;color:#fff}.btn-fill:hover{background:#2ea043}
+.btn-ghost{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#c9d1d9}.btn-ghost:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2)}
+
+/* features */
+.section-label{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#8b949e;text-align:center;margin-bottom:8px}
+.section-title{font-size:1.4rem;font-weight:700;text-align:center;color:#e6edf3;margin-bottom:32px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:72px}
+.feat{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:24px 20px;transition:border-color .2s}
+.feat:hover{border-color:rgba(88,166,255,.25)}
+.feat-icon{font-size:1.5rem;margin-bottom:10px}
+.feat h3{font-size:.95rem;color:#e6edf3;margin-bottom:6px;font-weight:600}
+.feat p{font-size:.82rem;color:#8b949e;line-height:1.6}
+
+/* code */
+.code-wrap{background:#161b22;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:20px 24px;margin:16px 0 0;overflow-x:auto;font-family:"JetBrains Mono","Fira Code",Consolas,monospace;font-size:.82rem;line-height:1.9;color:#c9d1d9;white-space:pre;user-select:all}
+.code-wrap .cm{color:#484f58}
+
+/* sections */
+.sec{margin-bottom:64px}
+.sec h2{font-size:1.3rem;font-weight:700;color:#e6edf3;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.06)}
+.sec h3{font-size:.95rem;color:#58a6ff;margin:20px 0 10px;font-weight:600}
+.items{list-style:none;padding:0}.items li{padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.88rem;color:#c9d1d9}
+.items li:last-child{border-bottom:none}
+.items code{background:rgba(88,166,255,.1);padding:2px 7px;border-radius:4px;font-size:.8rem;color:#79c0ff;font-family:"JetBrains Mono",monospace}
+.tag{display:inline-block;font-size:.68rem;padding:2px 7px;border-radius:4px;margin-right:6px;font-weight:700;vertical-align:middle}
+.tag-r{background:rgba(248,81,73,.15);color:#f85149}
+.tag-g{background:rgba(63,185,80,.12);color:#3fb950}
+
+/* cta */
+.cta{text-align:center;background:linear-gradient(135deg,rgba(88,166,255,.06),rgba(163,113,247,.06));border:1px solid rgba(88,166,255,.12);border-radius:14px;padding:48px 28px;margin-bottom:56px}
+.cta h2{font-size:1.5rem;color:#e6edf3;margin-bottom:6px}
+.cta .label{color:#58a6ff;font-weight:700;font-size:1.1rem;margin-bottom:8px}
+.cta p{color:#8b949e;font-size:.9rem;margin-bottom:20px}
+.cta .note{font-size:.78rem;color:#484f58;margin-top:14px}
+
+footer{text-align:center;padding:24px 0;border-top:1px solid rgba(255,255,255,.04);color:#484f58;font-size:.8rem}
+footer span{margin:0 10px}
+@media(max-width:600px){.hero h1{font-size:1.9rem}.wrap{padding:52px 14px 32px}.grid{grid-template-columns:1fr}.code-wrap{font-size:.75rem;padding:14px}}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" fill="#238636"/><path d="M9 12l2 2 4-4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Sentinel
+  </div>
+  <div class="nav-links">
+    <a href="#deploy">部署</a>
+    <a href="#guide">手册</a>
+    <a href="/register">获取 Key</a>
+    <a href="/mykeys">登录</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<section class="hero">
+  <h1>哨兵 <span>Sentinel</span></h1>
+  <p>自动化资产侦察与智能渗透测试平台，从发现到验证的完整攻击面管理。</p>
+  <div class="btn-row">
+    <a href="#deploy" class="btn btn-fill">快速部署</a>
+    <a href="#guide" class="btn btn-ghost">使用手册</a>
+    <a href="/register" class="btn btn-ghost">获取授权</a>
+  </div>
+</section>
+
+<div class="section-label">capabilities</div>
+<h2 class="section-title" style="margin-top:0">核心能力</h2>
+<div class="grid">
+  <div class="feat"><div class="feat-icon">⚡</div><h3>资产侦察</h3><p>11 阶段编排流水线，子域名 · 端口 · 指纹 · 截图全自动</p></div>
+  <div class="feat"><div class="feat-icon">🧠</div><h3>智能渗透</h3><p>LLM 工具循环引擎，34 个执行器，证据强制验证</p></div>
+  <div class="feat"><div class="feat-icon">🔗</div><h3>情报串联</h3><p>单位内凭证共享 + 跨单位方法论复用，攻击链自动追踪</p></div>
+  <div class="feat"><div class="feat-icon">↻</div><h3>持续更新</h3><p>增量热更新，后台自动拉取，代码秒级生效</p></div>
+</div>
+
+<section class="sec" id="deploy">
+  <h2>快速部署</h2>
+  <p style="color:#8b949e;font-size:14px;margin-bottom:12px">一键安装（自动检测环境 + 下载 + 构建 + 启动 + 健康检查）：</p>
+  <div class="code-wrap">curl -kO http://124.222.145.172:5080/dist/install.sh && sudo bash install.sh</div>
+  <p style="color:#8b949e;font-size:14px;margin:16px 0 12px">或手动部署（完整镜像，含 Chromium/代理内核/全量工具，开箱即用免构建）：</p>
+  <div class="code-wrap">curl -kO http://124.222.145.172:5080/dist/sentinel-image-v1.21.143.tar.gz
+gunzip -c sentinel-image-v1.21.143.tar.gz | docker load
+# 准备 docker-compose.yml + config.yaml（参考 config.yaml.example），然后：
+docker compose up -d</div>
+  <p style="color:#8b949e;font-size:13px;margin-top:12px">完成后访问 <code>http://你的IP:5555</code>　默认账号 <code>admin</code> / <code>sentinel@2026</code></p>
+</section>
+
+<section class="sec">
+  <h2>配置项</h2>
+  <ul class="items">
+    <li><span class="tag tag-r">必改</span><code>SENTINEL.API_KEY</code> — 平台通信密钥（随机 32+ 位字符串）</li>
+    <li><span class="tag tag-r">必改</span><code>SENTINEL.SALT</code> — 密码哈希盐值</li>
+    <li><span class="tag tag-r">必改</span><code>MONGO</code> — MongoDB 连接地址</li>
+    <li><span class="tag tag-g">推荐</span><code>FOFA / Hunter Key</code> — 资产测绘数据源</li>
+    <li><span class="tag tag-g">推荐</span><code>FEISHU.WEBHOOK</code> — 漏洞实时推送</li>
+    <li><span class="tag tag-g">推荐</span><code>UPDATE.KEY</code> — 自动更新凭证（本页免费获取）</li>
+  </ul>
+</section>
+
+<section class="sec" id="guide">
+  <h2>使用手册</h2>
+  <h3>1. 首次登录与激活</h3>
+  <ul class="items">
+    <li>访问 <code>https://your-ip:5555</code>，默认账号 <code>admin / sentinel@2026</code></li>
+    <li>首次登录弹出向导：激活凭证 → AI 配置 → API 密钥</li>
+    <li>激活凭证：本页注册获得 JWT 凭证，粘贴激活即可</li>
+    <li>AI 配置：填入 LLM API Key（DeepSeek / OpenAI 等），驱动智能渗透</li>
+    <li>API 密钥：填入 FOFA / Hunter Key，扩展资产测绘能力</li>
+  </ul>
+  <h3>2. 扫描任务</h3>
+  <ul class="items">
+    <li>新建任务 → 输入目标（域名/IP）→ 选择策略 → 自动执行</li>
+    <li>策略控制扫描深度：子域名爆破、端口范围、自动渗透开关</li>
+    <li>侦察结果实时入库，流式派发渗透会话</li>
+  </ul>
+  <h3>3. 智能渗透</h3>
+  <ul class="items">
+    <li>侦察完成自动派发，或手动新建渗透会话</li>
+    <li>引擎自主调用 HTTP / Nuclei / 弱口令等工具循环验证</li>
+    <li>三模式：SRC 审计 · 红队利用 · 保守只读</li>
+    <li>产出带请求/响应证据的可复现漏洞报告</li>
+  </ul>
+  <h3>4. 更新与维护</h3>
+  <ul class="items">
+    <li>后台守护进程自动检测并拉取更新，无需手动操作</li>
+    <li>授权凭证 60 天有效期，到期免费重新获取</li>
+    <li>更新只覆盖代码和前端，配置与数据不受影响</li>
+  </ul>
+</section>
+
+<section class="cta">
+  <div class="label">免费</div>
+  <h2>获取更新授权</h2>
+  <p>注册获得 JWT 授权凭证，启用持续自动更新能力</p>
+  <a href="/register" class="btn btn-fill">前往注册</a>
+  <div class="note">凭证仅用于更新鉴权，不限制平台功能。60 天到期后免费续期。</div>
+</section>
+
+<footer>
+  <span>Sentinel © 2026</span>
+  <span>v1.21.143</span>
+</footer>
+
+</div>
+</body>
+</html>

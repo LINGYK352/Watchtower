@@ -1,0 +1,45 @@
+# 哨兵 Sentinel docker 构建上下文排除 —— 保证敏感/本地文件绝不进镜像。
+# 铁律（2026-07-08 用户明令）：规范文档、分发系统、开发密钥/账号密码、系统数据绝不进主平台镜像。
+# 2026-08-06 收口：分发系统已独立部署（生产 /opt/sentinel-cloud/），**整个 云端/ 绝不进主平台镜像**
+#   （文档 云端/docs + 分发系统 云端/distribution 都排除）。真正的边界是 Dockerfile 的白名单式精确 COPY，
+#   本文件是第二道黑名单防线：即使 COPY 误扩大，敏感物也挡在构建上下文外。
+
+# 整个云端体系（文档 + 分发系统），绝不进主平台镜像
+云端/
+scaffold/
+docs/
+*.bak-before-condense-*
+
+# 配置与密钥 / 账号密码（运行时挂载提供，绝不烘焙）
+config/config.yaml
+**/config.yaml
+*.key
+*.pem
+update_keys.json
+.update_version
+.hotupdate_manifest.json
+
+# 系统数据 / 注册库（业务数据、捐赠者凭证库，绝不进任何镜像）
+*.db
+*.sqlite
+*.sqlite3
+update_registry.db
+
+# 运行时 / 缓存 / 版本控制 / 依赖工程
+.git/
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+node_modules/
+frontend/node_modules/
+logs/
+shared/
+proxy_runtime/
+.venv/
+.update_backup/
+.hotupdate_backup/
+*.log
+*.tmp

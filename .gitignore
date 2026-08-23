@@ -1,0 +1,53 @@
+# ===== 哨兵 Sentinel 源代码仓 .gitignore =====
+# 只保留源代码，排除：外部二进制/离线依赖/前端依赖/云端文档/配置密钥/运行时数据
+
+# 外部工具二进制（mihomo/nuclei/PD全家桶等，488M，各自独立发布物，不入源码库）
+external/
+
+# 离线依赖 wheel（47M，按 requirements 重装即可）
+vendor/
+
+# 前端依赖与构建产物
+frontend/node_modules/
+frontend/dist/
+# 前端构建产物（npm run build 生成，不入库）
+docker/frontend/
+docker/frontend-new.tgz
+
+# 云端文档体系（规范文档/渗透报告，绝不外发）
+云端/
+
+# 配置密钥（含真实/默认密钥，用户配置不入库；只保留 .example 样例）
+config/config.yaml
+docker/config/config.yaml
+sentinel_platform/config.yaml
+*.key
+.env
+
+# 运行时数据（实例持久化，非源码）
+shared/
+*.db
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Claude Code 工作目录（含记忆文件：API keys/服务器密码/VM凭据等大量敏感信息，绝不外发）
+.claude/
+
+# 测试配置（可能含测试密钥）
+**/_test_config.yaml
+**/test_config.yaml
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# 临时文件
+_vm-*.tar.gz
+*.tmp
+*.bak

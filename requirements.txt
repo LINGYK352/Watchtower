@@ -1,0 +1,66 @@
+# 哨兵 Sentinel · sentinel_platform 平台层依赖（直接依赖精编清单）
+# 版本 pin 对齐**服务器 venv 实测值**（2026-07-07 pip freeze 校准；Python 3.8.10 / Linux）。
+# 只列平台代码直接 import 的顶层依赖；传递依赖由 pip 解析（完整 70 包见 vendor/wheels/）。
+#
+# 离线安装：pip install --no-index --find-links vendor/wheels -r requirements.txt
+# 生成 wheel：pip download -r requirements.txt -d vendor/wheels
+# 注：celery 5.1.2 需 pip<24.1 / setuptools<70 安装（已知约束）。
+
+# —— Web 框架 + REST（router 核心路由 / gunicorn 运行入口）——
+Flask==2.0.3
+Werkzeug==2.0.3
+flask-restx==1.0.3
+gunicorn==20.1.0
+
+# —— MongoDB（core.db / 全平台数据层）——
+pymongo==3.13.0
+
+# —— 出站 HTTP（core.http / notify / 漏洞情报源抓取）——
+requests==2.26.0
+urllib3==1.25.3
+certifi==2026.5.20
+charset-normalizer==2.0.12
+idna==3.15
+
+# —— YAML 解析（risk_intel/vuln_intel 的 nuclei 模板抓取器，惰性 import）——
+PyYAML==5.4.1
+
+# —— GeoIP 库（kernel/recon/enrich 的 IP 富化，读 external/geolite2 的 mmdb，惰性 import 降级）——
+# 平台 enrich.py 只 import maxminddb（不用 geoip2 的 requests/aiohttp 传递链）；
+# venv 同时装了 geoip2==2.9.0 属历史遗留，平台代码不依赖它，故不列此处（保持清单=真实直接依赖）。
+maxminddb==2.6.3
+
+# —— 系统资源监控（workspace/dashboard 设备信息/资源趋势，惰性 import 降级）——
+psutil==5.7.2
+
+# —— 计划任务 cron 校验（task_plan/task_schedule · asset/github_monitor，croniter 本地库）——
+croniter==6.0.0
+
+# —— 资产富化/指纹/域名工具 ——
+mmh3==3.0.0
+tld==0.12.6
+pyquery==1.4.3
+dnspython==2.2.1
+
+# —— 报告导出（xlsx）——
+openpyxl==3.0.0
+
+# —— TLS/证书处理（native certfetch / pyOpenSSL）——
+pyOpenSSL==22.1.0
+
+# —— 带外通道 DNSLog（自建 OOB，dnslib 起 DNS 服务）——
+dnslib==0.9.16
+
+# —— 浏览器工具（ai_pentest browser_navigate/login，playwright；未装则该工具降级）——
+playwright==1.40.0
+
+# —— 异步任务队列（kernel/orchestration 的 celery worker/scheduler 绑定，惰性 import 可选）——
+# 平台核心不硬依赖 celery（无 celery 时降级线程/同步执行）；仅 Linux worker 部署需装。
+celery==5.1.2
+kombu==5.5.4
+amqp==5.3.1
+billiard==3.6.4.0
+vine==5.1.0
+
+# —— 公开代理池 socks5 验活（system/_pool.py，可选运行时依赖，缺失则 socks5 验活降级）——
+PySocks==1.7.1

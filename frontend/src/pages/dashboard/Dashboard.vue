@@ -1,0 +1,527 @@
+<template>
+  <PageContainer title="态势总览" kicker="Dashboard" description="资产与任务概览、AI 渗透与算力消耗、设备运行状态，数据定时自动刷新。">
+    <template #extra>
+      <a-space>
+        <span v-if="lastRefresh" class="muted refresh-ts">{{ lastRefresh }}</span>
+        <a-button @click="loadAll">刷新</a-button>
+      </a-space>
+    </template>
+
+    <a-row :gutter="16">
+      <a-col v-for="item in metrics" :key="item.key" :xs="12" :sm="8" :lg="4">
+        <a-card :bordered="false" class="metric-card" hoverable @click="item.to && router.push(item.to)">
+          <div class="metric-body">
+            <div class="metric-icon" :style="{ background: item.bg, color: item.color }">
+              <component :is="item.icon" />
+            </div>
+            <div class="metric-text">
+              <div class="metric-title">{{ item.title }}</div>
+              <div class="metric-value" :class="{ loading: metricLoading }">{{ item.value.toLocaleString() }}</div>
+              <div v-if="item.sub" class="metric-sub">{{ item.sub }}</div>
+            </div>
+          </div>
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <a-row :gutter="16" class="section-row">
+      <a-col :xs="24" :lg="8">
+        <a-card title="AI 渗透会话" :bordered="false" :loading="sessLoading">
+          <template #extra><a-button type="link" @click="router.push('/pentest')">全部</a-button></template>
+          <div class="sess-grid">
+            <div v-for="s in sessCards" :key="s.key" class="sess-item">
+              <div class="sess-num" :style="{ color: s.color }">{{ s.value }}</div>
+              <div class="sess-label">{{ s.label }}</div>
+            </div>
+          </div>
+        </a-card>
+      </a-col>
+      <a-col :xs="24" :lg="8">
+        <a-card title="代理状态" :bordered="false" :loading="proxyLoading">
+          <template #extra><a-button type="link" @click="router.push('/proxy')">详情</a-button></template>
+          <a-descriptions :column="1" size="small">
+            <a-descriptions-item label="出口 IP">
+              <a-tag :color="proxyState.color">{{ proxyState.ip }}</a-tag>
+              <span :class="proxyState.cls">{{ proxyState.text }}</span>
+            </a-descriptions-item>
+            <a-descriptions-item label="累计流量">
+              <span class="proxy-traffic">↑ {{ fmtBytes(proxyData.upload) }} · ↓ {{ fmtBytes(proxyData.download) }}</span>
+            </a-descriptions-item>
+            <a-descriptions-item label="活跃连接">{{ proxyData.connections }}</a-descriptions-item>
+            <a-descriptions-item label="节点">{{ proxyData.node || '—' }}</a-descriptions-item>
+          </a-descriptions>
+        </a-card>
+      </a-col>
+      <a-col :xs="24" :lg="8">
+        <a-card title="算力消耗 (Token)" :bordered="false" :loading="tokenLoading">
+          <template #extra><a-button type="link" @click="router.push('/ai-config')">详情</a-button></template>
+          <a-statistic title="累计 Token" :value="tokenStat.total" :value-style="{ color: '#1677ff' }" />
+          <div class="token-sub">
+            <span>调用 {{ tokenStat.calls.toLocaleString() }} 次</span>
+            <span v-if="tokenStat.fail">· 失败 <b style="color:#cf1322">{{ tokenStat.fail }}</b></span>
+            <span>· 入 {{ fmtK(tokenStat.prompt) }} / 出 {{ fmtK(tokenStat.completion) }}</span>
+          </div>
+          <div v-if="tokenStat.topScene" class="token-scene muted">主要环节：{{ tokenStat.topScene }}</div>
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <!-- 网络质量总评（定时监测产出，点击进网络检测页详情）-->
+    <a-row :gutter="16" class="section-row" v-if="netQuality">
+      <a-col :span="24">
+        <a-card :bordered="false" class="netq-card" hoverable @click="router.push('/network-check')">
+          <div class="netq-bar" :class="'nq-' + (netQuality.level || 'unknown')">
+            <div class="netq-badge">
+              <div class="netq-level">{{ netQuality.level_text || '—' }}</div>
+              <div class="netq-score">{{ netQuality.score != null ? netQuality.score : '?' }}<span>分</span></div>
+            </div>
+            <div class="netq-body">
+              <div class="netq-title">网络环境质量 <a-tag v-for="(g, k) in (netQuality.dims || {})" :key="k" :color="dimColor(String(g))" class="netq-dim">{{ dimLabel(String(k)) }}</a-tag></div>
+              <div class="netq-summary">{{ netQuality.summary || '暂无体检数据，系统将自动检测' }}</div>
+              <div class="netq-time" v-if="netCheckedAt">最近检测：{{ netCheckedAt }} · 每 30 分钟自动监测 · 点击查看详情</div>
+            </div>
+          </div>
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <a-row :gutter="16" class="section-row">
+      <a-col :xs="24" :lg="8">
+        <a-card title="设备状态" :bordered="false" :loading="deviceLoading">
+          <div class="dev-list">
+            <div class="dev-row">
+              <span class="dev-label">CPU（{{ cpuCount || '-' }} 核）</span>
+              <div class="dev-val"><a-progress :percent="cpu" size="small" :status="cpu > 85 ? 'exception' : 'normal'" /></div>
+            </div>
+            <div class="dev-row">
+              <span class="dev-label">内存</span>
+              <div class="dev-val">
+                <a-progress :percent="memory" size="small" :status="memory > 85 ? 'exception' : 'normal'" />
+                <span v-if="memText" class="dev-sub">{{ memText }}</span>
+              </div>
+            </div>
+            <div class="dev-row">
+              <span class="dev-label">磁盘</span>
+              <div class="dev-val">
+                <a-progress :percent="disk" size="small" :status="disk > 90 ? 'exception' : 'normal'" />
+                <span v-if="diskText" class="dev-sub">{{ diskText }}</span>
+              </div>
+            </div>
+            <div class="dev-row">
+              <span class="dev-label">哨兵运行</span>
+              <div class="dev-val"><span class="uptime">{{ uptimeText }}</span><span class="dev-hint">（平台启动至今，非操作系统）</span></div>
+            </div>
+            <div class="dev-row">
+              <span class="dev-label">出口 IP</span>
+              <div class="dev-val">
+                <span class="mono">{{ exitIpText }}</span>
+                <a-tag v-if="proxyEnabled" :color="proxyOk ? 'green' : 'red'" class="dev-tag">{{ proxyOk ? '代理正常' : '代理异常' }}</a-tag>
+              </div>
+            </div>
+          </div>
+        </a-card>
+      </a-col>
+      <a-col :xs="24" :lg="16">
+        <a-card title="资源趋势" :bordered="false" :loading="chartLoading">
+          <template #extra>
+            <a-slider v-model:value="chartDays" :min="1" :max="360" :step="1" style="width: 160px; display: inline-block; margin-right: 8px;" :tip-formatter="(v: number) => v + '天'" @afterChange="loadChart" />
+            <span class="muted">{{ chartDays }}天</span>
+          </template>
+          <canvas ref="chartCanvas" class="resource-chart"></canvas>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-dot cpu-dot"></span>CPU</span>
+            <span class="legend-item"><span class="legend-dot mem-dot"></span>内存</span>
+            <span class="legend-item"><span class="legend-dot disk-dot"></span>磁盘</span>
+            <span class="legend-item"><span class="legend-line thresh-line"></span>80% 阈值</span>
+          </div>
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <a-row :gutter="16" class="section-row">
+      <a-col :span="24">
+        <a-card title="最近任务" :bordered="false">
+          <template #extra><a-button type="link" @click="router.push('/tasks')">全部</a-button></template>
+          <a-table :columns="taskColumns" :data-source="recentTasks" :loading="taskLoading" row-key="_id" :pagination="false" size="small">
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'status'"><StatusTag :value="String(record.status || '')" /></template>
+              <template v-else-if="column.key === 'name'">
+                <a @click="router.push(`/tasks/${record._id}`)">{{ record.name }}</a>
+              </template>
+            </template>
+          </a-table>
+        </a-card>
+      </a-col>
+    </a-row>
+  </PageContainer>
+</template>
+
+<script setup lang="ts">
+import { onMounted, reactive, ref, markRaw, computed, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { ProfileOutlined, GlobalOutlined, ClusterOutlined, CloudServerOutlined, BugOutlined, RobotOutlined } from '@ant-design/icons-vue'
+import PageContainer from '../../layouts/PageContainer.vue'
+import StatusTag from '../../components/StatusTag.vue'
+import { collectionApi } from '../../api/assets'
+import { taskApi } from '../../api/task'
+import { consoleApi } from '../../api/console'
+import { pentestApi } from '../../api/pentest'
+import { aiConfigApi } from '../../api/aiConfig'
+import { proxyApi } from '../../api/proxy'
+import { request } from '../../api/request'
+import { useAutoRefresh } from '../../composables/useAutoRefresh'
+import type { RowRecord } from '../../api/types'
+
+const router = useRouter()
+const lastRefresh = ref('')
+
+function fmtK(n: number) {
+  if (!n) return '0'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
+  return String(n)
+}
+function fmtBytes(n: number) {
+  if (!n) return '0 B'
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + ' GB'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + ' MB'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + ' KB'
+  return n + ' B'
+}
+
+const metricLoading = ref(false)
+const metrics = ref([
+  { key: 'task', title: '任务总数', value: 0, sub: '', to: '/tasks', icon: markRaw(ProfileOutlined), color: '#1677ff', bg: '#e6f4ff' },
+  { key: 'domain', title: '域名', value: 0, sub: '', to: '/search', icon: markRaw(GlobalOutlined), color: '#13c2c2', bg: '#e6fffb' },
+  { key: 'ip', title: 'IP', value: 0, sub: '', to: '/search', icon: markRaw(ClusterOutlined), color: '#722ed1', bg: '#f9f0ff' },
+  { key: 'site', title: '站点', value: 0, sub: '', to: '/search', icon: markRaw(CloudServerOutlined), color: '#fa8c16', bg: '#fff7e6' },
+  { key: 'vuln', title: '漏洞总数', value: 0, sub: '', to: '/vuln-center', icon: markRaw(BugOutlined), color: '#cf1322', bg: '#fff1f0' },
+  { key: 'sess', title: 'AI 渗透会话', value: 0, sub: '', to: '/pentest', icon: markRaw(RobotOutlined), color: '#2f54eb', bg: '#f0f5ff' }
+])
+
+async function loadMetrics() {
+  metricLoading.value = true
+  const get = (k: string) => metrics.value.find(m => m.key === k)!
+  await Promise.all([
+    { key: 'task', ns: 'task' }, { key: 'domain', ns: 'domain' },
+    { key: 'ip', ns: 'ip' }, { key: 'site', ns: 'site' }
+  ].map(async ({ key, ns }) => {
+    try { const d = await collectionApi.list(ns, { page: 1, size: 1 }); get(key).value = d.total || 0 }
+    catch { get(key).value = 0 }
+  }))
+  try {
+    const s = await pentestApi.findingStat()
+    const v = get('vuln'); v.value = s.combined_total || 0
+    v.sub = `扫描 ${s.poc.total} · AI ${s.ai.verified}`
+  } catch { get('vuln').value = 0 }
+  metricLoading.value = false
+}
+/* AI 渗透会话统计 */
+const sessLoading = ref(false)
+const sess = reactive({ total: 0, running: 0, queued: 0, waiting: 0, paused: 0, done: 0, fatal: 0, stopped: 0, active: 0 })
+const sessCards = computed(() => [
+  { key: 'active', label: '进行中', value: sess.active, color: '#1677ff' },
+  { key: 'running', label: '执行中', value: sess.running, color: '#52c41a' },
+  { key: 'done', label: '已完成', value: sess.done, color: '#8c8c8c' },
+  { key: 'paused', label: '已暂停', value: sess.paused, color: '#fa8c16' },
+  { key: 'fatal', label: '失败', value: sess.fatal, color: '#cf1322' },
+  { key: 'total', label: '总计', value: sess.total, color: '#2f54eb' }
+])
+async function loadSession() {
+  sessLoading.value = true
+  try {
+    const s = await pentestApi.sessionStat()
+    Object.assign(sess, s)
+    metrics.value.find(m => m.key === 'sess')!.value = s.total || 0
+    metrics.value.find(m => m.key === 'sess')!.sub = `进行中 ${s.active}`
+  } catch { /* 忽略 */ } finally { sessLoading.value = false }
+}
+
+/* Token 消耗 */
+const tokenLoading = ref(false)
+const tokenStat = reactive({ total: 0, calls: 0, fail: 0, prompt: 0, completion: 0, topScene: '' })
+async function loadToken() {
+  tokenLoading.value = true
+  try {
+    const u = await aiConfigApi.usageStat()
+    tokenStat.total = u.overall.total || 0
+    tokenStat.calls = u.overall.calls || 0
+    tokenStat.fail = u.overall.fail_calls || 0
+    tokenStat.prompt = u.overall.prompt || 0
+    tokenStat.completion = u.overall.completion || 0
+    tokenStat.topScene = u.by_scene?.[0]?.name || ''
+  } catch { /* 忽略 */ } finally { tokenLoading.value = false }
+}
+
+/* 设备状态 + 运行时间 */
+const deviceLoading = ref(false)
+const cpu = ref(0); const memory = ref(0); const disk = ref(0); const uptime = ref(0)
+const cpuCount = ref(0)
+const memTotalGb = ref(0); const memUsedGb = ref(0)
+const diskTotalGb = ref(0); const diskUsedGb = ref(0)
+const exitIp = ref(''); const proxyOk = ref(false); const proxyEnabled = ref(false)
+const uptimeText = computed(() => {
+  const s = uptime.value
+  if (!s) return '—'
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
+  if (d > 0) return `${d} 天 ${h} 小时`
+  if (h > 0) return `${h} 小时 ${m} 分`
+  return `${m} 分钟`
+})
+const memText = computed(() => memTotalGb.value ? `${memUsedGb.value} / ${memTotalGb.value} GB` : '')
+const diskText = computed(() => diskTotalGb.value ? `${diskUsedGb.value} / ${diskTotalGb.value} GB` : '')
+const cpuText = computed(() => cpuCount.value ? `${cpu.value}%（${cpuCount.value} 核）` : `${cpu.value}%`)
+const exitIpText = computed(() => {
+  if (!exitIp.value) return '—'
+  if (!proxyEnabled.value) return `${exitIp.value}（直连）`
+  return proxyOk.value ? `${exitIp.value}（代理出口）` : `${exitIp.value}（代理异常·实际直连出口）`
+})
+async function loadDevice() {
+  deviceLoading.value = true
+  try {
+    const info = await consoleApi.info()
+    const d = (info.device_info || {}) as Record<string, unknown>
+    cpu.value = Math.round(Number(d.cpu_percent ?? 0))
+    memory.value = Math.round(Number(d.memory_percent ?? 0))
+    cpuCount.value = Number(d.cpu_count ?? 0)
+    memTotalGb.value = Number(d.memory_total_gb ?? 0)
+    memUsedGb.value = Number(d.memory_used_gb ?? 0)
+    const du = d.disk_usage as { percent?: number; total?: number; used?: number } | undefined
+    disk.value = Math.round(Number(du?.percent ?? 0))
+    const g = 1024 ** 3
+    diskTotalGb.value = du?.total ? Math.round((du.total / g) * 10) / 10 : 0
+    diskUsedGb.value = du?.used ? Math.round((du.used / g) * 10) / 10 : 0
+    uptime.value = Number(d.uptime_seconds ?? 0)
+    exitIp.value = String(d.exit_ip ?? '')
+    proxyOk.value = Boolean(d.proxy_ok)
+    proxyEnabled.value = Boolean(d.proxy_enabled)
+  } catch { /* 设备信息可选 */ } finally { deviceLoading.value = false }
+}
+
+/* 代理状态 */
+const proxyLoading = ref(false)
+const proxyData = reactive({ exitIp: '', directIp: '', proxied: false, hasData: false, enabled: false, errMsg: '', upload: 0, download: 0, connections: 0, node: '' })
+/* 代理状态展示：单一事实源，信任后端 last-good 稳定后的 proxied 判定，前端不再自己比 IP（治连续刷新闪烁）。
+   四态：代理生效(绿) / 代理开启但连不通=网络异常(红,不静默不误判直连) / 未开代理=直连出口(灰) / 无数据=—。
+   语义铁律：只有 smart 模式才降级直连；global/rule 连不通是硬失败，必须明确报"代理不可用/网络异常"，
+   绝不显示成"直连出口"误导用户以为在裸奔真实 IP。 */
+const proxyState = computed(() => {
+  if (proxyData.proxied && proxyData.exitIp) {
+    return { ip: proxyData.exitIp, color: 'green', text: '代理生效', cls: 'proxy-ok' }
+  }
+  // 代理已开启却探不到代理出口(proxy_ip空+有error) = 代理不可达/网络异常，明确红牌告警
+  if (proxyData.enabled && !proxyData.exitIp && (proxyData.errMsg || proxyData.hasData)) {
+    return { ip: proxyData.directIp || '⚠', color: 'red', text: '代理不可用·网络异常', cls: 'proxy-err' }
+  }
+  const shown = proxyData.exitIp || proxyData.directIp
+  if (shown) {
+    return { ip: shown, color: 'default', text: '直连出口', cls: 'proxy-warn' }
+  }
+  return { ip: '—', color: 'default', text: proxyData.hasData ? '出口未知' : '', cls: 'proxy-warn' }
+})
+async function loadProxy() {
+  proxyLoading.value = true
+  try {
+    const [ipData, trafficData] = await Promise.all([proxyApi.exitIp(), proxyApi.traffic()])
+    proxyData.exitIp = ipData.proxy_ip || ''
+    proxyData.directIp = ipData.direct_ip || ''
+    proxyData.proxied = Boolean((ipData as any).proxied)
+    // 代理是否启用 + 探测错误（区分"代理不可达网络异常"vs"未开代理直连"）
+    const errRaw = String((ipData as any).error || '')
+    proxyData.enabled = errRaw !== 'proxy not enabled'   // 后端未启用时 error 恒为此串
+    proxyData.errMsg = (errRaw && errRaw !== 'proxy not enabled') ? errRaw : ''
+    proxyData.hasData = true
+    proxyData.upload = trafficData.total_up || 0
+    proxyData.download = trafficData.total_down || 0
+    proxyData.connections = trafficData.connections || 0
+    proxyData.node = (trafficData as any).node || ''
+  } catch { /* 代理信息可选 */ } finally { proxyLoading.value = false }
+}
+
+/* 最近任务 */
+const taskLoading = ref(false)
+const recentTasks = ref<RowRecord[]>([])
+const taskColumns = [
+  { title: '任务名', key: 'name', ellipsis: true },
+  { title: '目标', dataIndex: 'target', key: 'target', ellipsis: true },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '开始时间', dataIndex: 'start_time', key: 'start_time', width: 160 }
+]
+async function loadTasks() {
+  taskLoading.value = true
+  try { const data = await taskApi.list({ page: 1, size: 8, order: '-_id' }); recentTasks.value = data.items || [] }
+  catch { recentTasks.value = [] } finally { taskLoading.value = false }
+}
+
+// 网络质量总评（读定时监测落库的最新结果）
+const netQuality = ref<Record<string, any> | null>(null)
+const netCheckedAt = ref('')
+function dimLabel(k: string) { return ({ deps: '依赖', stability: '出网', ping: '链路', dns: 'DNS', proxy: '代理' } as Record<string, string>)[k] || k }
+function dimColor(g: string) { return ({ good: 'green', fair: 'gold', poor: 'orange', dead: 'red' } as Record<string, string>)[g] || 'default' }
+async function loadNetQuality() {
+  try {
+    const r = await request<any>('/api/network/quality/latest')
+    if (r && r.has_data && r.assess) { netQuality.value = r.assess; netCheckedAt.value = r.checked_at || '' }
+    else { netQuality.value = { level: 'unknown', level_text: '待检测', score: null, summary: '暂无体检数据，系统将在 30 分钟内自动检测（或到网络检测页手动体检）', dims: {} }; netCheckedAt.value = '' }
+  } catch { /* 网络质量可选，取不到不影响 */ }
+}
+
+function loadAll() {
+  loadMetrics(); loadSession(); loadToken(); loadDevice(); loadProxy(); loadTasks(); loadChart(); loadNetQuality()
+  lastRefresh.value = new Date().toLocaleTimeString()
+}
+// 默认自动刷新(30s)——删除手动开关后恒定开启,useAutoRefresh 内部 onMounted 起定时器,返回值无需接收
+useAutoRefresh(loadAll, 30000)
+onMounted(loadAll)
+
+/* 资源趋势图(Canvas, 后端历史数据) */
+const chartCanvas = ref<HTMLCanvasElement | null>(null)
+const chartDays = ref(1)
+const chartLoading = ref(false)
+const chartPoints = ref<Array<{ts: number; cpu: number; memory: number; disk: number}>>([])
+
+async function loadChart() {
+  chartLoading.value = true
+  try {
+    const data = await consoleApi.resourceHistory(chartDays.value)
+    chartPoints.value = data.points || []
+  } catch { chartPoints.value = [] }
+  finally { chartLoading.value = false }
+  // drawChart 必须在 loading=false 之后:a-card :loading 会用骨架屏卸载 canvas,
+  // loading 期间画会画到即将卸载的节点上(空白)。nextTick 等 canvas 重新挂载再画。
+  await nextTick()
+  drawChart()
+}
+
+function drawChart() {
+  const canvas = chartCanvas.value
+  if (!canvas) return
+  // 高清适配
+  const dpr = window.devicePixelRatio || 1
+  const rect = canvas.getBoundingClientRect()
+  canvas.width = rect.width * dpr
+  canvas.height = rect.height * dpr
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.scale(dpr, dpr)
+  const w = rect.width, h = rect.height
+  const pad = { top: 10, bottom: 20, left: 35, right: 10 }
+  const chartW = w - pad.left - pad.right
+  const chartH = h - pad.top - pad.bottom
+  const points = chartPoints.value
+
+  ctx.clearRect(0, 0, w, h)
+
+  // Grid
+  ctx.strokeStyle = '#f0f0f0'
+  ctx.lineWidth = 1
+  ctx.font = '10px sans-serif'
+  ctx.fillStyle = '#aaa'
+  for (const pct of [0, 25, 50, 75, 100]) {
+    const y = pad.top + chartH * (1 - pct / 100)
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + chartW, y); ctx.stroke()
+    ctx.fillText(pct + '%', 2, y + 3)
+  }
+
+  // Threshold line 80%
+  const threshY = pad.top + chartH * (1 - 80 / 100)
+  ctx.strokeStyle = '#ff4d4f'
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+  ctx.beginPath(); ctx.moveTo(pad.left, threshY); ctx.lineTo(pad.left + chartW, threshY); ctx.stroke()
+  ctx.setLineDash([])
+
+  if (points.length < 2) {
+    ctx.fillStyle = '#ccc'
+    ctx.font = '13px sans-serif'
+    ctx.fillText('数据采集中...', w / 2 - 40, h / 2)
+    return
+  }
+
+  function drawLine(key: 'cpu' | 'memory' | 'disk', color: string) {
+    if (!ctx || points.length < 2) return
+    const step = chartW / (points.length - 1)
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1.5
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    for (let i = 0; i < points.length; i++) {
+      const x = pad.left + i * step
+      const y = pad.top + chartH * (1 - (points[i][key] || 0) / 100)
+      if (i === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  }
+
+  drawLine('cpu', '#1677ff')
+  drawLine('memory', '#52c41a')
+  drawLine('disk', '#fa8c16')
+}
+</script>
+
+<style scoped>
+.metric-card { cursor: pointer; transition: transform .15s ease; }
+.metric-card:hover { transform: translateY(-2px); }
+.metric-body { display: flex; align-items: center; gap: 14px; }
+.metric-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.metric-text { min-width: 0; }
+.metric-title { font-size: 13px; color: #8c8c8c; line-height: 1.4; }
+.metric-value { font-size: 26px; font-weight: 600; color: #1f2937; line-height: 1.2; }
+.metric-value.loading { opacity: .4; }
+.metric-sub { font-size: 11px; color: #bbb; margin-top: 2px; }
+.section-row { margin-top: 16px; }
+.muted { color: #aaa; }
+.refresh-ts { font-size: 12px; }
+.sess-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.sess-item { text-align: center; padding: 6px 0; }
+.sess-num { font-size: 24px; font-weight: 600; line-height: 1.1; }
+.sess-label { font-size: 12px; color: #8c8c8c; margin-top: 2px; }
+.token-sub { font-size: 12px; color: #8c8c8c; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.token-scene { font-size: 12px; margin-top: 6px; }
+.uptime { font-weight: 600; color: #389e0d; }
+/* 设备状态：label 固定宽 + 值区弹性，进度条与副文字同一行对齐，彻底消除 progress/文字错位 */
+.dev-list { display: flex; flex-direction: column; gap: 12px; }
+.dev-row { display: flex; align-items: center; gap: 10px; min-height: 24px; }
+.dev-label { flex: 0 0 88px; font-size: 13px; color: #8c8c8c; white-space: nowrap; }
+.dev-val { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.dev-val :deep(.ant-progress) { flex: 1 1 auto; margin: 0; min-width: 0; }
+.dev-val :deep(.ant-progress-text) { font-variant-numeric: tabular-nums; }
+.dev-sub { flex: 0 0 auto; font-size: 12px; color: #888; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dev-hint { font-size: 11px; color: #bbb; white-space: nowrap; }
+.dev-tag { margin: 0; flex: 0 0 auto; }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
+.proxy-ok { font-size: 11px; color: #52c41a; margin-left: 6px; }
+.proxy-warn { font-size: 11px; color: #fa8c16; margin-left: 6px; }
+.proxy-err { font-size: 11px; color: #cf1322; margin-left: 6px; font-weight: 500; }
+.proxy-traffic { font-weight: 500; color: #1f2937; }
+/* 网络质量总评卡 */
+.netq-card { cursor: pointer; transition: transform .15s ease; }
+.netq-card:hover { transform: translateY(-2px); }
+.netq-bar { display: flex; align-items: center; gap: 18px; }
+.netq-badge { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 88px; padding: 6px 14px; border-radius: 10px; color: #fff; }
+.netq-level { font-size: 24px; font-weight: 700; line-height: 1.1; }
+.netq-score { font-size: 13px; opacity: .95; } .netq-score span { font-size: 10px; }
+.netq-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.netq-dim { margin: 0; font-size: 11px; line-height: 18px; }
+.netq-summary { font-size: 14px; color: var(--dt-text, #333); }
+.netq-time { font-size: 12px; color: var(--dt-muted, #999); margin-top: 4px; }
+.nq-excellent .netq-badge, .nq-good .netq-badge { background: #52c41a; }
+.nq-fair .netq-badge { background: #faad14; }
+.nq-poor .netq-badge { background: #fa8c16; }
+.nq-critical .netq-badge { background: #cf1322; }
+.nq-unknown .netq-badge { background: #bfbfbf; }
+.resource-chart { width: 100%; height: 180px; display: block; }
+.chart-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #8c8c8c; }
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-dot { width: 10px; height: 3px; border-radius: 2px; }
+.legend-line { width: 14px; height: 0; border-top: 2px dashed #ff4d4f; }
+.cpu-dot { background: #1677ff; }
+.mem-dot { background: #52c41a; }
+.disk-dot { background: #fa8c16; }
+.thresh-line { }
+</style>
+
+
+

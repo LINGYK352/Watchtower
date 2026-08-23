@@ -1,0 +1,1 @@
+{"scripts":{"dev":"vite --host 0.0.0.0","build":"vue-tsc --noEmit && vite build","preview":"vite preview --host 0.0.0.0"},"dependencies":{"@ant-design/icons-vue":"^7.0.1","@vitejs/plugin-vue":"^5.2.4","ant-design-vue":"^4.2.6","vite":"^5.4.21","vue":"^3.5.25","vue-router":"^4.6.3"},"devDependencies":{"typescript":"^5.9.3","vue-tsc":"^2.2.12"}}

@@ -1,0 +1,105 @@
+# 哨兵 Sentinel 容器化编排 —— 全 docker 分发 + 增量热更共存。
+#
+# 关键设计：**应用代码以挂载卷进容器**（`../:/opt/sentinel/current`），镜像只装依赖。
+#   → 首次：docker compose up -d 起全部服务，代码从宿主机卷加载。
+#   → 后续增量热更：update_client/hot_update 补丁宿主机文件 → web gunicorn --reload 自动重载；
+#     compose 变更时 web 容器经 docker.sock 自动 force-recreate。**无需手动重建镜像/重拉**。
+#   → config.yaml、mongo 数据走独立卷，热更绝不覆盖。
+#
+# 起：docker compose -f docker/docker-compose.yml up -d
+
+x-app-volumes: &app-volumes
+  - ../:/opt/sentinel/current:rw
+  - ./config:/opt/sentinel/current/config:rw
+  - sentinel_extensions:/opt/sentinel/current/shared/ai_extensions:rw
+
+services:
+  mongo:
+    image: mongo:5.0
+    restart: unless-stopped
+    volumes: [ "sentinel_mongo:/data/db" ]
+
+  rabbitmq:
+    image: rabbitmq:3.9
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: sentinel
+      RABBITMQ_DEFAULT_PASS: sentinelpassword
+      RABBITMQ_DEFAULT_VHOST: /sentinelhost
+
+  # mihomo 代理内核：**独立容器**（2026-08 改造，根治端口冲突 + web 重启连带停 worker/scheduler + 容器
+  # 内嵌DNS高并发瓶颈）。同镜像（含二进制 external/mihomo/），读共享卷 config，controller 监听 0.0.0.0 供
+  # 业务容器经服务名 mihomo:19090/17890 连入。生命周期归 compose（restart:unless-stopped 自愈），平台不再
+  # spawn/kill mihomo，改 controller 热 reload（见 _mihomo.py 容器模式）。不映射端口到 host（仅 compose 内网）。
+  mihomo:
+    image: sentinel:base
+    restart: unless-stopped
+    depends_on: [ mongo ]
+    volumes: *app-volumes
+    cap_add: [ NET_ADMIN ]
+    expose: [ "17890", "17891", "17892", "19090" ]
+    # 读共享卷 config 起；config 由平台 build_runtime_config 生成（缺失时 mihomo 用内置默认起，仍可 reload）。
+    # -ext-ctl 0.0.0.0:19090 强制 controller 监听全接口：不受启动时序影响（否则首次读到旧 config 的
+    # 127.0.0.1 会只监听容器内 localhost，业务容器连 mihomo:19090 被拒——实测踩坑，用命令行覆盖根治）。
+    command: sh -c "/opt/sentinel/current/external/mihomo/mihomo-linux-amd64 -d /opt/sentinel/current/shared/proxy_runtime -f /opt/sentinel/current/shared/proxy_runtime/config.yaml -ext-ctl 0.0.0.0:19090"
+
+  web:
+    image: sentinel:base
+    build: { context: .., dockerfile: docker/Dockerfile }
+    restart: unless-stopped
+    # init:true：tini 作 PID1 回收本容器 recon 子进程（naabu/nuclei 等）的孤儿/僵尸（gunicorn 不回收）。
+    # 2026-08 改造：web 不再是 worker/scheduler 的 netns/pid 宿主（三容器已解耦独立网络）。
+    init: true
+    depends_on: [ mongo, rabbitmq, mihomo ]
+    environment:
+      MIHOMO_HOST: mihomo          # 容器模式：mihomo 是独立容器，经服务名访问（见 _mihomo._mihomo_host）
+    volumes:
+      - ../:/opt/sentinel/current:rw
+      - ./config:/opt/sentinel/current/config:rw
+      - sentinel_extensions:/opt/sentinel/current/shared/ai_extensions:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # gthread 线程模型(非默认 sync)：SSE 长连接(会话实时观察 /session/<id>/stream)占线程不占 worker，
+    # 否则 -w 3 sync 下几个人开实时流就把 3 个 worker 占满→全平台卡死。--timeout 0 防长连接被 worker 超时杀。
+    command: gunicorn -b 0.0.0.0:5013 sentinel_platform.wsgi:application -w 3 --threads 8 -k gthread --timeout 0 --reload
+    ports: [ "5013:5013" ]
+
+  worker:
+    image: sentinel:base
+    restart: unless-stopped
+    depends_on: [ mongo, rabbitmq, mihomo ]
+    volumes: *app-volumes
+    # 2026-08 改造：独立 netns/pid（不再共享 web）。根治「web 重启→Docker 强制停共享 netns 的
+    # worker/scheduler(Exit137)且不自动拉起」。代理经服务名 mihomo:17890（独立容器）。
+    # naabu 原始套接字需 NET_RAW/NET_ADMIN——独立网络下自己声明（原共享 web netns 时靠 web 的 cap）。
+    cap_add: [ NET_RAW, NET_ADMIN ]
+    environment:
+      MIHOMO_HOST: mihomo
+    command: celery -A sentinel_platform.celery_app:celery_app worker -l info -c 4
+
+  scheduler:
+    image: sentinel:base
+    restart: unless-stopped
+    depends_on: [ mongo, rabbitmq, mihomo ]
+    volumes: *app-volumes
+    # 2026-08 改造：独立 netns/pid。mihomo 生命周期归 compose（独立容器），scheduler 的自愈
+    # ensure_core_running 改为经 controller 探活 + reload config（见 _mihomo 容器模式），不再本地 spawn。
+    environment:
+      MIHOMO_HOST: mihomo
+    command: python -m sentinel_platform.scheduler
+
+# 注意：分发系统（update_source :5080）已于 2026-08-06 拆为独立系统，只在运营方云端服务器
+# 独立部署（/opt/sentinel-cloud/distribution/，独立 systemd 服务），**不再进主平台 compose 栈**。
+# 主平台镜像也不再烘焙 云端/distribution（见 Dockerfile）。捐赠者侧只跑主平台 + update_client 拉更新。
+
+  nginx:
+    image: nginx:1.23-alpine
+    restart: unless-stopped
+    depends_on: [ web ]
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports: [ "5555:5555" ]
+
+volumes:
+  sentinel_mongo:
+  sentinel_extensions:

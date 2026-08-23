@@ -1,0 +1,170 @@
+/* ===== 夜间模式：赛博作战室风（与 AI 会话台一致）=====
+   由 <html data-theme="dark"> 触发。Ant 组件内部由 App.vue 的 darkAlgorithm 处理；
+   这里覆盖我们自己写的 --dt-* 变量 + 全局壳层（header/sider/card/表格/滚动条）。 */
+html[data-theme="dark"] {
+  --dt-primary: #00e5ff;
+  --dt-primary-hover: #5cf0ff;
+  --dt-cyan: #00e5ff;
+  --dt-gradient: linear-gradient(135deg, #00e5ff 0%, #0091ff 100%);
+  --dt-gradient-soft: linear-gradient(135deg, rgba(0,229,255,.10) 0%, rgba(0,145,255,.10) 100%);
+  --dt-bg: #0a0e17;
+  --dt-card: #0d1424;
+  --dt-text: #cfe6f5;
+  --dt-muted: #5f7690;
+  --dt-border: #16324a;
+  --dt-border-strong: #1e3a56;
+  --dt-sider: #070b14;
+  --dt-sider-grad: linear-gradient(180deg, #0b1220 0%, #070b14 100%);
+  --dt-shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+  --dt-shadow: 0 2px 10px rgba(0,0,0,.45);
+  --dt-shadow-hover: 0 0 22px rgba(0,229,255,.18), 0 6px 20px rgba(0,0,0,.5);
+  --dt-shadow-primary: 0 0 14px rgba(0,229,255,.3);
+  --dt-fill: #0d1424;
+}
+
+/* body / 内容区网格底纹（弱化，呼应会话台不喧宾夺主） */
+html[data-theme="dark"] body { background: var(--dt-bg); color: var(--dt-text); }
+html[data-theme="dark"] .app-content {
+  background:
+    linear-gradient(rgba(0,229,255,.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,.028) 1px, transparent 1px),
+    var(--dt-bg);
+  background-size: 34px 34px, 34px 34px, auto;
+}
+
+/* Header：去白底，改深色 + 青描边 */
+html[data-theme="dark"] .app-shell .app-header {
+  background: #0d1424 !important;
+  border-bottom: 1px solid var(--dt-border);
+  box-shadow: 0 1px 0 rgba(0,229,255,.08);
+}
+html[data-theme="dark"] .app-header, html[data-theme="dark"] .app-header * { color: var(--dt-text); }
+html[data-theme="dark"] .page-title { color: var(--dt-text) !important; }
+html[data-theme="dark"] .app-header .ant-breadcrumb,
+html[data-theme="dark"] .app-header .ant-breadcrumb a,
+html[data-theme="dark"] .app-header .ant-breadcrumb li,
+html[data-theme="dark"] .app-header .ant-breadcrumb .ant-breadcrumb-separator { color: var(--dt-muted) !important; }
+html[data-theme="dark"] .trigger { color: var(--dt-text); }
+html[data-theme="dark"] .trigger:hover { color: var(--dt-primary); }
+html[data-theme="dark"] .user-entry { color: var(--dt-text); }
+html[data-theme="dark"] .user-entry:hover { background: rgba(0,229,255,.08); }
+html[data-theme="dark"] .user-name { color: var(--dt-text); }
+html[data-theme="dark"] .user-caret { color: var(--dt-muted); }
+html[data-theme="dark"] .user-avatar { background: var(--dt-primary) !important; color: #001018 !important; }
+html[data-theme="dark"] .app-header .ant-btn-text { color: var(--dt-text) !important; }
+html[data-theme="dark"] .app-header .ant-btn-text:hover { color: var(--dt-primary) !important; background: rgba(0,229,255,.08) !important; }
+
+/* 侧栏：更深 + 选中青色发光 */
+html[data-theme="dark"] .app-sider { box-shadow: 2px 0 18px rgba(0,0,0,.5); }
+html[data-theme="dark"] .sider-menu .ant-menu-dark .ant-menu-item-selected,
+html[data-theme="dark"] .sider-menu .ant-menu-dark .ant-menu-item-selected:hover {
+  background: rgba(0,229,255,.14) !important;
+  box-shadow: inset 3px 0 0 var(--dt-primary), 0 0 14px rgba(0,229,255,.14);
+  color: var(--dt-primary) !important;
+}
+html[data-theme="dark"] .brand { border-bottom: 1px solid rgba(0,229,255,.1); }
+
+/* 卡片：深底 + 青色 hover 光 */
+html[data-theme="dark"] .page-card, html[data-theme="dark"] .search-card, html[data-theme="dark"] .metric-card {
+  background: var(--dt-card);
+  border: 1px solid var(--dt-border);
+}
+html[data-theme="dark"] .page-card:hover, html[data-theme="dark"] .metric-card:hover {
+  border-color: rgba(0,229,255,.4);
+  box-shadow: var(--dt-shadow-hover);
+}
+
+/* 表格：覆盖浅色表头，暗底 */
+html[data-theme="dark"] .ant-table-thead > tr > th {
+  background: #0f1a2e !important;
+  color: var(--dt-text) !important;
+  border-bottom-color: var(--dt-border) !important;
+}
+html[data-theme="dark"] .ant-table-tbody > tr:hover > td { background: rgba(0,229,255,.06) !important; }
+/* 固定列（左/右冻结）默认白底 → 暗色卡底，否则 ID/勾选/操作列显示为白色条带 */
+html[data-theme="dark"] .ant-table-cell-fix-left,
+html[data-theme="dark"] .ant-table-cell-fix-right { background: var(--dt-card) !important; }
+html[data-theme="dark"] .ant-table-row:hover .ant-table-cell-fix-left,
+html[data-theme="dark"] .ant-table-row:hover .ant-table-cell-fix-right { background: #0f1a2e !important; }
+
+/* 主按钮：青色 + 发光 */
+html[data-theme="dark"] .ant-btn-primary {
+  background: var(--dt-primary) !important; color: #001018 !important;
+  box-shadow: 0 0 14px rgba(0,229,255,.3);
+}
+html[data-theme="dark"] .ant-btn-primary:hover { background: var(--dt-primary-hover) !important; }
+html[data-theme="dark"] .ant-btn-primary[disabled], html[data-theme="dark"] .ant-btn-primary[disabled]:hover {
+  background: #1e3a56 !important; color: #5f7690 !important; box-shadow: none;
+}
+
+/* 链接 / 内容区滚动条 */
+html[data-theme="dark"] a { color: var(--dt-primary); }
+html[data-theme="dark"] .app-content::-webkit-scrollbar-thumb { background: rgba(0,229,255,.22); }
+html[data-theme="dark"] .app-content::-webkit-scrollbar-thumb:hover { background: rgba(0,229,255,.4); }
+
+/* 硬编码白底页面元素兜底（scoped 里写死浅色的代码块/结果块——全局选择器仍能命中带 class 的元素） */
+html[data-theme="dark"] .json-preview { background: #060a14; color: #9fc4dd; }
+html[data-theme="dark"] .tool-result,
+html[data-theme="dark"] .conclusion pre.md-code,
+html[data-theme="dark"] .conclusion code,
+html[data-theme="dark"] .msg-content,
+html[data-theme="dark"] code {
+  background: #0f1a2e !important; color: #cfe6f5;
+}
+html[data-theme="dark"] .msg-system { background: rgba(250,173,20,.12) !important; }
+html[data-theme="dark"] .msg-assistant { background: rgba(0,229,255,.06) !important; }
+html[data-theme="dark"] .msg-user { background: rgba(46,230,166,.08) !important; }
+html[data-theme="dark"] .msg-tool { background: rgba(0,229,255,.06) !important; }
+html[data-theme="dark"] .t-result.fail { background: rgba(255,77,79,.12) !important; border-color: rgba(255,77,79,.4) !important; }
+/* 下拉菜单（用户菜单等 teleport 到 body 的，darkAlgorithm 已管，这里补链接色兜底） */
+html[data-theme="dark"] .log-box { background: #060a14; color: #9fc4dd; }
+/* 仪表盘指标卡图标底色（内联浅色 pastel）→ 暗色统一半透明,图标本身保留鲜色 */
+html[data-theme="dark"] .metric-icon { background: rgba(0,229,255,.08) !important; }
+
+/* 漏洞详情证据块（请求包/响应包/PoC，a-drawer teleport 到 body，scoped 作用不到，全局兜底）
+   原浅绿/浅蓝底 + 黑字在暗色下白茫茫看不清（2026-08-12 fix）→ 深底浅字 */
+html[data-theme="dark"] .burp-req { background: #10230f !important; border-color: #274916 !important; color: #b7eb8f !important; }
+html[data-theme="dark"] .burp-resp { background: #0d1a2e !important; border-color: #15395b !important; color: #91caff !important; }
+html[data-theme="dark"] .ev { background: #0f1420 !important; color: #c9d1d9 !important; }
+html[data-theme="dark"] .ev-label { color: #9fb0c0 !important; }
+
+/* 登录页夜间适配（主题持久化后登录页仍 data-theme=dark，原白卡片+darkAlgorithm黑输入框割裂，
+   2026-08-12 fix）：卡片改深空黑霓虹青,与整体夜间/会话台风一致；输入框由 darkAlgorithm 已处理，
+   这里补容器/logo/文字。 */
+html[data-theme="dark"] .auth-shell {
+  background: #060b16;
+  background-image:
+    linear-gradient(rgba(0,229,255,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,.04) 1px, transparent 1px);
+}
+html[data-theme="dark"] .auth-card {
+  background: #0e1626 !important;
+  border: 1px solid rgba(0,229,255,.18);
+  box-shadow: 0 12px 48px rgba(0,0,0,.55), 0 0 24px rgba(0,229,255,.06);
+}
+html[data-theme="dark"] .auth-brand h1 { color: #e6f3ff; }
+html[data-theme="dark"] .auth-brand p { color: #7fa8c9; }
+html[data-theme="dark"] .auth-logo { background: rgba(0,229,255,.1); }
+html[data-theme="dark"] .auth-card label { color: #cfe0f0 !important; }
+/* 输入框：darkAlgorithm 已给深底，这里补边框霓虹感 + 占位符可读 */
+html[data-theme="dark"] .auth-card .ant-input-affix-wrapper,
+html[data-theme="dark"] .auth-card .ant-input {
+  background: #0a1120 !important;
+  border-color: rgba(0,229,255,.2) !important;
+  color: #e6f3ff !important;
+}
+html[data-theme="dark"] .auth-card input::placeholder { color: #5f7891 !important; }
+
+/* ===== 代理中心（ProxySetting）夜间适配：修出口IP大字盒/平台模式块硬编码浅底导致的"全白" ===== */
+html[data-theme="dark"] .exit-box { background: #0d1424 !important; border-color: var(--dt-border) !important; }
+html[data-theme="dark"] .exit-box.exit-ok { background: rgba(82,196,26,.10) !important; border-color: rgba(82,196,26,.4) !important; }
+html[data-theme="dark"] .exit-box.exit-err { background: rgba(207,19,34,.12) !important; border-color: rgba(255,77,79,.45) !important; }
+html[data-theme="dark"] .exit-box.exit-direct { background: #0d1424 !important; }
+html[data-theme="dark"] .exit-k { color: var(--dt-muted) !important; }
+html[data-theme="dark"] .exit-v { color: var(--dt-text) !important; }
+html[data-theme="dark"] .mode-block { background: #0d1424 !important; border-color: var(--dt-border) !important; }
+html[data-theme="dark"] .mode-block.mode-on { background: #0e1830 !important; border-color: rgba(0,229,255,.25) !important; }
+html[data-theme="dark"] .mode-name { color: var(--dt-text) !important; }
+html[data-theme="dark"] .sub-block { background: #0d1424 !important; border-color: var(--dt-border) !important; }
+html[data-theme="dark"] .sub-title, html[data-theme="dark"] .cp-h { color: var(--dt-text) !important; }
+html[data-theme="dark"] .cp-sub, html[data-theme="dark"] .hint { color: var(--dt-muted) !important; }
