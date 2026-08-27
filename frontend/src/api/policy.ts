@@ -69,9 +69,9 @@ export const policyApi = {
 /** 默认策略配置（用于新建策略表单初值） */
 export function defaultPolicyConfig(): PolicyConfig {
   return {
-    domain_config: { domain_brute: true, domain_brute_type: 'big', alt_dns: true, arl_search: true, dns_query_plugin: false, subdomain_dict: '', resolvers_custom: '' },
+    domain_config: { domain_brute: false, domain_brute_type: 'none', alt_dns: false, arl_search: false, dns_query_plugin: false, subdomain_dict: '', resolvers_custom: '' },
     ip_config: {
-      port_scan: true, port_scan_type: 'test', service_detection: false, os_detection: false, ssl_cert: false,
+      port_scan: false, port_scan_type: 'none', service_detection: false, os_detection: false, ssl_cert: false,
       skip_scan_cdn_ip: true, port_custom: '80,443', host_timeout_type: 'default', host_timeout: 900,
       port_parallelism: 32, port_min_rate: 60, exclude_ports: ''
     },

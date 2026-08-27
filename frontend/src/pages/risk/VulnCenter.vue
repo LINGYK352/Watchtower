@@ -66,14 +66,17 @@
             <span class="muted" :class="{ calibrated: isCalibrated(record) }"> {{ record.cvss_score }}{{ isCalibrated(record) ? '*' : '' }}</span>
           </a-tooltip>
         </template>
-        <template v-else-if="column.key === 'target'"><CopyText :text="String(record.target || '')" /></template>
+        <template v-else-if="column.key === 'target'">
+          <a-tag v-if="record.asset_type === 'miniapp'" color="green" style="margin-right:4px">小程序</a-tag>
+          <CopyText :text="String(record.target || '')" />
+        </template>
         <template v-else-if="column.key === 'task_name'">
           <span v-if="record.task_name">{{ record.task_name }}</span>
           <span v-else class="muted">—</span>
         </template>
         <template v-else-if="column.key === 'unit'">
           <span v-if="record.unit">{{ record.unit }}</span>
-          <!-- AI 来源:无单位=ICP 查不到备案(哨兵扫描来源本就无单位维度,只显 —) -->
+          <!-- AI 来源:无单位=ICP 查不到备案(瞭望塔扫描来源本就无单位维度,只显 —) -->
           <span v-else-if="record.source === 'ai'" class="muted">暂无备案</span>
           <span v-else class="muted">—</span>
         </template>

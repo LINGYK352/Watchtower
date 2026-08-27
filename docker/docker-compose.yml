@@ -1,4 +1,4 @@
-# 哨兵 Sentinel 容器化编排 —— 全 docker 分发 + 增量热更共存。
+# 瞭望塔 Watchtower 容器化编排 —— 全 docker 分发 + 增量热更共存。
 #
 # 关键设计：**应用代码以挂载卷进容器**（`../:/opt/sentinel/current`），镜像只装依赖。
 #   → 首次：docker compose up -d 起全部服务，代码从宿主机卷加载。
@@ -8,16 +8,28 @@
 #
 # 起：docker compose -f docker/docker-compose.yml up -d
 
+# 时区跟随宿主机：挂载宿主机 /etc/localtime + /etc/timezone 到容器只读，容器时区自动=宿主机
+# （kali/CST+8 显 CST+8，海外机显当地）。治「容器默认 UTC 不跟随宿主机，平台时间戳/时区标签全显协调世界时」。
+# 所有服务（含 mongo/rabbitmq 官方镜像）都挂，保证全栈时间一致。宿主机无 /etc/timezone 时该挂载被 docker 忽略不报错。
+x-tz-volumes: &tz-volumes
+  - /etc/localtime:/etc/localtime:ro
+  - /etc/timezone:/etc/timezone:ro
+
 x-app-volumes: &app-volumes
   - ../:/opt/sentinel/current:rw
   - ./config:/opt/sentinel/current/config:rw
   - sentinel_extensions:/opt/sentinel/current/shared/ai_extensions:rw
+  - /etc/localtime:/etc/localtime:ro
+  - /etc/timezone:/etc/timezone:ro
 
 services:
   mongo:
     image: mongo:5.0
     restart: unless-stopped
-    volumes: [ "sentinel_mongo:/data/db" ]
+    volumes:
+      - sentinel_mongo:/data/db
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
 
   rabbitmq:
     image: rabbitmq:3.9
@@ -26,6 +38,7 @@ services:
       RABBITMQ_DEFAULT_USER: sentinel
       RABBITMQ_DEFAULT_PASS: sentinelpassword
       RABBITMQ_DEFAULT_VHOST: /sentinelhost
+    volumes: *tz-volumes
 
   # mihomo 代理内核：**独立容器**（2026-08 改造，根治端口冲突 + web 重启连带停 worker/scheduler + 容器
   # 内嵌DNS高并发瓶颈）。同镜像（含二进制 external/mihomo/），读共享卷 config，controller 监听 0.0.0.0 供
@@ -58,6 +71,8 @@ services:
       - ./config:/opt/sentinel/current/config:rw
       - sentinel_extensions:/opt/sentinel/current/shared/ai_extensions:rw
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     # gthread 线程模型(非默认 sync)：SSE 长连接(会话实时观察 /session/<id>/stream)占线程不占 worker，
     # 否则 -w 3 sync 下几个人开实时流就把 3 个 worker 占满→全平台卡死。--timeout 0 防长连接被 worker 超时杀。
     command: gunicorn -b 0.0.0.0:5013 sentinel_platform.wsgi:application -w 3 --threads 8 -k gthread --timeout 0 --reload
@@ -98,6 +113,8 @@ services:
     volumes:
       - ./frontend:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     ports: [ "5555:5555" ]
 
 volumes:

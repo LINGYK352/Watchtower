@@ -1,5 +1,5 @@
 <template>
-  <PageContainer title="使用手册" kicker="Manual" description="哨兵 Sentinel 面向使用者的操作说明与常见问题。">
+  <PageContainer title="使用手册" kicker="Manual" description="瞭望塔 Watchtower 面向使用者的操作说明与常见问题。">
     <div class="manual-wrap">
       <!-- 左侧分类导航 -->
       <div class="manual-nav">
@@ -34,6 +34,21 @@
             </ol>
             <div v-if="blk.tip" class="doc-tip"><BulbOutlined /> {{ blk.tip }}</div>
             <div v-if="blk.warn" class="doc-warn"><WarningOutlined /> {{ blk.warn }}</div>
+            <div v-if="blk.verse" class="doc-verse">
+              <div class="verse-scroll">
+                <div v-if="blk.verse.cipai" class="verse-title">
+                  <span class="verse-cipai">{{ blk.verse.cipai }}</span>
+                  <span v-if="blk.verse.title" class="verse-sep">·</span>
+                  <span v-if="blk.verse.title" class="verse-topic">{{ blk.verse.title }}</span>
+                </div>
+                <div class="verse-body">
+                  <div v-for="(stz, si) in blk.verse.stanzas" :key="si" class="verse-stanza">
+                    <p v-for="(ln, li) in stz" :key="li" class="verse-line">{{ ln }}</p>
+                  </div>
+                </div>
+                <p v-if="blk.verse.author" class="verse-author">— {{ blk.verse.author }}</p>
+              </div>
+            </div>
           </template>
         </template>
       </a-card>
@@ -46,7 +61,7 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import {
   SearchOutlined, BulbOutlined, WarningOutlined, RocketOutlined, RadarChartOutlined,
   RobotOutlined, BugOutlined, GlobalOutlined, SafetyOutlined, CloudSyncOutlined, QuestionCircleOutlined,
-  ExclamationCircleOutlined, CheckCircleOutlined,
+  ExclamationCircleOutlined, CheckCircleOutlined, ReadOutlined,
 } from '@ant-design/icons-vue'
 
 import { DISCLAIMER_SECTIONS } from '../../config/disclaimer'
@@ -58,7 +73,8 @@ onMounted(async () => {
   try { Object.assign(disc, await getDisclaimerStatus()) } catch { /* ignore */ }
 })
 
-interface Block { h?: string; p?: string; list?: string[]; steps?: string[]; tip?: string; warn?: string }
+interface Verse { cipai?: string; title?: string; stanzas: string[][]; author?: string }
+interface Block { h?: string; p?: string; list?: string[]; steps?: string[]; tip?: string; warn?: string; verse?: Verse }
 interface Section { key: string; title: string; icon: any; lead: string; blocks: Block[] }
 
 // 面向用户的说明（依据 云端/docs 提炼，非内部架构）。纯内置，离线可用。
@@ -73,7 +89,7 @@ const sections: Section[] = [
   },
   {
     key: 'quickstart', title: '快速上手', icon: RocketOutlined,
-    lead: '哨兵是面向授权安全工作的综合平台：从目标录入到资产侦察、AI 自主渗透、漏洞与情报闭环，一条龙完成。',
+    lead: '瞭望塔是面向授权安全工作的综合平台：从目标录入到资产侦察、AI 自主渗透、漏洞与情报闭环，一条龙完成。',
     blocks: [
       { h: '第一步：激活系统', steps: [
         '首次使用前，前往「关于系统 → 激活设置」粘贴授权凭证并激活。',
@@ -191,7 +207,7 @@ const sections: Section[] = [
   },
   {
     key: 'update', title: '更新与激活', icon: CloudSyncOutlined,
-    lead: '哨兵支持一键热更新、按版本查看改动、以及回退到历史版本。更新链带凭证校验。',
+    lead: '瞭望塔支持一键热更新、按版本查看改动、以及回退到历史版本。更新链带凭证校验。',
     blocks: [
       { h: '检查与更新', steps: [
         '「更新检测」点「检查更新」，有新版会列出更新内容。',
@@ -219,6 +235,23 @@ const sections: Section[] = [
       ] },
       { h: '扫描很慢 / 触发目标限速？', p: '同一 IP 的并发会触发目标侧限速，正常现象。跨 IP 并行、同 IP 串行是更稳的打法，可在策略里调并发。' },
       { h: 'FOFA 语句查不出结果？', p: '常见于从文档复制带入了全角引号/运算符。系统会自动归一化，若仍异常请检查语句语法。' },
+    ],
+  },
+  {
+    key: 'verse', title: '采桑子·鞭春', icon: ReadOutlined,
+    lead: '',
+    blocks: [
+      {
+        verse: {
+          cipai: '采桑子',
+          title: '鞭春',
+          stanzas: [
+            ['胥吏追呼昼夜逼，', '荒也吞糠，', '丰也吞糠，', '新苗破土带鞭伤。'],
+            ['天造草昧岁相食，', '秋也杀人，', '冬也杀人，', '春生夏长又一轮。'],
+          ],
+          author: '佚名（现代）',
+        },
+      },
     ],
   },
 ]
@@ -259,5 +292,35 @@ function renderInline(text: string): string {
 .doc-tip { background: rgba(47,107,255,.08); border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 13px; color: #2f6bff; display: flex; gap: 8px; align-items: flex-start; }
 .doc-warn { background: rgba(212,107,8,.1); border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 13px; color: #d46b08; display: flex; gap: 8px; align-items: flex-start; }
 :deep(code) { background: rgba(0,0,0,.06); padding: 1px 6px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+/* —— 诗词块：古典卷轴排版 —— */
+.doc-verse { margin: 28px auto; max-width: 560px; padding: 40px 44px 32px; border-radius: 4px;
+  position: relative; text-align: center;
+  background:
+    linear-gradient(180deg, rgba(180,140,80,.05), rgba(180,140,80,.02)),
+    var(--dt-card-bg, #fbf8f2);
+  border: 1px solid rgba(180,140,80,.28);
+  box-shadow: 0 6px 24px rgba(120,90,40,.08), inset 0 0 0 1px rgba(180,140,80,.08); }
+/* 卷轴上下描边装饰 */
+.doc-verse::before, .doc-verse::after { content: ''; position: absolute; left: 44px; right: 44px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(180,140,80,.4), transparent); }
+.doc-verse::before { top: 18px; }
+.doc-verse::after { bottom: 18px; }
+.verse-scroll { font-family: 'KaiTi', 'STKaiti', 'Kaiti SC', 'Songti SC', serif; }
+.verse-title { margin: 0 0 22px; letter-spacing: 3px; color: var(--dt-text, #2b2b2b);
+  font-weight: 700; }
+.verse-cipai { font-size: 21px; }
+.verse-sep { font-size: 17px; margin: 0 3px; color: rgba(180,140,80,.75); }
+.verse-topic { font-size: 21px; }
+.verse-body { display: flex; flex-direction: column; gap: 20px; }
+.verse-stanza { display: flex; flex-direction: column; }
+.verse-line { font-size: 18px; line-height: 2.15; letter-spacing: 3px; margin: 0;
+  color: var(--dt-text, #23201b); }
+.verse-author { margin: 26px 0 0; text-align: right; font-size: 14px; letter-spacing: 2px;
+  color: var(--dt-muted, #9a8f7c); font-style: normal; }
+[data-theme="dark"] .doc-verse {
+  background: linear-gradient(180deg, rgba(212,175,120,.06), rgba(212,175,120,.02)), rgba(255,255,255,.02);
+  border-color: rgba(212,175,120,.3); box-shadow: 0 6px 24px rgba(0,0,0,.3); }
+[data-theme="dark"] .verse-title, [data-theme="dark"] .verse-line { color: #e7dcc6; }
+[data-theme="dark"] .verse-author { color: #b8a988; }
 </style>
 

@@ -1,4 +1,4 @@
-# 哨兵 Sentinel 自包含系统镜像 —— **代码+依赖+外部工具+前端全烘焙进镜像，pull 即跑**。
+# 瞭望塔 Watchtower 自包含系统镜像 —— **代码+依赖+外部工具+前端全烘焙进镜像，pull 即跑**。
 # 别人 docker load/pull 后仅需填 config.yaml + compose up 即全栈运行；config 挂载不入镜像。
 # 增量热更（可选）：把 sentinel_platform/docker/frontend 挂成卷覆盖镜像内路径即可（见 compose 文末）。
 #

@@ -23,9 +23,9 @@
     </SearchBar>
 
     <a-card :bordered="false">
-      <a-space style="margin-bottom: 12px" v-if="selectedRowKeys.length">
-        <ConfirmAction danger type="primary" title="确认删除选中日志？" @confirm="removeSelected">删除选中 ({{ selectedRowKeys.length }})</ConfirmAction>
-        <a-button @click="openReport"><CloudUploadOutlined /> 上传到云端 ({{ selectedRowKeys.length }})</a-button>
+      <a-space style="margin-bottom: 12px">
+        <ConfirmAction danger type="primary" :disabled="!selectedRowKeys.length" title="确认删除选中日志？" @confirm="removeSelected">删除选中{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</ConfirmAction>
+        <a-button :disabled="!selectedRowKeys.length" @click="openReport"><CloudUploadOutlined /> 上传到云端{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</a-button>
       </a-space>
       <a-table :columns="columns" :data-source="items" :loading="loading" row-key="_id" :pagination="pagination"
         :scroll="{ x: 'max-content' }" size="middle" bordered

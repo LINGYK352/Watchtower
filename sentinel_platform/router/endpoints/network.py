@@ -44,6 +44,16 @@ class _DnsConfig(Resource):
         return ok(result)
 
 
+@ns.route("/dns/builtin")
+class _DnsBuiltin(Resource):
+    def get(self):
+        """内置 DNS 解析器表（dnsserver.txt，侦察用，只读展示）"""
+        svc = _svc()
+        if not svc or not hasattr(svc, "get_builtin_dns"):
+            return ok({"servers": [], "readonly": True})
+        return ok(svc.get_builtin_dns())
+
+
 @ns.route("/ping")
 class _Ping(Resource):
     def post(self):

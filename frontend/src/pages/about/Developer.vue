@@ -1,5 +1,5 @@
 <template>
-  <PageContainer title="开发者" kicker="Developer" description="哨兵 Sentinel 由以下开发者独立设计与维护。">
+  <PageContainer title="开发者" kicker="Developer" description="瞭望塔 Watchtower 由以下开发者独立设计与维护。">
     <a-card class="page-card dev-card">
       <div class="dev-hero">
         <div class="dev-avatar">
@@ -7,7 +7,7 @@
         </div>
         <div class="dev-hero-text">
           <h2>LINGYK</h2>
-          <p>哨兵 Sentinel · 设计 / 研发 / 维护</p>
+          <p>瞭望塔 Watchtower · 设计 / 研发 / 维护</p>
         </div>
       </div>
 
@@ -29,7 +29,7 @@
           <div class="donate-head">
             <span class="donate-title">捐赠支持</span>
           </div>
-          <p class="donate-desc">如果哨兵对你有帮助<br/>欢迎请开发者喝杯咖啡 ☕</p>
+          <p class="donate-desc">如果瞭望塔对你有帮助<br/>欢迎请开发者喝杯咖啡 ☕</p>
           <div class="donate-qr">
             <img src="/avatars/donate-qr.png" alt="捐赠二维码" />
           </div>
@@ -63,7 +63,7 @@
             </div>
           </li>
         </ul>
-        <p class="credits-foot">感谢为哨兵 Sentinel 的设计、测试与打磨提供帮助的每一位贡献者。</p>
+        <p class="credits-foot">感谢为瞭望塔 Watchtower 的设计、测试与打磨提供帮助的每一位贡献者。</p>
       </div>
 
       <div class="dev-credits">
@@ -71,9 +71,6 @@
           <span class="credits-title">项目推进者</span>
           <span class="credits-sub">Project Drivers</span>
         </div>
-        <a-alert class="drivers-tip" type="success" show-icon
-          message="成为项目推进者"
-          description="凡为哨兵 Sentinel 提出问题、建议或缺陷，并被采纳落地的用户，均可申请成为「项目推进者」。你的每一条被采纳的反馈都在直接推动项目演进——被采纳后，欢迎通过上方邮箱或微信联系开发者申请。" />
         <ul v-if="drivers.length" class="credits-list">
           <li v-for="dv in drivers" :key="dv.name" class="credit-item">
             <div class="credit-avatar-wrap">
@@ -83,14 +80,19 @@
               <div class="credit-name">{{ dv.name }}</div>
               <span class="credit-role">{{ dv.role }}</span>
               <div v-if="dv.contribution" class="credit-contrib">{{ dv.contribution }}</div>
-              <div v-if="dv.wechat" class="credit-wx">
+              <div class="credit-wx">
                 <span class="wx-label">微信</span>
-                <CopyText :text="dv.wechat" />
+                <CopyText v-if="dv.wechat" :text="dv.wechat" />
+                <span v-else class="wx-private">不公开</span>
               </div>
             </div>
           </li>
         </ul>
         <p v-else class="credits-foot">虚位以待 —— 你的下一条被采纳的建议，就能出现在这里。</p>
+        <!-- "成为项目推进者"提示卡放推进者列表下方（用户要求：先展示已有推进者，再引导申请） -->
+        <a-alert class="drivers-tip" type="success" show-icon
+          message="成为项目推进者"
+          description="凡为瞭望塔 Watchtower 提出问题、建议或缺陷，并被采纳落地的用户，均可申请成为「项目推进者」。你的每一条被采纳的反馈都在直接推动项目演进——被采纳后，欢迎通过上方邮箱或微信联系开发者申请。" />
       </div>
     </a-card>
   </PageContainer>
@@ -114,6 +116,7 @@ const contributors = [
 // 项目推进者（提出问题/建议并被采纳者，申请后在此追加）。contribution=被采纳的贡献简述，可空。
 // 头像缺省用通用占位（driver.jpg 未提供时复用 contributor.jpg）。空数组时页面显示"虚位以待"。
 const drivers: Array<{ name: string; role: string; contribution?: string; wechat?: string; avatar: string }> = [
+  { name: '尤里曾', role: '项目推进者', wechat: 'Cavanture', avatar: '/avatars/yulizeng.jpg' },
 ]
 </script>
 
@@ -156,8 +159,9 @@ const drivers: Array<{ name: string; role: string; contribution?: string; wechat
   border: 1px solid var(--dt-border); }
 .credit-wx { color: var(--dt-muted); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
 .wx-label { opacity: .8; }
+.wx-private { color: var(--dt-muted); opacity: .7; }   /* 未公开微信的推进者显示"不公开" */
 .credit-contrib { color: var(--dt-muted); font-size: 12px; line-height: 1.5; max-width: 160px;
   word-break: break-word; overflow-wrap: anywhere; }
 .credits-foot { margin: 18px 0 0; color: var(--dt-muted); font-size: 12px; }
-.drivers-tip { margin-bottom: 16px; max-width: 720px; }
+.drivers-tip { margin-top: 20px; max-width: 720px; }   /* 挪到推进者列表下方后，与卡片拉开间距 */
 </style>

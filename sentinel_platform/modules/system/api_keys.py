@@ -222,7 +222,7 @@ def _validate_feishu(key: str, sub: Dict[str, Any]) -> tuple:
         from sentinel_platform.core.http import http_req
         import json as _json
         import hashlib, hmac, base64
-        body = {"msg_type": "text", "content": {"text": "Sentinel 连接测试 ✓（本消息确认 webhook 有效）"}}
+        body = {"msg_type": "text", "content": {"text": "瞭望塔 Watchtower 连接测试 ✓（本消息确认 webhook 有效）"}}
         # 如果有签名密钥，带签
         secret = (sub.get("secret") or "").strip()
         if secret:

@@ -26,20 +26,30 @@
 
           <a-divider orientation="left" class="sec">内置能力（{{ builtin.length }}）</a-divider>
           <div class="toolbar">
-            <a-select v-model:value="catFilter" allow-clear placeholder="按分类筛选" style="width:200px" :options="catOptions" />
-            <span class="muted">共 {{ filteredBuiltin.length }} / {{ builtin.length }} 个内置工具（随平台发布，不可移除）</span>
+            <span class="muted">共 {{ builtin.length }} 个内置工具，按功能分 {{ builtinGroups.length }} 类（随平台发布，不可移除）</span>
           </div>
-          <div class="grid">
-            <div v-for="t in filteredBuiltin" :key="t.name" class="ext-card readonly">
-              <div class="c-head">
-                <code class="c-name">{{ t.name }}</code>
-                <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? '可调用' : '未接入' }}</a-tag>
-              </div>
-              <div class="c-cat"><a-tag color="blue" size="small">{{ t.category }}</a-tag><span class="c-tag builtin">内置</span></div>
-              <div class="c-sum">{{ t.summary || t.description }}</div>
-              <div v-if="t.params && t.params.length" class="c-params">
-                <span class="c-params-label">参数</span>
-                <span v-for="p in t.params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
+          <!-- 按 7 类功能维度分组展示（与「AI 工具」页一致） -->
+          <div v-for="g in builtinGroups" :key="g.name" class="cat-block">
+            <a-divider orientation="left" class="cat-title">
+              {{ g.name }}<a-tag color="blue" style="margin-left:6px">{{ g.tools.length }}</a-tag>
+            </a-divider>
+            <div class="grid">
+              <div v-for="t in g.tools" :key="t.name" class="ext-card readonly">
+                <div class="c-head">
+                  <code class="c-name">{{ t.name }}</code>
+                  <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? '可调用' : '未接入' }}</a-tag>
+                </div>
+                <div class="c-cat">
+                  <a-tag :color="t.origin === 'third_party' ? 'orange' : 'cyan'" size="small">
+                    {{ t.origin === 'third_party' ? '第三方' : '自研' }}
+                  </a-tag>
+                  <span class="c-tag builtin">内置</span>
+                </div>
+                <div class="c-sum">{{ t.summary || t.description }}</div>
+                <div v-if="t.params && t.params.length" class="c-params">
+                  <span class="c-params-label">参数</span>
+                  <span v-for="p in t.params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
+                </div>
               </div>
             </div>
           </div>
@@ -134,10 +144,22 @@ const storeOpen = ref(false)
 const detailOpen = ref(false)
 const detail = ref<ExtensionItem | null>(null)
 const logFilter = ref('')
-const catFilter = ref<string | undefined>(undefined)
 
-const catOptions = computed(() => Array.from(new Set(builtin.value.map(t => t.category))).sort().map(c => ({ label: c, value: c })))
-const filteredBuiltin = computed(() => catFilter.value ? builtin.value.filter(t => t.category === catFilter.value) : builtin.value)
+// 内置能力按 7 类功能维度分组展示（与「AI 工具」页 CAT_ORDER 一致；未登记的新分类排最后不丢）
+const CAT_ORDER = ['资产收集', '漏洞验证', '情报查询', '情报回写', '带外通道', '浏览器', '内网后渗透']
+const builtinGroups = computed(() => {
+  const map = new Map<string, BuiltinTool[]>()
+  for (const t of builtin.value) {
+    if (!map.has(t.category)) map.set(t.category, [])
+    map.get(t.category)!.push(t)
+  }
+  return Array.from(map.entries())
+    .map(([name, tools]) => ({ name, tools }))
+    .sort((a, b) => {
+      const ia = CAT_ORDER.indexOf(a.name), ib = CAT_ORDER.indexOf(b.name)
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+    })
+})
 const detailParams = computed<ExtParam[]>(() => {
   const d = detail.value
   if (!d) return []
@@ -186,6 +208,8 @@ onMounted(() => { loadBuiltin(); loadAi() })
 .sec { font-size: 13px; font-weight: 600 }
 .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px }
 .muted { color: var(--dt-muted, #888); font-size: 13px }
+.cat-block { margin-bottom: 8px }
+.cat-title { font-size: 13px; font-weight: 600; margin: 6px 0 10px }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px }
 .ext-card { border: 1px solid var(--dt-border, #f0f0f0); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px }
 .ext-card.readonly { background: var(--dt-fill, #fafafa) }

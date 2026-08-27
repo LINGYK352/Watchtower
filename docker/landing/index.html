@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>哨兵 Sentinel</title>
+<title>瞭望塔 Watchtower</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#0b0f1a;color:#c9d1d9;min-height:100vh;line-height:1.7;-webkit-font-smoothing:antialiased}
@@ -70,7 +70,7 @@ footer span{margin:0 10px}
 <nav class="nav">
   <div class="nav-brand">
     <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" fill="#238636"/><path d="M9 12l2 2 4-4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    Sentinel
+    瞭望塔 Watchtower
   </div>
   <div class="nav-links">
     <a href="#deploy">部署</a>
@@ -83,7 +83,7 @@ footer span{margin:0 10px}
 <div class="wrap">
 
 <section class="hero">
-  <h1>哨兵 <span>Sentinel</span></h1>
+  <h1>瞭望塔 <span>Watchtower</span></h1>
   <p>自动化资产侦察与智能渗透测试平台，从发现到验证的完整攻击面管理。</p>
   <div class="btn-row">
     <a href="#deploy" class="btn btn-fill">快速部署</a>
@@ -110,7 +110,7 @@ footer span{margin:0 10px}
 gunzip -c sentinel-image-v1.21.143.tar.gz | docker load
 # 准备 docker-compose.yml + config.yaml（参考 config.yaml.example），然后：
 docker compose up -d</div>
-  <p style="color:#8b949e;font-size:13px;margin-top:12px">完成后访问 <code>http://你的IP:5555</code>　默认账号 <code>admin</code> / <code>sentinel@2026</code></p>
+  <p style="color:#8b949e;font-size:13px;margin-top:12px">完成后访问 <code>http://你的IP:5555</code>　默认账号 <code>admin</code> / <code>watchtower@2026</code></p>
 </section>
 
 <section class="sec">
@@ -129,7 +129,7 @@ docker compose up -d</div>
   <h2>使用手册</h2>
   <h3>1. 首次登录与激活</h3>
   <ul class="items">
-    <li>访问 <code>https://your-ip:5555</code>，默认账号 <code>admin / sentinel@2026</code></li>
+    <li>访问 <code>https://your-ip:5555</code>，默认账号 <code>admin / watchtower@2026</code></li>
     <li>首次登录弹出向导：激活凭证 → AI 配置 → API 密钥</li>
     <li>激活凭证：本页注册获得 JWT 凭证，粘贴激活即可</li>
     <li>AI 配置：填入 LLM API Key（DeepSeek / OpenAI 等），驱动智能渗透</li>
@@ -165,7 +165,7 @@ docker compose up -d</div>
 </section>
 
 <footer>
-  <span>Sentinel © 2026</span>
+  <span>瞭望塔 Watchtower © 2026</span>
   <span>v1.21.143</span>
 </footer>
 

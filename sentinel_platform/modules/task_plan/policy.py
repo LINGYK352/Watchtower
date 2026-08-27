@@ -31,13 +31,17 @@ logger = get_logger()
 # —— 配置默认值（净室重写自旧 flask_restx model 的 default/example）——
 # 这些是**缺省值**，不是限制；用户提交的值原样透传（守禁止硬限制参数）。
 DOMAIN_CONFIG_DEFAULT = {
-    "domain_brute": True, "domain_brute_type": "big", "alt_dns": True,
-    "arl_search": True, "dns_query_plugin": False,
+    # 默认不爆破（domain_brute_type=none → domain_brute 归一为 False，见 get_options 末尾）——用户要求默认不跑爆破。
+    # alt_dns/arl_search/dns_query_plugin：净室后 recon 内核无消费方（历史情报由 subfinder 被动源覆盖、
+    # alt-DNS 变形是核心链路 §11.4 故意砍掉的），前端已删这三个开关；保留字段仅为兼容旧策略/schema，默认全 False。
+    "domain_brute": False, "domain_brute_type": "none", "alt_dns": False,
+    "arl_search": False, "dns_query_plugin": False,
     # 自定义字典（空=用内置默认 dicts/domain_2w.txt / dnsserver.txt；填多行文本则覆盖，禁硬限制）
     "subdomain_dict": "", "resolvers_custom": "",
 }
 IP_CONFIG_DEFAULT = {
-    "port_scan": True, "port_scan_type": "test", "service_detection": False,
+    # 默认不扫描端口（port_scan_type=none → port_scan 归一为 False）——用户要求默认不扫。
+    "port_scan": False, "port_scan_type": "none", "service_detection": False,
     "os_detection": False, "ssl_cert": False, "skip_scan_cdn_ip": True,
     "port_custom": "80,443", "host_timeout_type": "default", "host_timeout": 900,
     "port_parallelism": 32, "port_min_rate": 60, "exclude_ports": "",
@@ -72,8 +76,12 @@ def _oid(v: Any):
 
 # —— 归一化（净室，自包含，不 import 别的叶子）——
 def _norm_collect_mode(v: str) -> str:
+    """资产收集模式归一为两档（2026-08 简化：单点 single / 广域 multi_brute）。
+    存量 multi_passive（旧「多域+被动」）合并到 multi_brute（广域=爆破+被动都做，爆破打公共 DNS 不惊动目标）。"""
     v = (v or "multi_brute").lower()
-    return v if v in _COLLECT_MODES else "multi_brute"
+    if v == "multi_passive":
+        return "multi_brute"
+    return v if v in ("single", "multi_brute") else "multi_brute"
 
 
 def _norm_pentest_mode(v: str) -> str:
@@ -360,6 +368,17 @@ class PolicyServiceImpl:
             options.update(ip_config or {})
         options.update(site_config or {})
         options.update(policy)                    # 顶层项（file_leak/collect_mode/auto_pentest/三轨代理等）
+        # 「不爆破/不扫描」归一（前端删勾选框，改用类型下拉的 none 表达"关"）——把 type=none 落成布尔开关，
+        # 后端消费方（recon_bridge/pipeline）继续读 domain_brute/port_scan 布尔，无需改。**保证前端灰=后台真不跑**。
+        if task_tag == models.TaskTag.TASK:
+            if str(options.get("domain_brute_type", "")).lower() == "none":
+                options["domain_brute"] = False
+            else:
+                options.setdefault("domain_brute", True)   # 选了具体字典档=开爆破
+            if str(options.get("port_scan_type", "")).lower() == "none":
+                options["port_scan"] = False
+            else:
+                options.setdefault("port_scan", True)
         return options
 
 

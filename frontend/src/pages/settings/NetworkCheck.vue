@@ -1,15 +1,32 @@
 <template>
   <PageContainer title="网络检测" kicker="Network" description="检测服务器网络连通性，配置 DNS 服务器。">
     <a-card title="DNS 服务器" :bordered="false" style="margin-bottom: 16px">
-      <template #extra><a-button type="primary" size="small" :loading="dnsSaving" @click="saveDns">保存</a-button></template>
-      <a-form layout="inline">
-        <a-form-item label="自定义 DNS">
-          <a-input v-model:value="dnsInput" placeholder="多个用逗号分隔，如 8.8.8.8,114.114.114.114" style="width: 360px" />
-        </a-form-item>
-      </a-form>
-      <div style="margin-top: 8px; color: #888; font-size: 12px">
-        配置后 Ping 解析域名优先使用自定义 DNS；留空则依次尝试系统 DNS → 公共 DNS（8.8.8.8 / 114.114.114.114）。
+      <template #extra><a-button type="primary" size="small" :loading="dnsSaving" @click="saveDns">保存自定义</a-button></template>
+      <!-- 自定义 DNS：用户可加/改/删（平台自身 Ping/解析优先用）——列表式 -->
+      <div class="dns-block">
+        <div class="dns-h">自定义 DNS <span class="muted">（可增删改，平台 Ping/域名解析优先使用）</span></div>
+        <div v-for="(d, i) in customDns" :key="i" class="dns-row">
+          <a-input v-model:value="customDns[i]" placeholder="如 8.8.8.8" style="width: 260px" size="small" />
+          <a-button type="text" danger size="small" @click="customDns.splice(i, 1)">删除</a-button>
+        </div>
+        <a-button size="small" type="dashed" style="margin-top:6px" @click="customDns.push('')">+ 添加 DNS</a-button>
+        <div v-if="!customDns.length" class="muted" style="margin-top:4px">未配置自定义 DNS，将依次尝试系统 DNS → 内置 DNS 表。</div>
       </div>
+      <!-- 内置 DNS 表：dnsserver.txt（侦察 dnsx/massdns 用 + 探活轮换），只读，折叠 -->
+      <a-collapse ghost style="margin-top:10px">
+        <a-collapse-panel key="builtin">
+          <template #header>
+            <span class="dns-h">内置 DNS 解析器表 <span class="muted">（{{ builtinDns.length }} 个 · 侦察工具用 · 自动探活轮换 · 只读）</span></span>
+          </template>
+          <div class="dns-builtin-list">
+            <a-tag v-for="s in builtinDns" :key="s" color="blue">{{ s }}</a-tag>
+            <span v-if="!builtinDns.length" class="muted">（未加载）</span>
+          </div>
+          <div class="muted" style="margin-top:6px;font-size:12px">
+            这是随代码分发的内置解析器表，侦察扫描时自动探测可用性、剔除不通的、轮换使用。如需修改请走版本更新（不在此编辑）。
+          </div>
+        </a-collapse-panel>
+      </a-collapse>
     </a-card>
 
     <!-- 网络质量体检：一键诊断"网络为什么差"（丢包抖动/出网稳定/DNS健康/依赖可达/代理出口）-->
@@ -35,7 +52,11 @@
           <div class="ov-summary">{{ assess.summary }}</div>
         </div>
       </div>
-      <div v-if="q" class="q-wrap">
+      <!-- 5项详情默认折叠：进页看总评卡即可，要细节再展开（对齐态势总览"卡片+详情折叠"体验） -->
+      <a-collapse v-if="q" ghost>
+        <a-collapse-panel key="detail">
+          <template #header><span style="font-weight:600">体检详情（链路 / 出网 / DNS / 依赖 / 代理出口）</span></template>
+      <div class="q-wrap">
         <!-- ① 链路质量 -->
         <div class="q-sec"><span class="q-h">① 链路质量（{{ qHost }}）</span>
           <a-tag v-if="q.ping" :color="gradeColor(q.ping.grade)">{{ gradeText(q.ping.grade) }}</a-tag>
@@ -59,13 +80,13 @@
             <span class="q-metric">{{ d.ok ? (d.ip + ' · ' + d.ms + 'ms') : '解析失败/超时' }}</span>
           </div>
         </div>
-        <!-- ④ 关键依赖体检 -->
+        <!-- ④ 关键依赖体检（通/慢/断三态：慢=连得上但延迟高，能用但体验差，会拉低总评） -->
         <div class="q-sec"><span class="q-h">④ 平台关键依赖</span>
-          <a-tag v-if="q.deps" :color="q.deps.down_count ? 'red' : 'green'">{{ q.deps.total - q.deps.down_count }}/{{ q.deps.total }} 可达</a-tag>
+          <a-tag v-if="q.deps" :color="q.deps.down_count ? 'red' : (q.deps.slow_count ? 'gold' : 'green')">{{ q.deps.total - q.deps.down_count }}/{{ q.deps.total }} 可达<template v-if="q.deps.slow_count">（{{ q.deps.slow_count }} 慢）</template></a-tag>
           <div v-for="d in (q.deps && q.deps.deps) || []" :key="d.name" class="q-row">
-            <a-tag :color="d.reachable ? 'green' : 'red'">{{ d.reachable ? '通' : '断' }}</a-tag>
+            <a-tag :color="!d.reachable ? 'red' : (d.slow ? 'gold' : 'green')">{{ !d.reachable ? '断' : (d.slow ? '慢' : '通') }}</a-tag>
             <span class="q-name">{{ d.name }}</span>
-            <span class="q-metric">{{ d.reachable ? ('HTTP ' + d.status + ' · ' + d.ms + 'ms') : ('不可达 ' + (d.err || '')) }}</span>
+            <span class="q-metric">{{ d.reachable ? ('HTTP ' + d.status + ' · ' + d.ms + 'ms' + (d.slow ? '（延迟偏高）' : '')) : ('不可达 ' + (d.err || '')) }}</span>
           </div>
         </div>
         <!-- ⑤ 代理出口质量 -->
@@ -74,6 +95,8 @@
           <span v-if="q.proxy" class="q-metric">{{ q.proxy.note }}<template v-if="q.proxy.proxy_ip">（代理出口 {{ q.proxy.proxy_ip }} / 直连 {{ q.proxy.direct_ip }}）</template></span>
         </div>
       </div>
+        </a-collapse-panel>
+      </a-collapse>
     </a-card>
 
     <a-card title="Ping 检测" :bordered="false">
@@ -101,23 +124,29 @@ import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import { request } from '../../api/request'
 
-// DNS 配置
-const dnsInput = ref('')
+// DNS 配置：customDns=用户自定义(可增删改,存mongo)；builtinDns=内置dnsserver.txt(侦察用,只读)
+const customDns = ref<string[]>([])
+const builtinDns = ref<string[]>([])
 const dnsSaving = ref(false)
 
 async function loadDns() {
   try {
     const res = await request<{ servers: string[] }>('/api/network/dns')
-    dnsInput.value = (res.servers || []).join(', ')
+    customDns.value = (res.servers || []).slice()
   } catch { /* ignore */ }
+  try {
+    const b = await request<{ servers: string[] }>('/api/network/dns/builtin')
+    builtinDns.value = b.servers || []
+  } catch { /* 内置表读不到不影响 */ }
 }
 
 async function saveDns() {
   dnsSaving.value = true
   try {
-    const servers = dnsInput.value.split(/[,;，；\s]+/).map(s => s.trim()).filter(Boolean)
+    const servers = customDns.value.map(s => s.trim()).filter(Boolean)
     await request('/api/network/dns', { method: 'POST', body: JSON.stringify({ servers }) })
-    message.success('DNS 配置已保存')
+    customDns.value = servers   // 回填去空后的
+    message.success('自定义 DNS 已保存')
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
   } finally {
@@ -237,4 +266,10 @@ onMounted(() => { loadDns(); loadLatestQuality() })
 .q-name { min-width: 130px; color: var(--dt-text, #333); font-size: 13px; }
 .q-metric { color: var(--dt-muted, #888); font-size: 12px; }
 .q-err { color: #cf1322; font-size: 12px; }
+/* DNS 区 */
+.dns-block { margin-bottom: 4px; }
+.dns-h { font-weight: 600; font-size: 13px; }
+.dns-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.dns-builtin-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.muted { color: var(--dt-muted, #999); font-size: 12px; font-weight: normal; }
 </style>

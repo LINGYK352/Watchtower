@@ -23,11 +23,25 @@ logger = get_logger()
 
 ICP_CACHE_COLL = "icp_cache"
 
+# 反查网络重试（治容器系统 DNS/网络间歇抽风：单次 DNS 超时不该让整个反查归零，重试自愈——
+# 对齐记忆铁律"间歇失败优先重试自愈"+ proxy._EXIT_IP_RETRY / update_check._REMOTE_RETRY 范式）。
+_REVERSE_RETRY = 3       # 单页网络失败重试次数
+_REVERSE_BACKOFF = 0.5   # 退避基数（秒），指数退避
 
-def _intel_proxies() -> Optional[Dict[str, str]]:
-    """第三方测绘源（Hunter/FOFA/crtsh/ICP）出口：**固定走智能代理**（不受任务策略影响）——
-    智能源可达则经代理，不可达则返 None 由 http_req 直连（trust_env=False 真直连）。
-    这样反查代理挂了自动直连、不卡死（治单位名反查被代理劫持/挂死事故）。缺服务/无源→None 直连。"""
+
+def _intel_proxies(prefer_proxy: bool = False) -> Optional[Dict[str, str]]:
+    """第三方测绘源出口决策。返回 proxies dict 或 None（None=交 http_req 直连，trust_env=False 真直连）。
+
+    **国内源（Hunter/FOFA/ICP 备案反查，prefer_proxy=False，默认）固定直连**：它们是国内服务，
+    直连又快又稳；走境外机场节点纯负优化——实测 Hunter 对机场 IP 直接返 403，机场节点抖动还会
+    ProxyError('Cannot connect to proxy') → 反查拿 0 域名 → 单位名任务误判"未发现资产"（实为鹰图有
+    资产、只是反查被代理打回）。这也对齐 `代理出口规范.md`「第三方测绘源直连」（此前该轨标 ❌ 偏离）。
+    注意 smart 的可达探针（gstatic）只证明"经代理能出境"，不证明"目标源接受该代理 IP"，探针通过≠反查能成。
+
+    **境外源（crtsh 证书透明，prefer_proxy=True）保留走智能代理绕墙**：智能源可达则经代理、不可达降级
+    直连（resolve_egress_url smart 叠加降级）。缺服务/无源 → None 直连。"""
+    if not prefer_proxy:
+        return None                                  # 国内测绘源固定直连（不读残留 env，不走机场节点）
     try:
         svc = get_registry().get(ROLE.PROXY)
         if svc and hasattr(svc, "resolve_egress_url"):
@@ -186,6 +200,76 @@ def _mask(text: str, key: str) -> str:
     return text
 
 
+# FOFA 限流信号（HTTP 429 / errmsg 含这些片段）：限流是瞬时抖动，应退避重试自愈，
+# 不能当成查询结果直接甩给用户（守记忆铁律"间歇失败优先重试自愈"，非缓存/非直报）。
+_FOFA_RATELIMIT_MARKS = ("速度过快", "too fast", "820000", "45012", "429", "请求过于频繁", "rate limit")
+_FOFA_COUNT_RETRY = 4       # 限流重试次数
+_FOFA_COUNT_BACKOFF = 2.0   # 退避基数（秒），指数退避 2/4/8...
+
+
+def _is_fofa_ratelimit(status: int, errmsg: str) -> bool:
+    """判定是否 FOFA 限流（HTTP 429 或 errmsg 命中限流码/关键词）。"""
+    if status == 429:
+        return True
+    em = (errmsg or "").lower()
+    return any(m.lower() in em for m in _FOFA_RATELIMIT_MARKS)
+
+
+def fofa_count(query: str) -> Dict[str, Any]:
+    """FOFA 命中总数预估（只打一次 search/all 读官方 size，不翻页/不拉全量，省额度）。
+
+    返回结构化 dict（供"测试查询"用，取代原先"拉一批再数 len"的误导性预估）：
+      {ok, size, error, errmsg, query}
+      - ok=True + size：FOFA 官方声明的总命中数（size=0 就是真没匹配到，非"超上限"）。
+      - ok=False + errmsg：FOFA 真实报错（语法错/额度不足等），如实透传。
+    **限流(429/速度过快)退避重试自愈**：限流是瞬时抖动，不当结果直报（守记忆铁律
+    [[feedback-retry-not-cache-for-flaky-probe]]）；重试仍限流才提示"稍后重试"。
+    治「domain="gov.cn" 预估 0 条」的误导——domain 是精确主域匹配，gov.cn 是公共二级
+    后缀本就 0 条命中（实测 beijing.gov.cn=1664/www.gov.cn=647 有命中，gov.cn=0），如实透出。
+    """
+    cfg = get_config()
+    key = _apikey("fofa") or cfg.section("FOFA", "KEY", default="") or ""
+    if not key:
+        return {"ok": False, "size": 0, "error": True, "errmsg": "未配置 FOFA KEY", "query": query}
+    q = normalize_fofa_query(query) or ""
+    base = str(cfg.section("FOFA", "URL", default="https://fofa.info")).rstrip("/")
+    q64 = base64.b64encode(q.encode()).decode()
+    last_msg = "FOFA 查询失败"
+    for attempt in range(_FOFA_COUNT_RETRY):
+        try:
+            conn = http_req(base + "/api/v1/search/all", "get",
+                            params={"qbase64": q64, "size": 1, "fields": "host", "key": key},
+                            proxies=_intel_proxies())
+            status = conn.status_code
+            data = conn.json() if status == 200 else {}
+            errmsg = str(data.get("errmsg") or "") if data else ""
+            # 限流 → 退避重试自愈（不直报）
+            if _is_fofa_ratelimit(status, errmsg) or (status != 200 and status >= 500):
+                last_msg = errmsg or "HTTP {}".format(status)
+                if attempt < _FOFA_COUNT_RETRY - 1:
+                    time.sleep(_FOFA_COUNT_BACKOFF * (2 ** attempt))
+                    continue
+                # 重试耗尽仍限流：明确提示是限流、稍后再试（而非笼统 429/会员上限）
+                return {"ok": False, "size": 0, "error": True, "query": q,
+                        "errmsg": "FOFA 请求频繁被限流，请稍后重试（已自动重试 {} 次）".format(_FOFA_COUNT_RETRY)}
+            if status != 200:
+                return {"ok": False, "size": 0, "error": True,
+                        "errmsg": "HTTP {}".format(status), "query": q}
+            if data.get("error"):
+                # 非限流的真实报错（语法/额度等）如实透传（脱敏 key）
+                return {"ok": False, "size": 0, "error": True,
+                        "errmsg": _mask(errmsg or "FOFA 查询出错", key), "query": q}
+            size = int(data.get("size") or 0)
+            logger.info("fofa count %s -> size=%d", q, size)
+            return {"ok": True, "size": size, "error": False, "errmsg": "", "query": q}
+        except Exception as e:
+            last_msg = _mask(str(e), key)[:160]
+            if attempt < _FOFA_COUNT_RETRY - 1:
+                time.sleep(_FOFA_COUNT_BACKOFF * (2 ** attempt))
+                continue
+    return {"ok": False, "size": 0, "error": True, "errmsg": last_msg, "query": q}
+
+
 def fofa_query(query: str, fields: str = "host,ip,port",
                page_size: int = 0, max_page: int = 0) -> Any:
     """FOFA 查询。返回结果列表；未配 key/出错返回错误字符串（日志脱敏 key）。"""
@@ -216,13 +300,201 @@ def fofa_query(query: str, fields: str = "host,ip,port",
         return msg
 
 
+# —— 鹰图 Hunter 按任意语句查询（多源建任务用；区别于 _hunter_by_icp_name 的 icp.name 反查）——
+_HUNTER_RATELIMIT_MARKS = ("请求太多", "频繁", "too many", "rate", "40204", "429", "积分")
+
+
+def _hunter_query_max_page() -> int:
+    """鹰图按语句查询翻页上限（可配 HUNTER.QUERY_MAX_PAGE，默认沿用 unit 上限）。禁硬编码魔数。"""
+    try:
+        v = get_config().section("HUNTER", "QUERY_MAX_PAGE", default=None)
+        if v is not None:
+            return int(v)
+    except (TypeError, ValueError):
+        pass
+    return _unit_max_page()
+
+
+def hunter_count(query: str) -> Dict[str, Any]:
+    """鹰图命中总数预估：只查首页读 data.total，省配额。限流退避重试自愈。
+    返回 {ok, size, error, errmsg}。语义：鹰图 domain= 是模糊匹配（domain="gov.cn" 命中全部 *.gov.cn）。"""
+    cfg = get_config()
+    key = _apikey("hunter") or cfg.section("HUNTER", "KEY", default="") or ""
+    if not key:
+        return {"ok": False, "size": 0, "error": True, "errmsg": "未配置鹰图 KEY"}
+    q = (query or "").strip()
+    if not q:
+        return {"ok": False, "size": 0, "error": True, "errmsg": "查询语句为空"}
+    url = str(cfg.section("HUNTER", "URL", default="https://hunter.qianxin.com")).rstrip("/") + "/openApi/search"
+    sb64 = base64.urlsafe_b64encode(q.encode()).decode()
+    for attempt in range(_REVERSE_RETRY):
+        try:
+            data = http_req(url, "get", timeout=(10.1, 20),
+                            params={"api-key": key, "search": sb64, "page": 1, "page_size": 1, "is_web": 3},
+                            proxies=_intel_proxies()).json()
+            code = data.get("code")
+            msg = str(data.get("message") or "")
+            if code == 200:
+                total = int(((data.get("data") or {}).get("total")) or 0)
+                logger.info("hunter count %s -> total=%d", q, total)
+                return {"ok": True, "size": total, "error": False, "errmsg": ""}
+            # 限流类 → 退避重试；其他确定性错（语法/积分不足）→ 直接返回
+            if any(m in msg for m in _HUNTER_RATELIMIT_MARKS) and attempt < _REVERSE_RETRY - 1:
+                time.sleep(_REVERSE_BACKOFF * (2 ** attempt))
+                continue
+            return {"ok": False, "size": 0, "error": True, "errmsg": "鹰图: {}".format(msg[:80] or code)}
+        except Exception as e:
+            if attempt < _REVERSE_RETRY - 1:
+                time.sleep(_REVERSE_BACKOFF * (2 ** attempt))
+                continue
+            return {"ok": False, "size": 0, "error": True, "errmsg": _mask(str(e), key)[:120]}
+    return {"ok": False, "size": 0, "error": True, "errmsg": "鹰图查询重试耗尽"}
+
+
+def hunter_query(query: str, max_page: int = 0) -> Dict[str, Any]:
+    """鹰图按任意语句查资产（翻页收集）。返回 {ok, total, rows:[{host,ip,port}], error}。
+    rows: host=domain（无则空，用 ip 落目标）；ip=公网IPv4；port。翻页+网络重试自愈（同 _hunter_by_icp_name）。"""
+    cfg = get_config()
+    key = _apikey("hunter") or cfg.section("HUNTER", "KEY", default="") or ""
+    if not key:
+        return {"ok": False, "total": 0, "rows": [], "error": "未配置鹰图 KEY"}
+    q = (query or "").strip()
+    if not q:
+        return {"ok": False, "total": 0, "rows": [], "error": "查询语句为空"}
+    url = str(cfg.section("HUNTER", "URL", default="https://hunter.qianxin.com")).rstrip("/") + "/openApi/search"
+    sb64 = base64.urlsafe_b64encode(q.encode()).decode()
+    mp = max_page if max_page > 0 else _hunter_query_max_page()
+    rows: List[Dict[str, Any]] = []
+    total = 0
+    page, page_size = 1, 100
+    while mp <= 0 or page <= mp:
+        data = None
+        for attempt in range(_REVERSE_RETRY):
+            try:
+                data = http_req(url, "get", timeout=(10.1, 20),
+                                params={"api-key": key, "search": sb64,
+                                        "page": page, "page_size": page_size, "is_web": 3},
+                                proxies=_intel_proxies()).json()
+                break
+            except Exception:
+                if attempt < _REVERSE_RETRY - 1:
+                    time.sleep(_REVERSE_BACKOFF * (2 ** attempt))
+        if data is None:
+            break
+        if data.get("code") != 200:
+            logger.warning("hunter query %s code=%s msg=%s", q, data.get("code"), data.get("message"))
+            if not rows:
+                return {"ok": False, "total": 0, "rows": [], "error": "鹰图: {}".format(str(data.get("message"))[:80])}
+            break
+        dd = data.get("data") or {}
+        total = int(dd.get("total") or total)
+        arr = dd.get("arr") or []
+        for item in arr:
+            host = (item.get("domain") or "").strip().lower()
+            ip = (item.get("ip") or "").strip()
+            port = str(item.get("port") or "").strip()
+            rows.append({"host": host, "ip": ip if _is_ipv4(ip) else "", "port": port})
+        if len(arr) < page_size:
+            break
+        page += 1
+    logger.info("hunter query %s -> total=%d rows=%d", q, total, len(rows))
+    return {"ok": True, "total": total, "rows": rows, "error": ""}
+
+
+def _dedup_source_rows(rows: List[Dict[str, Any]]) -> List[str]:
+    """多源资产行 → 去重后的 target 列表（本方案去重键，宽进不误删）：
+      有域名(host 非纯IP) → 按 hostname 去重（key=d:host），落 target=host（域名下发触发完整侦察）；
+      纯IP(无 host 或 host 是 IP) → 按 ip+port 去重（key=p:ip|port），落 target=ip。
+    不解析域名成IP、不用 title、不判 CDN（建任务前信息不全，避免 CDN 共享IP/子系统误合并）；
+    精细去重复用下游策略层 session._dedup_key（扫描归集→派发时用完整信息）。"""
+    seen = set()
+    targets: List[str] = []
+    for r in rows:
+        host = (r.get("host") or "").strip().lower()
+        ip = (r.get("ip") or "").strip()
+        # 落 target：有域名(非纯IP)下发域名(触发完整侦察)，否则下发 IP。
+        # 去重键=最终 target 字符串：域名按 hostname 去重；纯 IP 按 IP 去重
+        # （同 IP 不同端口合并成一次 IP 任务——IP 侦察本就全端口扫，不按端口重复下发）。
+        if host and not _is_ipv4(host):
+            tgt = host
+        elif ip:
+            tgt = ip
+        elif host:            # host 是纯 IP 字面量
+            tgt = host
+        else:
+            continue
+        if tgt in seen:
+            continue
+        seen.add(tgt)
+        targets.append(tgt)
+    return targets
+
+
+def multi_source_targets(queries: Dict[str, str]) -> Dict[str, Any]:
+    """多源查询合并去重（FOFA + 鹰图，各写各语法）。核心：源查询建任务的入口层合并。
+    入参 queries={"fofa":"语句","hunter":"语句"}（只处理非空源）。
+    各源各查 → 汇成 rows[{host,ip,port}] → _dedup_source_rows 去重 → targets。
+    返回 {ok, targets:[...], per_source:{fofa:N,hunter:M}, merged:T, errors:{...}}。"""
+    queries = queries or {}
+    rows: List[Dict[str, Any]] = []
+    per_source: Dict[str, int] = {}
+    errors: Dict[str, str] = {}
+
+    # FOFA：fofa_query 返回 [[host,ip,port],...]
+    fq = (queries.get("fofa") or "").strip()
+    if fq:
+        try:
+            res = fofa_query(normalize_fofa_query(fq), fields="host,ip,port")
+            if isinstance(res, str):        # 错误字符串
+                errors["fofa"] = res[:120]
+                per_source["fofa"] = 0
+            else:
+                cnt = 0
+                for row in res:
+                    if isinstance(row, (list, tuple)) and row:
+                        host = str(row[0] or "").strip().lower()
+                        ip = str(row[1]).strip() if len(row) > 1 and row[1] else ""
+                        port = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+                        # FOFA host 常带 scheme（http://x），剥掉
+                        if "://" in host:
+                            host = host.split("://", 1)[1]
+                        host = host.split("/")[0]
+                        # host 带端口 → 拆
+                        if ":" in host and not _is_ipv4(host):
+                            hp = host.rsplit(":", 1)
+                            if hp[1].isdigit():
+                                host, port = hp[0], port or hp[1]
+                        rows.append({"host": host, "ip": ip, "port": port})
+                        cnt += 1
+                per_source["fofa"] = cnt
+        except Exception as e:
+            errors["fofa"] = str(e)[:120]
+            per_source["fofa"] = 0
+
+    # 鹰图：hunter_query 返回 {rows:[{host,ip,port}]}
+    hq = (queries.get("hunter") or "").strip()
+    if hq:
+        hr = hunter_query(hq)
+        if hr.get("ok"):
+            rows.extend(hr.get("rows") or [])
+            per_source["hunter"] = len(hr.get("rows") or [])
+        else:
+            errors["hunter"] = hr.get("error", "鹰图查询失败")
+            per_source["hunter"] = 0
+
+    targets = _dedup_source_rows(rows)
+    ok = bool(targets) or not errors   # 有目标即成功；全空且有错则失败
+    return {"ok": ok, "targets": targets, "per_source": per_source,
+            "merged": len(targets), "errors": errors}
+
+
 def crtsh_search(domain: str) -> List[str]:
     """crt.sh 证书透明日志查子域名。返回归属 domain 的子域名去重列表；出错返回 []。"""
     names: List[str] = []
     try:
         conn = http_req("https://crt.sh/", "get",
                         params={"output": "json", "q": domain}, timeout=(30.1, 50.1),
-                        proxies=_intel_proxies())
+                        proxies=_intel_proxies(prefer_proxy=True))   # crtsh 境外源，保留智能代理绕墙
         for item in conn.json() or []:
             for name in (item.get("name_value") or "").split():
                 name = name.strip().strip("*.").lower()
@@ -262,8 +534,13 @@ def _main_domain(domain: str) -> str:
 
 
 def icp_query(domain: str) -> Dict[str, str]:
-    """域名→备案单位名。Hunter(company 字段)优先，FOFA(icp 号)兜底，结果缓存 icp_cache。
-    返回 {"unit", "icp_no", "source"}；查不到返回空 unit（不抛异常）。"""
+    """域名→备案单位名。多源链：Hunter(company 字段，快/可批量/免验证码) 优先 →
+    工信部官方 miit(权威/免积分，但有滑块验证码略慢) 兜底校准 → FOFA(仅 icp 号) 末位。
+    结果缓存 icp_cache。返回 {"unit", "icp_no", "source"}；查不到返回空 unit（不抛异常）。
+
+    官方源定位为**兜底**（对齐用户决策）：Hunter 拿到单位名即用，主链路批量归集不被验证码拖慢；
+    仅 Hunter 未出单位名时才请官方补齐（权威且不烧鹰图积分）。官方源可用性受出口 IP 风控影响，
+    失败静默降级到 FOFA（守 §0.4 外部源失败不抛异常）。"""
     dom = _main_domain(domain)
     if not dom:
         return {"unit": "", "icp_no": "", "source": ""}
@@ -271,10 +548,30 @@ def icp_query(domain: str) -> Dict[str, str]:
     if cached:
         return {"unit": cached.get("unit", ""), "icp_no": cached.get("icp_no", ""),
                 "source": cached.get("source", "cache")}
-    result = _query_hunter(dom) or _query_fofa(dom) or {"unit": "", "icp_no": "", "source": ""}
+    # Hunter 优先：拿到单位名(unit)即采用（company 字段够用、快、免验证码）
+    result = _query_hunter(dom)
+    if not (result and result.get("unit")):
+        # Hunter 没出单位名 → 官方 miit 兜底（权威、免积分；失败降级）
+        miit = _query_miit(dom)
+        if miit and (miit.get("unit") or miit.get("icp_no")):
+            result = miit
+        elif not result:
+            result = _query_fofa(dom)     # 官方也没有 → FOFA 拿 icp 号兜底
+    result = result or {"unit": "", "icp_no": "", "source": ""}
     if result.get("unit") or result.get("icp_no"):
         _cache_set(dom, result)
     return result
+
+
+def _query_miit(domain: str) -> Optional[Dict[str, str]]:
+    """工信部官方 ICP 查询兜底（对接模块经 _icp_miit，防腐层结构化）。失败/异常返回 None（静默降级）。"""
+    try:
+        from ._icp_miit import query_icp as _miit_query
+        r = _miit_query(domain)
+        return r if (r and (r.get("unit") or r.get("icp_no"))) else None
+    except Exception as exc:
+        logger.debug("icp _query_miit degraded: %s", exc)
+        return None
 
 
 def _cache_get(domain: str) -> Optional[Dict[str, Any]]:
@@ -354,25 +651,40 @@ def _unit_max_page() -> int:
         return 10
 
 
-def _hunter_by_icp_name(unit: str) -> set:
-    """鹰图 icp.name="单位全称" 反查该单位全部备案域名（翻页收集去重）。无 key/失败→空 set（静默降级）。
-    净室重写 unit_collect._hunter_by_icp（备案维度精准，不扯第三方，不踩授权红线）。"""
+def _hunter_by_icp_name(unit: str) -> Dict[str, set]:
+    """鹰图 icp.name="单位全称" 反查该单位全部备案资产（翻页收集去重）。无 key/失败→空（静默降级）。
+    净室重写 unit_collect._hunter_by_icp（备案维度精准，不扯第三方，不踩授权红线）。
+    **返回 {"domains": set, "ips": set}**：Hunter 每条记录自带 domain + ip + port，两者都是资产、互补——
+    有些主域无 A 记录（如 xxx.cn 只承载邮件/子域名）DNS 解析不出，但 Hunter 已给出可直接扫的 IP，不能丢
+    （治"反查到资产却因主域解析不出→0 资产"）。IP 交 ip pipeline 直接 portscan/site，绕开 DNS 瓶颈。"""
     domains: set = set()
+    ips: set = set()
     cfg = get_config()
     key = _apikey("hunter") or cfg.section("HUNTER", "KEY", default="") or ""
     if not key or not unit:
-        return domains
+        return {"domains": domains, "ips": ips}
     url = str(cfg.section("HUNTER", "URL", default="https://hunter.qianxin.com")).rstrip("/") + "/openApi/search"
     search_b64 = base64.urlsafe_b64encode('icp.name="{}"'.format(unit).encode()).decode()
     page, max_page, page_size = 1, _unit_max_page(), 100
     while max_page <= 0 or page <= max_page:
-        try:
-            data = http_req(url, "get", timeout=(10.1, 20),
-                            params={"api-key": key, "search": search_b64,
-                                    "page": page, "page_size": page_size, "is_web": 1},
-                            proxies=_intel_proxies()).json()
-        except Exception as e:
-            logger.warning("unit reverse hunter unit=%s page=%s error: %s", unit, page, e)
+        # 网络异常（连接/DNS/超时）重试自愈：容器系统 DNS 偶发抽风，单次失败不该让反查归零。
+        # 拿到 HTTP 响应即跳出重试（含 code!=200 的确定性错，交下方判定，不重试）。
+        data = None
+        last_err = None
+        for attempt in range(_REVERSE_RETRY):
+            try:
+                data = http_req(url, "get", timeout=(10.1, 20),
+                                params={"api-key": key, "search": search_b64,
+                                        "page": page, "page_size": page_size, "is_web": 1},
+                                proxies=_intel_proxies()).json()
+                break
+            except Exception as e:
+                last_err = e
+                if attempt < _REVERSE_RETRY - 1:
+                    time.sleep(_REVERSE_BACKOFF * (2 ** attempt))   # 0.5s / 1s 退避后重连
+        if data is None:
+            logger.warning("unit reverse hunter unit=%s page=%s 重试 %d 次仍失败: %s",
+                           unit, page, _REVERSE_RETRY, last_err)
             break
         if data.get("code") != 200:
             logger.warning("unit reverse hunter unit=%s code=%s msg=%s",
@@ -383,26 +695,45 @@ def _hunter_by_icp_name(unit: str) -> set:
             d = (item.get("domain") or "").strip().lower()
             if d:
                 domains.add(d)
+            ip = (item.get("ip") or "").strip()
+            if _is_ipv4(ip):                  # 只收公网可扫的 IPv4，域名/内网/空一律不当 IP 种子
+                ips.add(ip)
         if len(arr) < page_size:
             break
         page += 1
-    logger.info("unit reverse hunter unit=%s domains=%d", unit, len(domains))
-    return domains
+    logger.info("unit reverse hunter unit=%s domains=%d ips=%d", unit, len(domains), len(ips))
+    return {"domains": domains, "ips": ips}
+
+
+def _is_ipv4(v: str) -> bool:
+    """判定是否为公网 IPv4（反查 IP 种子入 ip pipeline 前的守卫：内网/环回/非法一律排除）。"""
+    try:
+        import ipaddress
+        ip = ipaddress.ip_address(v)
+        return ip.version == 4 and not (ip.is_private or ip.is_loopback or ip.is_reserved
+                                        or ip.is_link_local or ip.is_multicast)
+    except (ValueError, TypeError):
+        return False
 
 
 def reverse_lookup_units(units: List[str]) -> Dict[str, Any]:
-    """单位名 → 资产反查（种子收集）。Hunter icp.name 主力反查各单位备案域名。
-    返回 {"seeds": [去重域名...], "unit_map": {fld: unit}}。查不到返空 seeds（不抛，交调用方降级）。
-    净室重写 unit_collect.reverse_lookup_by_units：只拿种子不做探测，种子交 recon pipeline 统一处理。"""
+    """单位名 → 资产反查（种子收集）。Hunter icp.name 主力反查各单位备案资产。
+    返回 {"seeds": [域名...], "ip_seeds": [公网IP...], "unit_map": {fld: unit}}。查不到返空（不抛，交调用方降级）。
+    净室重写 unit_collect.reverse_lookup_by_units：只拿种子不做探测，种子交 recon pipeline 统一处理。
+    **域名 + IP 两类种子互补**：域名走 domain pipeline（子域名/解析/建站），IP 走 ip pipeline（直接
+    portscan/site，绕开 DNS）——测绘源情报与自主侦察互补，主域解析不出时 IP 资产仍能覆盖。"""
     seeds: set = set()
+    ip_seeds: set = set()
     unit_map: Dict[str, str] = {}
     for unit in (units or []):
         u = (unit or "").strip()
         if not u:
             continue
-        for d in _hunter_by_icp_name(u):
+        found = _hunter_by_icp_name(u)
+        for d in found.get("domains", set()):
             seeds.add(d)
             fld = _main_domain(d)
             if fld and fld not in unit_map:   # fld→单位映射（四级目录归属，先到先得）
                 unit_map[fld] = u
-    return {"seeds": sorted(seeds), "unit_map": unit_map}
+        ip_seeds.update(found.get("ips", set()))
+    return {"seeds": sorted(seeds), "ip_seeds": sorted(ip_seeds), "unit_map": unit_map}

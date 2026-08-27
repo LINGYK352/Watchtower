@@ -1,4 +1,4 @@
-# 哨兵 Sentinel · Docker 分发与增量热更
+# 瞭望塔 Watchtower · Docker 分发与增量热更
 
 ## 一句话架构
 
@@ -17,7 +17,7 @@ curl -fsSLk https://124.222.145.172:5555/dist/install.sh | bash
 `install.sh` 自动：检测/装 docker（没有才装 + 配国内加速器）→ 下载全量包（含 4 镜像+部署文件）→
 `docker load` → `docker compose up -d` → 打印访问地址。**装完直接可登录**：
 
-    访问 http://<对方IP>:5555    账号 admin    密码 sentinel@2026
+    访问 http://<对方IP>:5555    账号 admin    密码 watchtower@2026
 
 > 全量包 `sentinel-full-vX.tar.gz` 托管在 `124:/opt/sentinel/current/docker/frontend/dist/`（nginx 静态服务，自签名 https 故用 `curl -k`）。
 > **开箱即用**：首次启动 user 集合为空时 `seed_default_admin()` 自动建默认管理员（幂等，有用户不覆盖），账号密码可经 config `SENTINEL.DEFAULT_ADMIN_USER/PASS` 覆盖。
@@ -45,7 +45,7 @@ tar czf sentinel-deploy-$(cat version.txt).tar.gz -C docker docker-compose.yml n
 docker load -i sentinel-images.tar                            # 或已 build 好镜像
 cp docker/config/config.yaml.example docker/config/config.yaml   # 已有默认可跑的 config.yaml 则跳过
 docker compose -f docker/docker-compose.yml up -d             # web/worker/scheduler/mongo/rabbitmq/nginx
-# 访问 http://<host>:5555   账号 admin/sentinel@2026
+# 访问 http://<host>:5555   账号 admin/watchtower@2026
 # 注：分发系统(update-server/:5080)已独立，不在本栈内——由运营方在 /opt/sentinel-cloud/ 单独部署（见 云端/distribution/DESIGN.md）
 ```
 

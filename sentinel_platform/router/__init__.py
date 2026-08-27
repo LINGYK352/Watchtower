@@ -73,6 +73,8 @@ def _mount_namespaces(api: Any) -> None:
         ("sentinel_platform.router.endpoints.asset_monitor", "ns"),  # /api/scheduler/*（资产监控周期任务）
         ("sentinel_platform.router.endpoints.about", "ns"),          # /api/about/*（更新检测）
         ("sentinel_platform.router.endpoints.network", "ns"),        # /api/network/*（网络检测 ping）
+        ("sentinel_platform.router.endpoints.probe", "ns"),          # /api/probe/*（探针管理）
+        ("sentinel_platform.router.endpoints.miniapp", "ns"),        # /api/miniapp/*（小程序渗透：解包+提接口）
         ("sentinel_platform.router.endpoints.scan_result", "ns_vuln"),    # /api/vuln/*（PoC 扫描结果 list+delete）
         ("sentinel_platform.router.endpoints.scan_result", "ns_nuclei"),  # /api/nuclei_result/*（nuclei 命中 list+delete）
         ("sentinel_platform.router.endpoints.scan_result", "ns_npoc"),    # /api/npoc_service/*（非Web服务识别，仅 list）

@@ -18,9 +18,9 @@ def build_api(app: Any = None):
     """建 flask_restx.Api：挂 /api，文档 /api/doc，全局 Token 安全方案。"""
     from flask_restx import Api
     api = Api(
-        title="哨兵 Sentinel API",
+        title="瞭望塔 Watchtower API",
         version="1.0",
-        description="哨兵平台对外 REST API（统一信封 {code,message,data}，Token 头鉴权）",
+        description="瞭望塔平台对外 REST API（统一信封 {code,message,data}，Token 头鉴权）",
         doc="/api/doc",
         prefix="/api",
         authorizations=AUTHORIZATIONS,

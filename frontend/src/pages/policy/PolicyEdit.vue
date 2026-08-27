@@ -10,23 +10,21 @@
         <a-divider orientation="left">域名配置</a-divider>
         <a-form-item label="资产收集模式">
           <a-radio-group v-model:value="cfg.collect_mode" button-style="solid" size="small" class="collect-mode-group">
-            <a-radio-button value="single">单域(只打下发目标)</a-radio-button>
-            <a-radio-button value="multi_brute">多域+爆破</a-radio-button>
-            <a-radio-button value="multi_passive">多域+被动(FOFA)</a-radio-button>
+            <a-radio-button value="single">单点目标</a-radio-button>
+            <a-radio-button value="multi_brute">广域目标</a-radio-button>
           </a-radio-group>
           <div style="margin-top:4px;color:#888;font-size:12px">
             <span v-if="cfg.collect_mode === 'single'">只解析下发目标本身,不做任何子域扩散(爆破/历史/智能/FOFA 全禁),去重按 IP+port/hostname。</span>
-            <span v-else-if="cfg.collect_mode === 'multi_passive'">不做子域爆破,但用 FOFA 被动补充子域资产。</span>
-            <span v-else>子域爆破 + 历史/智能字典 + FOFA 多源收集(默认,兼容存量策略)。</span>
+            <span v-else>subfinder 被动枚举(证书透明日志/DNS 聚合/搜索引擎等多源) + 子域名字典爆破(按上方选项),尽可能收全资产。</span>
           </div>
         </a-form-item>
         <a-space wrap>
-          <a-checkbox v-model:checked="cfg.domain_config.domain_brute" :disabled="cfg.collect_mode === 'single'">域名爆破</a-checkbox>
+          <span style="color:#888">域名爆破</span>
           <a-select v-model:value="cfg.domain_config.domain_brute_type" style="width: 120px" :options="bruteTypeOptions" :disabled="cfg.collect_mode === 'single'" />
-          <a-checkbox v-model:checked="cfg.domain_config.alt_dns" :disabled="cfg.collect_mode === 'single'">智能字典</a-checkbox>
-          <a-checkbox v-model:checked="cfg.domain_config.arl_search" :disabled="cfg.collect_mode === 'single'">历史情报</a-checkbox>
-          <a-checkbox v-model:checked="cfg.domain_config.dns_query_plugin" :disabled="cfg.collect_mode === 'single'">查询插件</a-checkbox>
         </a-space>
+        <div style="margin-top:4px;color:#888;font-size:12px">
+          子域名爆破字典（单点目标不爆破，已禁用）。选「不爆破」则只被动收集（subfinder 从证书透明日志/DNS 聚合/搜索引擎等被动源枚举子域名），不跑字典爆破。
+        </div>
         <a-collapse ghost style="margin-top:8px">
           <a-collapse-panel key="dict" header="自定义爆破字典 / DNS Resolver（可选，留空用内置默认）">
             <a-row :gutter="16">
@@ -46,13 +44,16 @@
 
         <a-divider orientation="left">IP / 端口配置</a-divider>
         <a-space wrap>
-          <a-checkbox v-model:checked="cfg.ip_config.port_scan">端口扫描</a-checkbox>
+          <span style="color:#888">端口扫描</span>
           <a-select v-model:value="cfg.ip_config.port_scan_type" style="width: 130px" :options="portTypeOptions" />
           <a-checkbox v-model:checked="cfg.ip_config.service_detection">服务识别</a-checkbox>
           <a-checkbox v-model:checked="cfg.ip_config.os_detection">操作系统识别</a-checkbox>
           <a-checkbox v-model:checked="cfg.ip_config.ssl_cert">SSL证书</a-checkbox>
           <a-checkbox v-model:checked="cfg.ip_config.skip_scan_cdn_ip">跳过CDN</a-checkbox>
         </a-space>
+        <div style="margin-top:4px;color:#888;font-size:12px">
+          端口扫描范围。选「不扫描」则不做端口扫描（服务识别/操作系统识别等依赖端口的项也不生效）。
+        </div>
         <a-row :gutter="16" style="margin-top: 12px">
           <a-col :xs="24" :md="8" v-if="cfg.ip_config.port_scan_type === 'custom'"><a-form-item label="自定义端口"><a-input v-model:value="cfg.ip_config.port_custom" placeholder="80,443" /></a-form-item></a-col>
           <a-col :xs="24" :md="8"><a-form-item label="排除端口"><a-input v-model:value="cfg.ip_config.exclude_ports" placeholder="留空不排除" /></a-form-item></a-col>
@@ -103,17 +104,9 @@
             <a-radio-button v-for="m in PENTEST_MODES" :key="m.value" :value="m.value">{{ m.label }}</a-radio-button>
           </a-radio-group>
           <div style="margin-top:6px;color:#d46b08;font-size:12px" v-if="currentModeWarn">⚠ {{ currentModeWarn }}</div>
-          <div style="margin-top:10px">
-            <span style="margin-right:8px">AI 攻击出口</span>
-            <a-radio-group v-model:value="cfg.pentest_egress.mode" button-style="solid" size="small">
-              <a-radio-button value="direct">直连</a-radio-button>
-              <a-radio-button value="global">全局</a-radio-button>
-              <a-radio-button value="smart">智能</a-radio-button>
-            </a-radio-group>
-            <div style="margin-top:6px;color:#888;font-size:12px">
-              AI 渗透打目标出口。直连=不走代理;全局=走代理中心「平台代理模式」选定的源;智能=代理不通自动回退直连(推荐)。中转站访问代理另在 AI 配置处按模型设。
-              <span v-if="cfg.pentest_egress.mode === 'direct' && globalOn" style="color:#d46b08">（注：直连仅本策略此项）</span>
-            </div>
+          <!-- AI 攻击出口已移到「新建任务」页选择（cfg.pentest_egress 仍作策略默认兜底，任务传了则覆盖）。 -->
+          <div style="margin-top:10px;color:#888;font-size:12px">
+            AI 攻击出口（直连/全局/智能）改在<b>新建任务</b>时按任务选择，未绑定代理源的模式会置灰。本策略默认：{{ cfg.pentest_egress?.mode === 'global' ? '全局' : cfg.pentest_egress?.mode === 'smart' ? '智能' : '直连' }}。
           </div>
           <div style="margin-top:10px">
             <span style="margin-right:8px">派发去重</span>
@@ -214,9 +207,9 @@ async function loadProxyRules() {
   } catch { /* 代理服务不可用不阻断策略编辑 */ }
 }
 
-const bruteTypeOptions = [{ label: '测试字典', value: 'test' }, { label: '大字典', value: 'big' }]
+const bruteTypeOptions = [{ label: '不爆破', value: 'none' }, { label: '测试字典', value: 'test' }, { label: '大字典', value: 'big' }]
 const portTypeOptions = [
-  { label: '测试端口', value: 'test' }, { label: 'TOP100', value: 'top100' },
+  { label: '不扫描', value: 'none' }, { label: '测试端口', value: 'test' }, { label: 'TOP100', value: 'top100' },
   { label: 'TOP1000', value: 'top1000' }, { label: '全部', value: 'all' }, { label: '自定义', value: 'custom' }
 ]
 

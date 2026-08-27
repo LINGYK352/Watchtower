@@ -35,12 +35,62 @@ class Health(Resource):
         return ok({"status": "up"})
 
 
+# IANA 时区名 → 人类可读中文地理名（常见区，覆盖不到则按 UTC 偏移兜底）。
+_TZ_CN = {
+    "Etc/UTC": "协调世界时", "UTC": "协调世界时", "GMT": "格林尼治时间",
+    "America/New_York": "美国东部时间", "America/Detroit": "美国东部时间",
+    "America/Chicago": "美国中部时间", "America/Denver": "美国山地时间",
+    "America/Phoenix": "美国山地时间", "America/Los_Angeles": "美国西部时间",
+    "America/Anchorage": "美国阿拉斯加时间", "Pacific/Honolulu": "美国夏威夷时间",
+    "America/Sao_Paulo": "巴西时间", "Europe/London": "英国时间",
+    "Europe/Paris": "中欧时间", "Europe/Berlin": "中欧时间", "Europe/Moscow": "莫斯科时间",
+    "Asia/Shanghai": "北京时间", "Asia/Hong_Kong": "香港时间", "Asia/Taipei": "台北时间",
+    "Asia/Tokyo": "日本时间", "Asia/Seoul": "韩国时间", "Asia/Singapore": "新加坡时间",
+    "Asia/Kolkata": "印度时间", "Asia/Dubai": "海湾时间", "Australia/Sydney": "澳东时间",
+}
+
+
+def _tz_label(iana: str, off_min: int) -> str:
+    """时区中文地理名。优先按 IANA 名精确映射；命中不了按 UTC 偏移给通用中文名（如"东八区"级别）。"""
+    if iana in _TZ_CN:
+        return _TZ_CN[iana]
+    # 偏移兜底：常见整点区给地理名，其余用"UTC±N"
+    _OFF_CN = {0: "协调世界时", -300: "美国东部时间", -360: "美国中部时间",
+               -420: "美国山地时间", -480: "美国西部时间", 480: "北京时间",
+               540: "日本时间", 60: "中欧时间", 0.0: "协调世界时"}
+    if off_min in _OFF_CN:
+        return _OFF_CN[off_min]
+    return ""   # 交前端用 UTC±偏移展示
+
+
+def _os_timezone() -> dict:
+    """操作系统时区（态势总览/全局顶栏展示，说明平台所有时间戳都是该 OS 时区的本地时间，无时区标注）。
+    平台不改时间存储；要改时间显示只能改 OS/容器时区。返回 {tz_name, tz_abbr, tz_label, utc_offset_min}。"""
+    try:
+        import time as _t, os as _os
+        is_dst = _t.daylight and _t.localtime().tm_isdst > 0
+        off_sec = -(_t.altzone if is_dst else _t.timezone)   # 东区为正
+        abbr = _t.tzname[1] if is_dst else _t.tzname[0]
+        name = _os.environ.get("TZ", "") or ""
+        if not name and _os.path.exists("/etc/timezone"):
+            try:
+                with open("/etc/timezone") as f:
+                    name = f.read().strip()
+            except Exception:
+                pass
+        off_min = int(off_sec // 60)
+        return {"tz_name": name or abbr, "tz_abbr": abbr, "utc_offset_min": off_min,
+                "tz_label": _tz_label(name or abbr, off_min)}
+    except Exception:
+        return {"tz_name": "", "tz_abbr": "", "utc_offset_min": 0, "tz_label": ""}
+
+
 @ns.route("/version")
 class Version(Resource):
     @ns.doc(security=None)
     def get(self):
-        """平台版本"""
-        return ok({"name": "哨兵 Sentinel", "api": "1.0"})
+        """平台版本 + 服务器操作系统时区（前端展示时间戳所属时区）"""
+        return ok({"name": "瞭望塔 Watchtower", "api": "1.0", **_os_timezone()})
 
 
 @ns.route("/modules")
@@ -126,9 +176,10 @@ class Activation(Resource):
         """查询系统激活状态 —— 统一走 system/activation.local_status()（本地校 JWT 时效，全 worker 一致）。"""
         from sentinel_platform.modules.system import activation
         st = activation.local_status()
+        # 附服务器时区：剩余天数/到期时间按服务器 OS 时区计算，前端徽标标注时区避免误解（见 §7.8）。
         return ok({"activated": st["activated"], "expired": st["expired"],
                    "expires_at": st["expires_at"], "source_url": activation.source_url(),
-                   "remaining_days": st["remaining_days"]})
+                   "remaining_days": st["remaining_days"], **_os_timezone()})
 
     @ns.doc(security="token")
     def post(self):

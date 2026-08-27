@@ -116,6 +116,49 @@ _QUEUED_ORPHAN_SECONDS = 180   # queued 中间态超此秒数无进展 = 投递�
 _MAX_TASK_RECLAIM = 3          # running 僵尸重投续扫上限：超此次数仍僵死 = 真坏任务，标 error 防无限重投
 
 
+def _reclaim_on_startup() -> dict:
+    """**scheduler 启动即回收被打断的 running 任务/会话，立即续跑（不等心跳超时阈值）**。
+    根据：scheduler 一启动就意味着上一轮进程已终止（重启/热更/容器 recreate/崩溃）——此刻残留的
+    running 任务、running/dispatching 会话**必然是被打断的**（worker 也随之重启，不会有真正在跑的），
+    无需傻等 TASK_STALL_SECONDS(默认2h)/会话 STALL(15min) 的僵尸判定。直接回收续跑。
+    **区分用户手动停止（铁律，绝不误续）**：扫描手动停=status="stop"、会话手动停=status="stopped"+
+    stop_requested，二者都不是 running/dispatching，本函数只动 running/dispatching，天然不碰手动停止的。
+    续跑数据不丢：扫描 recon 断点续扫(_load_checkpoint 跳已完成阶段)、会话 checkpoint 接续。
+    重投上限沿用（running 任务累加 reclaim_count，超 _MAX_TASK_RECLAIM 才在后续 tick 判死）。"""
+    from sentinel_platform.core import get_repo
+    out = {"tasks": 0, "sessions": 0}
+    try:
+        tcoll = get_repo().collection("task")
+        # running 扫描任务 → waiting（下轮 run_waiting_tasks 立即重投，断点续扫）。原子条件 status=running。
+        for doc in tcoll.find({"status": "running"}, {"_id": 1, "reclaim_count": 1}):
+            rc = int(doc.get("reclaim_count", 0) or 0)
+            r = tcoll.update_one({"_id": doc["_id"], "status": "running"}, {"$set": {
+                "status": "waiting", "reclaim_count": rc + 1,
+                "dispatch_error": "调度器启动检测到中断（进程重启/热更/容器重建），立即回收续扫（第 {} 次）".format(rc + 1)}})
+            out["tasks"] += getattr(r, "modified_count", 0)
+    except Exception as exc:
+        logger.debug("startup reclaim tasks degraded: %s", exc)
+    try:
+        scoll = get_repo().collection("intel_pentest_session")
+        # running/dispatching 会话 → queued（下轮 _tick_sessions 按并发槽位立即恢复）。
+        # 绝不碰 stopped(手动停+stop_requested)/paused_manual/done/fatal 等终态。
+        # **额外排除 stop_requested=True**（与 orchestration._claim_session 认领条件同口径，BUG-019）：
+        # 用户显式 stop 过的会话即使因竞态状态落在 running（stop 撞上引擎写 running 的窄窗口），也绝不续跑；
+        # 否则回收成 queued 后 _claim_session 会拒认领→卡 queued 不干净。带 stop_requested 的保持不动。
+        for doc in scoll.find({"status": {"$in": ["running", "dispatching"]},
+                               "stop_requested": {"$ne": True}}, {"_id": 1}):
+            r = scoll.update_one({"_id": doc["_id"], "status": {"$in": ["running", "dispatching"]},
+                                  "stop_requested": {"$ne": True}},
+                                 {"$set": {"status": "queued"}})
+            out["sessions"] += getattr(r, "modified_count", 0)
+    except Exception as exc:
+        logger.debug("startup reclaim sessions degraded: %s", exc)
+    if out["tasks"] or out["sessions"]:
+        logger.info("scheduler 启动回收：中断任务 %d 个→waiting、中断会话 %d 个→queued，立即续跑",
+                    out["tasks"], out["sessions"])
+    return out
+
+
 def _reclaim_stalled_tasks() -> int:
     """回收孤儿任务，两类（治「状态永挂、占 in_flight 槽位、无人回收」）：
       ① running 僵尸：running 但 start_time/update_date 超 TASK_STALL_SECONDS 无变化 → 标 error 释放。
@@ -575,6 +618,12 @@ def run_forever() -> None:
     except Exception as exc:
         logger.warning("scheduler bootstrap degraded: %s", exc)
     _install_celery_delivery()   # #7：装 celery 投递，会话/任务投 worker 跑，不在 scheduler 进程内起线程
+    # 启动即回收被打断的 running 任务/会话，立即续跑（不等 2h/15min 僵尸阈值）。scheduler 启动=上轮进程
+    # 已终止(重启/热更/容器recreate)，残留 running 必是中断态。手动停止(stop/stopped)不在 running 天然不误续。
+    try:
+        _reclaim_on_startup()
+    except Exception as exc:
+        logger.warning("scheduler startup reclaim degraded: %s", exc)
     interval = _tick_seconds()
     logger.info("sentinel scheduler started, tick=%ss", interval)
     while True:

@@ -31,6 +31,7 @@
           </div>
         </div>
         <a-space :size="16">
+          <TimezoneTag />
           <a-tag v-if="licenseDays !== null && licenseDays > 0" color="green" style="cursor:pointer" @click="router.push('/about/activation')">
             已激活 · 剩余 {{ licenseDays }} 天
           </a-tag>
@@ -86,6 +87,12 @@
     <!-- 全局更新提示弹窗（检测到新版本弹出，可关闭，一键更新带进度条+自动刷新）-->
     <UpdateNotice @unauthorized="onUnauthorized" />
 
+    <!-- 升级后提示弹窗（更新完成后按版本区间合并提示需复查的配置，弹一次记 seen）-->
+    <UpgradeNoticeModal />
+
+    <!-- 网络质量告警弹窗（体检分数<40 时弹，列排查项；每轮新自检仍<40 再弹）-->
+    <NetQualityAlertModal />
+
     <!-- 首次配置向导（激活 + AI 配置 + API 密钥，按步骤引导） -->
     <SetupWizard :force-show="forceActivation" />
   </a-layout>
@@ -104,6 +111,9 @@ import {
   ControlOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  DeploymentUnitOutlined,
+  ThunderboltOutlined,
+  WechatOutlined,
   NodeIndexOutlined,
   ApartmentOutlined,
   DownOutlined,
@@ -142,9 +152,12 @@ import { APP_NAME, APP_NAME_EN, APP_VERSION } from '../config/brand'
 import { checkActivation } from '../api/meta'
 import BrandLogo from '../components/BrandLogo.vue'
 import UpdateNotice from '../components/UpdateNotice.vue'
+import UpgradeNoticeModal from '../components/UpgradeNoticeModal.vue'
+import NetQualityAlertModal from '../components/NetQualityAlertModal.vue'
 import SetupWizard from '../components/SetupWizard.vue'
 import DisclaimerModal from '../components/DisclaimerModal.vue'
 import AnnouncementBar from '../components/AnnouncementBar.vue'
+import TimezoneTag from '../components/TimezoneTag.vue'
 import { useTheme } from '../composables/useTheme'
 
 const { isDark, toggleTheme } = useTheme()
@@ -184,6 +197,9 @@ const icons: Record<string, unknown> = {
   ControlOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  DeploymentUnitOutlined,
+  ThunderboltOutlined,
+  WechatOutlined,
   NodeIndexOutlined,
   ApartmentOutlined,
   ExperimentOutlined,

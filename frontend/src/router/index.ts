@@ -29,9 +29,11 @@ export const menuGroups: MenuGroup[] = [
     { key: 'policy', title: '策略配置', icon: 'ControlOutlined', path: '/policy' },
     { key: 'taskSchedule', title: '计划任务', icon: 'ScheduleOutlined', path: '/task-schedule' }
   ] },
-  { key: 'aiPentest', title: 'AI 渗透', icon: 'RobotOutlined', children: [
+  { key: 'aiPentest', title: '渗透控制台', icon: 'RobotOutlined', children: [
     { key: 'pentest', title: '渗透会话', icon: 'BugOutlined', path: '/pentest' },
     { key: 'pentestConsole', title: 'AI 控制台', icon: 'CodeOutlined', path: '/pentest/console' },
+    { key: 'miniapp', title: '小程序渗透', icon: 'WechatOutlined', path: '/miniapp' },
+    { key: 'probeManage', title: '免杀与探针', icon: 'ThunderboltOutlined', path: '/probe' },
     { key: 'aiConfig', title: 'AI 配置', icon: 'ApiOutlined', path: '/ai-config' }
   ] },
   { key: 'riskIntel', title: '漏洞与情报', icon: 'SecurityScanOutlined', children: [
@@ -108,6 +110,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'system-extensions', name: 'systemExtension', component: () => import('../pages/system/SystemExtension.vue'), meta: { title: '系统扩展' } },
       { path: 'pentest', name: 'pentest', component: () => import('../pages/pentest/PentestList.vue'), meta: { title: '渗透会话' } },
       { path: 'pentest/console', name: 'pentestConsole', component: () => import('../pages/pentest/PentestConsole.vue'), meta: { title: 'AI 控制台' } },
+      { path: 'miniapp', name: 'miniapp', component: () => import('../pages/miniapp/MiniAppPentest.vue'), meta: { title: '小程序渗透' } },
+      { path: 'probe', name: 'probeManage', component: () => import('../pages/probe/ProbeManage.vue'), meta: { title: '探针管理' } },
       { path: 'pentest/live/:id', name: 'pentestLive', component: () => import('../pages/pentest/PentestLive.vue'), meta: { title: '实时观察' } },
       { path: 'pentest/:id', name: 'pentestDetail', component: () => import('../pages/pentest/PentestDetail.vue'), meta: { title: '渗透会话详情' } },
       { path: 'user-manage', name: 'userManage', component: () => import('../pages/settings/UserManage.vue'), meta: { title: '用户管理' } },

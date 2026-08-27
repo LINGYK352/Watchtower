@@ -211,14 +211,14 @@ def _admin_count() -> int:
 def seed_default_admin() -> dict:
     """开箱即用：首次启动（user 集合为空）时播种一个默认管理员，让 docker 拉取后直接能登录。
     幂等——已有任何用户则跳过（绝不覆盖/重置已存在账号）。默认账号密码可经 config 覆盖：
-      SENTINEL.DEFAULT_ADMIN_USER / DEFAULT_ADMIN_PASS（缺省 admin / sentinel@2026）。
+      SENTINEL.DEFAULT_ADMIN_USER / DEFAULT_ADMIN_PASS（缺省 admin / watchtower@2026）。
     安全：默认口令仅供首次登录，前端/文档提示立即改密（同旧 ARL 的 admin/arlpass 模式）。"""
     try:
         if _users().count_documents({}) > 0:
             return {"seeded": False, "reason": "已有用户，跳过"}
         cfg = get_config()
         user = str(cfg.section("SENTINEL", "DEFAULT_ADMIN_USER", default="") or "admin")
-        pw = str(cfg.section("SENTINEL", "DEFAULT_ADMIN_PASS", default="") or "sentinel@2026")
+        pw = str(cfg.section("SENTINEL", "DEFAULT_ADMIN_PASS", default="") or "watchtower@2026")
         _users().insert_one({"username": user, "password": hash_password(pw),
                              "role": rbac.ADMIN_ROLE, "disabled": False, "token": "",
                              "created_by": "system-seed", "create_date": _now(),

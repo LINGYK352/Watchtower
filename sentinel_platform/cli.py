@@ -1,4 +1,4 @@
-"""哨兵 CLI —— 终端直接操作渗透会话。
+"""瞭望塔 CLI —— 终端直接操作渗透会话。
 
 用法:
     python -m sentinel_platform.cli resume <session_id>    续跑/重跑指定会话

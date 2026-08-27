@@ -65,6 +65,8 @@ PERM_RULES: List[Tuple[str, Tuple[str, ...], str]] = [
     ("/api/pentest/extensions", ("POST", "PUT", "DELETE"), "ai_extension:manage"),
     ("/api/pentest/extensions", ("GET",), "ai_extension:read"),
     ("/api/pentest", ("POST", "PUT", "DELETE"), "pentest:write"),
+    ("/api/miniapp", ("POST", "PUT", "DELETE"), "pentest:write"),      # 小程序渗透:解包/删除(渗透产出,同 pentest 口径)
+    ("/api/miniapp", ("GET",), "pentest:read"),                        # 小程序渗透:状态/历史/回看
     ("/api/intel/chain", ("POST", "PUT", "DELETE"), "pentest:write"),  # 攻击链属AI渗透产出(Claude-Opus[chain])
     ("/api/intel/chain", ("GET",), "pentest:read"),                    # PERMISSIONS 表 pentest:read 明含「攻击链」
     ("/api/intel/delete", ("POST",), "pentest:write"),                 # 删情报记录(资产/报告等,属渗透产出,同 chain 口径)

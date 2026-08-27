@@ -50,6 +50,9 @@ export const taskApi = {
     method: 'POST',
     body: JSON.stringify({ task_id: ids })
   }),
+  // 孤儿资产：task_id 指向已删除任务的残留结果记录
+  scanOrphan: () => request<{ total: number; by_collection: Record<string, number>; live_task_count: number }>(`${base}/orphan_assets`),
+  purgeOrphan: () => request<{ purged: number; by_collection: Record<string, number>; skipped?: string; note?: string }>(`${base}/orphan_assets/purge`, { method: 'POST' }),
   /** 将任务结果同步到资产组 */
   sync: (task_id: string, scope_id: string) => request<Record<string, unknown>>(`${base}/sync/`, {
     method: 'POST',
@@ -64,6 +67,7 @@ export const taskApi = {
     pentest_whitelist?: string;
     mission_intel?: string;
     pentest_provider_id?: string;
+    pentest_egress_mode?: string;
     'source.platform'?: string; 'source.category'?: string; 'source.unit'?: string; 'source.src_id'?: string
   }) =>
     request<{ items?: RowRecord[] }>(`${base}/policy/`, { method: 'POST', body: JSON.stringify(payload) })
@@ -72,15 +76,22 @@ export const taskApi = {
 const fofaBase = '/api/task_fofa'
 
 export const taskFofaApi = {
-  test: (query: string) => request<{ size: number; query: string }>(`${fofaBase}/test`, {
-    method: 'POST',
-    body: JSON.stringify({ query })
-  }),
+  // 可用测绘源列表（源查询用，前端渲染绿√+输入框）
+  sources: () => request<{ sources: { id: string; name: string; placeholder: string; available: boolean }[] }>(`${fofaBase}/sources`),
+  // 预估：支持 {queries:{fofa,hunter}} 多源 或 {query} 单源(兼容)。返回 per_source 各源命中数
+  test: (payload: { queries?: Record<string, string>; query?: string } | string) => {
+    const body = typeof payload === 'string' ? { query: payload } : payload
+    return request<{ per_source?: Record<string, { size: number; ok: boolean; error: boolean; errmsg: string }>;
+      size: number; ok?: boolean; error?: boolean; errmsg?: string }>(`${fofaBase}/test`, {
+      method: 'POST', body: JSON.stringify(body)
+    })
+  },
   submit: (payload: {
-    query: string; name: string; policy_id?: string; priority?: number;
+    queries?: Record<string, string>; query?: string; name: string; policy_id?: string; priority?: number;
     pentest_whitelist?: string;
     mission_intel?: string;
     pentest_provider_id?: string;
+    pentest_egress_mode?: string;
     'source.platform'?: string; 'source.category'?: string; 'source.unit'?: string; 'source.src_id'?: string
   }) =>
     request<RowRecord>(`${fofaBase}/submit`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -89,6 +100,7 @@ export const taskFofaApi = {
     name: string; units: string; policy_id?: string; priority?: number; pentest_whitelist?: string;
     mission_intel?: string;
     pentest_provider_id?: string;
+    pentest_egress_mode?: string;
     'source.platform'?: string; 'source.category'?: string; 'source.src_id'?: string
   }) =>
     request<{ task_id: string; name: string; unit_count: number }>(

@@ -140,6 +140,28 @@ class TaskDelete(Resource):
         return ok(svc.delete_tasks(ids, bool(body.get("del_task_data", False))))
 
 
+@ns.route("/orphan_assets")
+class TaskOrphanScan(Resource):
+    @ns.doc(security="token", description="需权限 task:read")
+    def get(self):
+        """扫描孤儿资产（task_id 指向已删除任务的结果记录，只统计不删，供清理前预览）"""
+        svc = _svc()
+        if not svc:
+            return err(CODE_ERROR, "任务服务未就绪")
+        return ok(svc.scan_orphan_assets())
+
+
+@ns.route("/orphan_assets/purge")
+class TaskOrphanPurge(Resource):
+    @ns.doc(security="token", description="需权限 task:write")
+    def post(self):
+        """清理孤儿资产（删 task_id 指向已删除任务的结果记录；无现存任务时跳过防误删）"""
+        svc = _svc()
+        if not svc:
+            return err(CODE_ERROR, "任务服务未就绪")
+        return ok(svc.purge_orphan_assets())
+
+
 @ns.route("/sync/")
 class TaskSync(Resource):
     @ns.doc(security="token", description="需权限 task:write（结果同步资产组，经 asset_group_service）")

@@ -65,6 +65,9 @@ export interface ExitIpResult {
   direct_ip: string
   proxied: boolean
   error: string
+  platform_mode?: 'direct' | 'global' | 'smart'   // 代理中心当前选的模式
+  mode_label?: string                              // 模式中文名（直连/全局/智能）
+  source_label?: string                            // 代理出口 IP 归属（机场订阅·xx / 自定义代理·xx / 公共代理池）
 }
 
 export interface ProxyProfile {
@@ -131,6 +134,7 @@ export const proxyApi = {
   autoSelect: (group = 'PROXY') => request<AutoSelectResult>(`${base}/proxies/auto_select`, { method: 'POST', body: JSON.stringify({ group }) }),
   logs: (lines = 200) => request<{ logs: string }>(`${base}/logs?lines=${lines}`),
   exitIp: () => request<ExitIpResult>(`${base}/exit_ip`),
+  egressOptions: () => request<Record<string, { available: boolean; reason: string }>>(`${base}/egress_options`),
   traffic: () => request<ProxyTraffic>(`${base}/traffic`),
   resetTraffic: (scope?: string, key?: string) => request<ProxyTraffic>(`${base}/traffic/reset`, { method: 'POST', body: JSON.stringify({ scope, key }) }),
   // 公开抓取代理池

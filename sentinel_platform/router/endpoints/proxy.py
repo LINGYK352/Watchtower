@@ -95,6 +95,24 @@ class ProxyExitIp(Resource):
             return ok(svc.detect_exit_ip())   # 兼容旧签名（未更新的实现）
 
 
+@ns.route("/egress_options")
+class ProxyEgressOptions(Resource):
+    @ns.doc(security="token", description="需权限 proxy:read")
+    def get(self):
+        """出口模式可选性（新建任务页 AI 攻击出口用）：direct/global/smart 各档 {available, reason}。
+        只校验源是否配置、不探可达（内网无公网出口不误伤）。未配置的模式 available=false，reason 供 tooltip。"""
+        svc = _svc()
+        if not svc:
+            return err(CODE_ERROR, "代理服务未就绪")
+        try:
+            return ok(svc.egress_options())
+        except Exception:
+            # 降级：服务异常时全部可用（不阻塞建任务），前端拿默认
+            return ok({"direct": {"available": True, "reason": ""},
+                       "global": {"available": True, "reason": ""},
+                       "smart": {"available": True, "reason": ""}})
+
+
 @ns.route("/health")
 class ProxyHealth(Resource):
     @ns.doc(security="token", description="需权限 proxy:read")

@@ -188,6 +188,112 @@ def _source_url(source: Optional[Dict[str, Any]]) -> str:
     return ""
 
 
+def _source_label(source: Optional[Dict[str, Any]]) -> str:
+    """代理源 {type, ref_id} → 人类可读归属名（态势总览「代理出口 IP 归属」展示）。
+    custom→自定义代理名 / subscription→当前机场配置名(active profile) / pool→公共代理池。空/未知→"—"。"""
+    if not isinstance(source, dict):
+        return "—"
+    t = source.get("type", "")
+    if t == "custom":
+        try:
+            from bson import ObjectId
+            doc = get_repo().collection(Collections.PROXY_CUSTOM).find_one({"_id": ObjectId(source.get("ref_id", ""))})
+            if doc:
+                return "自定义代理 · {}".format(doc.get("name") or doc.get("url") or "?")
+        except Exception as exc:
+            logger.debug("_source_label custom degraded: %s", exc)
+        return "自定义代理"
+    if t == "pool":
+        return "公共代理池"
+    if t == "subscription":
+        # 机场订阅：取当前激活 profile 名 + 当前选中节点
+        try:
+            from . import _mihomo
+            cfg = get_config()
+            pid = cfg.get("active_profile_id", "")
+            pname = ""
+            if pid:
+                prof = _mihomo.get_profile(pid)
+                pname = (prof or {}).get("name", "") if prof else ""
+            node = _safe_current_node()
+            base = "机场订阅" + (" · {}".format(pname) if pname else "")
+            return base + (" · {}".format(node) if node else "")
+        except Exception as exc:
+            logger.debug("_source_label subscription degraded: %s", exc)
+        return "机场订阅"
+    return "—"
+
+
+def current_platform_egress() -> Dict[str, Any]:
+    """代理中心**当前实际生效**的出口（态势总览代理卡片单一事实源）。
+    判定与前端 ProxySetting 顶层模式一致：
+      - global_mode_enabled=True → mode=global，源=global_source
+      - 否则 smart_source 配了非默认（有 custom ref_id 或非 subscription 空档）→ mode=smart，源=smart_source
+      - 否则 → mode=direct
+    返回 {mode(direct/global/smart), mode_label(中文), source(dict), source_label(归属名), proxy_url(出口URL,direct为空)}。"""
+    cfg = get_config()
+    _LABELS = {"direct": "直连", "global": "全局", "smart": "智能"}
+    if cfg.get("global_mode_enabled"):
+        src = cfg.get("global_source") or {}
+        return {"mode": "global", "mode_label": _LABELS["global"],
+                "source": src, "source_label": _source_label(src),
+                "proxy_url": _source_url(src)}
+    # 智能是否"配了"：必须与前端 ProxySetting 的 smartConfigured 判据完全一致——
+    # subscription 类型且 ref_id 空 = 默认占位 = 未配置（直连）；绝不能用 _source_url()!=""
+    # 判断（subscription 只要 mihomo 内核 enabled 就返回 URL，与 ref_id 无关，会把直连误判成智能——
+    # 这正是"代理中心选了直连、总览却显智能"的根因）。
+    smart = cfg.get("smart_source") or {}
+    if _source_configured(smart):
+        return {"mode": "smart", "mode_label": _LABELS["smart"],
+                "source": smart, "source_label": _source_label(smart),
+                "proxy_url": _source_url(smart)}
+    return {"mode": "direct", "mode_label": _LABELS["direct"],
+            "source": {}, "source_label": "—", "proxy_url": ""}
+
+
+def _source_configured(source: Optional[Dict[str, Any]]) -> bool:
+    """源是否真的被用户绑定——**与前端 ProxySetting `smartConfigured` 判据逐字一致**（唯一权威）：
+      `smart_source.type 存在 && !(type==='subscription' && !ref_id)`
+    即：subscription 且 ref_id 空 = 默认占位 = 未配置（直连）；custom/pool 或 subscription 带 ref_id = 已配置。
+    绝不看 `_source_url()!=""`（subscription 只要内核 enabled 就返 URL，会把直连误判成智能——本 bug 根因），
+    也不看 active_profile_id（前端判据不含它，跟着它走会与前端不一致）。"""
+    if not isinstance(source, dict):
+        return False
+    t = source.get("type", "")
+    if not t:
+        return False
+    if t == "subscription" and not source.get("ref_id"):
+        return False   # 订阅默认占位 = 未配置 = 直连（对齐前端 smartConfigured）
+    if t == "custom" and not source.get("ref_id"):
+        return False   # 自定义必须选一条（对齐 saveMode 校验：custom 无 ref 拦保存）
+    return True
+
+
+def egress_options() -> Dict[str, Any]:
+    """出口模式可选性（新建任务页「AI 攻击出口」用：未配置源的模式变灰 + 悬停提示）。
+    **只校验"是否配置了源"，不探代理可达性**——内网环境无公网出口，探可达会误判所有模式不可用（用户明确要求）。
+    - direct 直连：永远可用（内网/公网都靠它打目标，是否出网由目标决定，非平台该拦）。
+    - global 全局：需 global_mode_enabled=True 且 global_source 已配置（否则「全局」等于直连，无意义→变灰）。
+    - smart 智能：需 smart_source 已配置（未配置则智能无源可走→变灰；配了则可用，代理不通会自动降级直连）。
+    返回 {direct/global/smart: {available: bool, reason: str}}。reason 供前端 tooltip 显示变灰原因。"""
+    cfg = get_config()
+    opts: Dict[str, Any] = {"direct": {"available": True, "reason": ""}}
+    # 全局：开关开 + 源已配置
+    g_on = bool(cfg.get("global_mode_enabled"))
+    g_cfg = _source_configured(cfg.get("global_source") or {})
+    if g_on and g_cfg:
+        opts["global"] = {"available": True, "reason": ""}
+    elif not g_on:
+        opts["global"] = {"available": False, "reason": "代理中心未开启「全局代理」，无法选全局出口。请到代理中心开启并绑定代理源。"}
+    else:
+        opts["global"] = {"available": False, "reason": "「全局代理」已开启但未绑定有效代理源。请到代理中心为全局代理选择一个源。"}
+    # 智能：源已配置即可（不探可达，代理不通时自动降级直连）
+    s_cfg = _source_configured(cfg.get("smart_source") or {})
+    opts["smart"] = ({"available": True, "reason": ""} if s_cfg
+                     else {"available": False, "reason": "「智能代理」未绑定代理源。请到代理中心为智能代理选择一个源（智能=可达走代理、不可达自动直连）。"})
+    return opts
+
+
 # 旧偏好值 → 新4模式（迁移期兼容存量策略/调用方透传的旧值）。
 _LEGACY_MODE_MAP = {"proxy": "global", "on": "global", "off": "direct",
                     "direct": "direct", "follow": "smart", "smart": "smart",
@@ -453,11 +559,21 @@ def detect_exit_ip(use_cache: bool = True, cache_ttl: int = _EXIT_IP_CACHE_TTL) 
     import time as _t
     if use_cache and _EXIT_IP_CACHE["data"] is not None and (_t.time() - _EXIT_IP_CACHE["ts"]) < cache_ttl:
         cached = dict(_EXIT_IP_CACHE["data"]); cached["cached"] = True
+        # 模式/归属从 config 实时覆盖（零探测开销）——用户在代理中心切模式后总览立即反映，
+        # 不必等 45s IP 缓存过期（治"改了模式总览还显旧模式"）。IP 仍用缓存值避免每次实探。
+        egr = current_platform_egress()
+        cached["platform_mode"] = egr["mode"]; cached["mode_label"] = egr["mode_label"]
+        cached["source_label"] = egr["source_label"]
         return cached
     cfg = get_config()
-    result = {"proxy_ip": "", "direct_ip": "", "proxied": False, "error": ""}
-    enabled = bool(cfg.get("enabled"))
-    proxy = "http://{}:{}".format(_mihomo_host(), cfg.get("http_port", 17890))
+    # 代理中心当前生效出口（模式 + 源 + 归属）——探"实际在用的代理"，不再写死 mihomo 订阅。
+    egr = current_platform_egress()
+    result = {"proxy_ip": "", "direct_ip": "", "proxied": False, "error": "",
+              "platform_mode": egr["mode"], "mode_label": egr["mode_label"],
+              "source_label": egr["source_label"]}
+    # enabled = 当前模式确实要走代理（direct 模式不探代理出口，只探直连真实出口）。
+    proxy = egr["proxy_url"]
+    enabled = bool(proxy)
     # 用线程 + future.result(timeout) 做**墙钟硬超时**——真正卡点是 DNS 解析(getaddrinfo)在无外网时
     # 阻塞到 libc 默认 ~16s，requests 的 socket timeout 管不住 DNS 阶段。故不靠 timeout 参数，靠 future
     # 墙钟切断；且 **shutdown(wait=False)** 不等悬挂线程回收（否则 with 退出会 join 满 16s，等于没提速）。
@@ -634,6 +750,9 @@ class ProxyServiceImpl:
 
     def detect_exit_ip(self, use_cache: bool = True) -> Dict[str, Any]:
         return detect_exit_ip(use_cache=use_cache)
+
+    def egress_options(self) -> Dict[str, Any]:
+        return egress_options()
 
     # —— mihomo 内核生命周期 + profile/节点/流量/日志（委托 _mihomo，endpoints 经此调）——
     def core_action(self, action: str) -> Dict[str, Any]:

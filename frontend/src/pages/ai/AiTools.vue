@@ -36,8 +36,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  SearchOutlined, FileSearchOutlined, GlobalOutlined,
-  SecurityScanOutlined, PartitionOutlined, NodeIndexOutlined, ToolOutlined
+  SearchOutlined, FileSearchOutlined, GlobalOutlined, SecurityScanOutlined,
+  PartitionOutlined, NodeIndexOutlined, ToolOutlined, ApiOutlined, ClusterOutlined
 } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import { pentestApi } from '../../api/pentest'
@@ -50,14 +50,18 @@ const loading = ref(false)
 const list = ref<ToolItem[]>([])
 const total = ref(0)
 
+// 与后端 TOOL_CATALOG 的 7 类功能维度对齐（ai_tools.py）
 const CAT_ICON: Record<string, unknown> = {
-  '情报侦察': SearchOutlined,
-  '信息收集': FileSearchOutlined,
+  '资产收集': FileSearchOutlined,
+  '漏洞验证': SecurityScanOutlined,
+  '情报查询': SearchOutlined,
+  '情报回写': PartitionOutlined,
+  '带外通道': ApiOutlined,
   '浏览器': GlobalOutlined,
-  '主动验证': SecurityScanOutlined,
-  '情报串联': PartitionOutlined,
-  '攻击链': NodeIndexOutlined,
+  '内网后渗透': ClusterOutlined,
 }
+// 分类展示顺序：侦察→验证→情报→带外→浏览器→后渗透（渗透工作流自然序）
+const CAT_ORDER = ['资产收集', '漏洞验证', '情报查询', '情报回写', '带外通道', '浏览器', '内网后渗透']
 function catIcon(name: string) { return CAT_ICON[name] || ToolOutlined }
 
 const categories = computed(() => {
@@ -66,7 +70,13 @@ const categories = computed(() => {
     if (!map.has(t.category)) map.set(t.category, [])
     map.get(t.category)!.push(t)
   }
-  return Array.from(map.entries()).map(([name, tools]) => ({ name, tools }))
+  // 按 CAT_ORDER 排序，未登记的新分类排在最后（不丢）
+  return Array.from(map.entries())
+    .map(([name, tools]) => ({ name, tools }))
+    .sort((a, b) => {
+      const ia = CAT_ORDER.indexOf(a.name), ib = CAT_ORDER.indexOf(b.name)
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+    })
 })
 
 async function load() {

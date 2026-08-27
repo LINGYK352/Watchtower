@@ -80,3 +80,8 @@ class Collections:
     POLICY = "policy"
     SCHEDULER = "scheduler"
     ICP_CACHE = "icp_cache"
+    # 探针管理
+    PROBE_CONFIG = "probe_config"
+    AGENT_CONFIG = "agent_config"
+    # 小程序渗透（解包记录：wxid/name/接口/密钥/解包时间/结果摘要）
+    MINIAPP = "miniapp"

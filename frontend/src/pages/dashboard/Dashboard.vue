@@ -2,6 +2,7 @@
   <PageContainer title="态势总览" kicker="Dashboard" description="资产与任务概览、AI 渗透与算力消耗、设备运行状态，数据定时自动刷新。">
     <template #extra>
       <a-space>
+        <TimezoneTag />
         <span v-if="lastRefresh" class="muted refresh-ts">{{ lastRefresh }}</span>
         <a-button @click="loadAll">刷新</a-button>
       </a-space>
@@ -40,15 +41,23 @@
         <a-card title="代理状态" :bordered="false" :loading="proxyLoading">
           <template #extra><a-button type="link" @click="router.push('/proxy')">详情</a-button></template>
           <a-descriptions :column="1" size="small">
-            <a-descriptions-item label="出口 IP">
-              <a-tag :color="proxyState.color">{{ proxyState.ip }}</a-tag>
-              <span :class="proxyState.cls">{{ proxyState.text }}</span>
+            <a-descriptions-item label="代理模式">
+              <a-tag :color="proxyModeColor">{{ proxyData.modeLabel || '—' }}</a-tag>
+            </a-descriptions-item>
+            <a-descriptions-item label="代理出口 IP">
+              <span class="proxy-ip">{{ proxyData.mode === 'direct' ? (proxyData.directIp || '—') : (proxyData.exitIp || '—') }}</span>
+            </a-descriptions-item>
+            <a-descriptions-item label="实际出口 IP">
+              <span class="proxy-ip">{{ proxyData.directIp || '—' }}</span>
             </a-descriptions-item>
             <a-descriptions-item label="累计流量">
               <span class="proxy-traffic">↑ {{ fmtBytes(proxyData.upload) }} · ↓ {{ fmtBytes(proxyData.download) }}</span>
             </a-descriptions-item>
-            <a-descriptions-item label="活跃连接">{{ proxyData.connections }}</a-descriptions-item>
-            <a-descriptions-item label="节点">{{ proxyData.node || '—' }}</a-descriptions-item>
+            <a-descriptions-item label="出口归属">
+              <a-tooltip :title="proxyData.mode === 'direct' ? '未走代理' : proxyData.sourceLabel">
+                <span class="proxy-src">{{ proxyData.mode === 'direct' ? '—' : (proxyData.sourceLabel || '—') }}</span>
+              </a-tooltip>
+            </a-descriptions-item>
           </a-descriptions>
         </a-card>
       </a-col>
@@ -108,7 +117,7 @@
               </div>
             </div>
             <div class="dev-row">
-              <span class="dev-label">哨兵运行</span>
+              <span class="dev-label">瞭望塔运行</span>
               <div class="dev-val"><span class="uptime">{{ uptimeText }}</span><span class="dev-hint">（平台启动至今，非操作系统）</span></div>
             </div>
             <div class="dev-row">
@@ -162,6 +171,7 @@ import { useRouter } from 'vue-router'
 import { ProfileOutlined, GlobalOutlined, ClusterOutlined, CloudServerOutlined, BugOutlined, RobotOutlined } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import StatusTag from '../../components/StatusTag.vue'
+import TimezoneTag from '../../components/TimezoneTag.vue'
 import { collectionApi } from '../../api/assets'
 import { taskApi } from '../../api/task'
 import { consoleApi } from '../../api/console'
@@ -199,8 +209,8 @@ const metrics = ref([
   { key: 'sess', title: 'AI 渗透会话', value: 0, sub: '', to: '/pentest', icon: markRaw(RobotOutlined), color: '#2f54eb', bg: '#f0f5ff' }
 ])
 
-async function loadMetrics() {
-  metricLoading.value = true
+async function loadMetrics(silent = false) {
+  if (!silent) metricLoading.value = true
   const get = (k: string) => metrics.value.find(m => m.key === k)!
   await Promise.all([
     { key: 'task', ns: 'task' }, { key: 'domain', ns: 'domain' },
@@ -227,8 +237,8 @@ const sessCards = computed(() => [
   { key: 'fatal', label: '失败', value: sess.fatal, color: '#cf1322' },
   { key: 'total', label: '总计', value: sess.total, color: '#2f54eb' }
 ])
-async function loadSession() {
-  sessLoading.value = true
+async function loadSession(silent = false) {
+  if (!silent) sessLoading.value = true
   try {
     const s = await pentestApi.sessionStat()
     Object.assign(sess, s)
@@ -240,8 +250,8 @@ async function loadSession() {
 /* Token 消耗 */
 const tokenLoading = ref(false)
 const tokenStat = reactive({ total: 0, calls: 0, fail: 0, prompt: 0, completion: 0, topScene: '' })
-async function loadToken() {
-  tokenLoading.value = true
+async function loadToken(silent = false) {
+  if (!silent) tokenLoading.value = true
   try {
     const u = await aiConfigApi.usageStat()
     tokenStat.total = u.overall.total || 0
@@ -276,8 +286,8 @@ const exitIpText = computed(() => {
   if (!proxyEnabled.value) return `${exitIp.value}（直连）`
   return proxyOk.value ? `${exitIp.value}（代理出口）` : `${exitIp.value}（代理异常·实际直连出口）`
 })
-async function loadDevice() {
-  deviceLoading.value = true
+async function loadDevice(silent = false) {
+  if (!silent) deviceLoading.value = true
   try {
     const info = await consoleApi.info()
     const d = (info.device_info || {}) as Record<string, unknown>
@@ -300,37 +310,23 @@ async function loadDevice() {
 
 /* 代理状态 */
 const proxyLoading = ref(false)
-const proxyData = reactive({ exitIp: '', directIp: '', proxied: false, hasData: false, enabled: false, errMsg: '', upload: 0, download: 0, connections: 0, node: '' })
-/* 代理状态展示：单一事实源，信任后端 last-good 稳定后的 proxied 判定，前端不再自己比 IP（治连续刷新闪烁）。
-   四态：代理生效(绿) / 代理开启但连不通=网络异常(红,不静默不误判直连) / 未开代理=直连出口(灰) / 无数据=—。
-   语义铁律：只有 smart 模式才降级直连；global/rule 连不通是硬失败，必须明确报"代理不可用/网络异常"，
-   绝不显示成"直连出口"误导用户以为在裸奔真实 IP。 */
-const proxyState = computed(() => {
-  if (proxyData.proxied && proxyData.exitIp) {
-    return { ip: proxyData.exitIp, color: 'green', text: '代理生效', cls: 'proxy-ok' }
-  }
-  // 代理已开启却探不到代理出口(proxy_ip空+有error) = 代理不可达/网络异常，明确红牌告警
-  if (proxyData.enabled && !proxyData.exitIp && (proxyData.errMsg || proxyData.hasData)) {
-    return { ip: proxyData.directIp || '⚠', color: 'red', text: '代理不可用·网络异常', cls: 'proxy-err' }
-  }
-  const shown = proxyData.exitIp || proxyData.directIp
-  if (shown) {
-    return { ip: shown, color: 'default', text: '直连出口', cls: 'proxy-warn' }
-  }
-  return { ip: '—', color: 'default', text: proxyData.hasData ? '出口未知' : '', cls: 'proxy-warn' }
-})
-async function loadProxy() {
-  proxyLoading.value = true
+/* 代理状态：直接反映「代理中心当前选的模式」+ 对应出口/归属（后端 current_platform_egress 单一事实源）。
+   5 字段平铺：代理模式 / 代理出口 IP / 实际出口 IP / 累计流量 / 代理出口 IP 归属。
+   不再前端判"生效/网络异常"三态——只如实展示当前模式与两个出口 IP，避免"没走代理却显代理出口"的误导。 */
+const proxyData = reactive({ mode: 'direct', modeLabel: '', exitIp: '', directIp: '', sourceLabel: '', upload: 0, download: 0, connections: 0, node: '' })
+const proxyModeColor = computed(() => (
+  proxyData.mode === 'global' ? 'blue' : proxyData.mode === 'smart' ? 'green' : 'default'
+))
+async function loadProxy(silent = false) {
+  if (!silent) proxyLoading.value = true
   try {
     const [ipData, trafficData] = await Promise.all([proxyApi.exitIp(), proxyApi.traffic()])
+    // 后端 current_platform_egress 单一事实源：代理中心当前选的模式 + 对应出口/归属
+    proxyData.mode = String((ipData as any).platform_mode || 'direct')
+    proxyData.modeLabel = String((ipData as any).mode_label || '直连')
     proxyData.exitIp = ipData.proxy_ip || ''
     proxyData.directIp = ipData.direct_ip || ''
-    proxyData.proxied = Boolean((ipData as any).proxied)
-    // 代理是否启用 + 探测错误（区分"代理不可达网络异常"vs"未开代理直连"）
-    const errRaw = String((ipData as any).error || '')
-    proxyData.enabled = errRaw !== 'proxy not enabled'   // 后端未启用时 error 恒为此串
-    proxyData.errMsg = (errRaw && errRaw !== 'proxy not enabled') ? errRaw : ''
-    proxyData.hasData = true
+    proxyData.sourceLabel = String((ipData as any).source_label || '—')
     proxyData.upload = trafficData.total_up || 0
     proxyData.download = trafficData.total_down || 0
     proxyData.connections = trafficData.connections || 0
@@ -366,13 +362,15 @@ async function loadNetQuality() {
   } catch { /* 网络质量可选，取不到不影响 */ }
 }
 
-function loadAll() {
-  loadMetrics(); loadSession(); loadToken(); loadDevice(); loadProxy(); loadTasks(); loadChart(); loadNetQuality()
+// silent=true：静默刷新（不显 loading 骨架屏），用于 30s 自动刷新——数据已有，只更新不闪屏。
+// 首次挂载 silent=false：显骨架屏。治"设备/代理卡每 30s 退回骨架屏、看着像没工作"。
+function loadAll(silent = false) {
+  loadMetrics(silent); loadSession(silent); loadToken(silent); loadDevice(silent); loadProxy(silent); loadTasks(); loadChart(); loadNetQuality()
   lastRefresh.value = new Date().toLocaleTimeString()
 }
-// 默认自动刷新(30s)——删除手动开关后恒定开启,useAutoRefresh 内部 onMounted 起定时器,返回值无需接收
-useAutoRefresh(loadAll, 30000)
-onMounted(loadAll)
+// 默认自动刷新(30s)——恒定开启且静默(不闪骨架屏);首次挂载显骨架屏。
+useAutoRefresh(() => loadAll(true), 30000)
+onMounted(() => loadAll(false))
 
 /* 资源趋势图(Canvas, 后端历史数据) */
 const chartCanvas = ref<HTMLCanvasElement | null>(null)
@@ -471,6 +469,10 @@ function drawChart() {
 .metric-value.loading { opacity: .4; }
 .metric-sub { font-size: 11px; color: #bbb; margin-top: 2px; }
 .section-row { margin-top: 16px; }
+/* 同行卡片等高对齐：a-row 是 flex，列默认等高；让卡片撑满列高，三卡底部齐平
+   （治代理状态卡 5 行比左右两卡高、参差不齐）。 */
+.section-row :deep(.ant-col) { display: flex; }
+.section-row :deep(.ant-card) { width: 100%; }
 .muted { color: #aaa; }
 .refresh-ts { font-size: 12px; }
 .sess-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -495,6 +497,11 @@ function drawChart() {
 .proxy-warn { font-size: 11px; color: #fa8c16; margin-left: 6px; }
 .proxy-err { font-size: 11px; color: #cf1322; margin-left: 6px; font-weight: 500; }
 .proxy-traffic { font-weight: 500; color: #1f2937; }
+.proxy-ip { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+/* 出口归属：长文本(机场订阅·profile·节点)单行省略号,不撑破窄卡片,全文见 tooltip */
+.proxy-src { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+/* 代理卡 descriptions 值列允许收缩,长内容不溢出 */
+.netq-fix, .ant-descriptions-item-content { min-width: 0; }
 /* 网络质量总评卡 */
 .netq-card { cursor: pointer; transition: transform .15s ease; }
 .netq-card:hover { transform: translateY(-2px); }

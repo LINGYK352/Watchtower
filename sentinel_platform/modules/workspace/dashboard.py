@@ -24,7 +24,7 @@ from sentinel_platform.contracts import Collections
 
 logger = get_logger()
 
-# 哨兵平台进程启动时间戳（模块首次 import≈进程启动，用于"哨兵系统运行时间"而非操作系统 uptime）。
+# 瞭望塔平台进程启动时间戳（模块首次 import≈进程启动，用于"瞭望塔系统运行时间"而非操作系统 uptime）。
 _PROC_START = time.time()
 
 # 直连出口 IP 进程内缓存（态势总览设备卡提速：出口 IP 秒级不变，不必每次实探外网 4~6s）。
@@ -50,9 +50,9 @@ class DashboardServiceImpl:
         """实时设备信息（扁平字段，对齐前端 ConsoleInfo.device_info）。psutil 缺失降级 0/空。
 
         返回 `{cpu_percent, memory_percent, disk_percent, disk_usage{}, memory_total, memory_used,
-        memory_total_gb, memory_used_gb, cpu_count, uptime_seconds(哨兵进程), os_uptime_seconds,
+        memory_total_gb, memory_used_gb, cpu_count, uptime_seconds(瞭望塔进程), os_uptime_seconds,
         exit_ip, proxy_ok}`。字段扁平——旧代码曾因嵌套 cpu.percent 前端读扁平永远 0（踩坑）。
-        uptime_seconds=哨兵平台运行时间（进程启动至今），非操作系统 uptime（用户要求）。
+        uptime_seconds=瞭望塔平台运行时间（进程启动至今），非操作系统 uptime（用户要求）。
         """
         ps = _psutil()
         info: Dict[str, Any] = {
@@ -103,7 +103,7 @@ class DashboardServiceImpl:
                                   "free": disk.free, "percent": disk.percent}
         except Exception as exc:
             logger.debug("dashboard: disk read failed: %s", exc)
-        # 哨兵进程运行时间已在 info 初始化时算好（_PROC_START）；OS uptime 单列 os_uptime_seconds 供参考
+        # 瞭望塔进程运行时间已在 info 初始化时算好（_PROC_START）；OS uptime 单列 os_uptime_seconds 供参考
         try:
             info["os_uptime_seconds"] = int(time.time() - ps.boot_time())
         except Exception:

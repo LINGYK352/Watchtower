@@ -106,11 +106,21 @@ def _stage_subdomain(ctx: ReconContext, t: Tools) -> StageResult:
     roots = ctx.targets
     scope = set(roots)
     found = {}
+    # **种子域名（下发目标/单位反查种子）无条件先入 found —— 它们本身就是确定要扫的资产，绝不能只留
+    # subfinder 枚举结果而丢掉种子本身**（负优化根因：原来只 found=subfinder结果，种子若没被被动源枚举到
+    # 就整个丢失。实测单位反查 34 域名里 .cn 系列 subfinder 没返回→全丢，只剩 subfinder 枚举到的 12 个 .com。
+    # 种子能解析的后续 resolve 出 IP/建站，解析不出的至少保留 domain 记录，不静默蒸发）。
+    from .models import DomainRec as _DR
+    for _root in roots:
+        _r = (_root or "").strip().lower().rstrip(".")
+        if _r:
+            found[_r] = _DR(domain=_r, record=[], type="SEED", ips=[], source="unit_seed")
     if _avail(t.subfinder):
         for r in t.subfinder.enumerate(roots, scope=scope):
-            found[r.domain] = r
-    # 爆破仅在 multi_brute 档执行（multi_passive 只被动枚举不爆破）
-    if collect_mode != "multi_passive":
+            found[r.domain] = r   # subfinder 枚举结果覆盖/追加（种子若被枚举到则用更全的记录）
+    # 爆破门控（2026-08 两档简化后）：domain_brute=False（前端「不爆破」下拉，policy 归一落盘）时绝不跑 massdns，
+    # 保证"前端选不爆破=后台真不跑"。domain_brute 缺失=兼容旧任务默认爆破。广域目标默认爆破+被动都做。
+    if ctx.options.get("domain_brute", True):
         words = ctx.options.get("brute_words") or []
         resolvers = ctx.options.get("resolvers", "")
         if words and resolvers and _avail(t.massdns):
@@ -133,7 +143,9 @@ def _stage_resolve(ctx: ReconContext, t: Tools) -> StageResult:
     hosts = ctx.hosts or list(ctx.targets)
     if not hosts or not _avail(t.dnsx):
         return StageResult("resolve", skipped=True)
-    recs = t.dnsx.resolve(hosts, concurrency=ctx.io_concurrency(200))
+    # 与 massdns 共用 resolver 文件：不传则 dnsx 用内置境外默认 resolver，某些网络全超时→解析恒空。
+    resolvers = ctx.options.get("resolvers", "")
+    recs = t.dnsx.resolve(hosts, concurrency=ctx.io_concurrency(200), resolvers=resolvers)
     if not recs:
         return StageResult("resolve", skipped=True)
     byd = {d.domain: d for d in ctx.domains}
@@ -141,6 +153,32 @@ def _stage_resolve(ctx: ReconContext, t: Tools) -> StageResult:
         byd[r.domain] = r                       # 解析结果覆盖被动枚举的空壳
     ctx.domains = list(byd.values())
     return StageResult("resolve", count=len(recs))
+
+
+def _stage_ip_seed(ctx: ReconContext, t: Tools) -> StageResult:
+    """IP 种子保底入库（IP 任务内置必跑，不受 port_scan 策略门控）。
+    **负优化根因**：IP 任务(如单位反查的 13 个 IP)的 targets 本身是确定资产，但原来只有 portscan 阶段
+    把 IP 灌进 ctx.ips；策略 port_scan=false 时 portscan 整个 disabled→IP 从没进 ctx.ips→ip 集合空、
+    后续 site/归集拿不到→13 个反查 IP 全丢。种子 IP 是确定资产,不该因"不扫端口"就蒸发。
+    此阶段把 targets 里的公网 IP 无条件建 IPRec 入 ctx.ips(按 IP 去重,与后续 portscan 若开则补端口不冲突)。"""
+    if ctx.task_type != "ip":
+        return StageResult("ip_seed", skipped=True)
+    import ipaddress
+    existing = {getattr(r, "ip", "") for r in ctx.ips}
+    added = 0
+    for tgt in ctx.targets:
+        ip = (tgt or "").strip()
+        try:
+            v = ipaddress.ip_address(ip)
+            if v.is_private or v.is_loopback or v.is_reserved or v.is_link_local or v.is_multicast:
+                continue
+        except (ValueError, TypeError):
+            continue
+        if ip and ip not in existing:
+            ctx.ips.append(IPRec(ip=ip))
+            existing.add(ip)
+            added += 1
+    return StageResult("ip_seed", count=added, skipped=not added)
 
 
 def _stage_portscan(ctx: ReconContext, t: Tools) -> StageResult:
@@ -343,15 +381,22 @@ def _domain_stages() -> List:
 
 
 def _ip_stages() -> List:
-    """IP 任务阶段列表（省"子域名/解析",直接端口→…）。"""
-    return [_stage_portscan, _stage_cert, _stage_site, _stage_enrich, _stage_screenshot,
+    """IP 任务阶段列表（省"子域名/解析",IP种子保底入库→端口→…）。
+    _stage_ip_seed 打头：IP 种子无条件入 ctx.ips(内置必跑,不受 port_scan 门控)，防 portscan 关时 IP 全丢。"""
+    return [_stage_ip_seed, _stage_portscan, _stage_cert, _stage_site, _stage_enrich, _stage_screenshot,
             _stage_webinfo, _stage_crawl, _stage_fileleak, _stage_vhost, _stage_service,
             _stage_weakbrute, _stage_poc]
 
 
 # 策略展开后为扁平 options。字段缺失表示旧任务/内部调用，保持兼容执行；显式 False 才关闭。
+# 策略开关 → 阶段门控映射。**site 站点探测阶段刻意不在此**：站点探测(httpx 探活+基础指纹)是
+# 内置必跑能力（对齐 ARL 原版 run()：fetch_site 无条件调用，只有 site_identify 指纹层受开关控）。
+# 净室曾误把 site 探测绑死在 site_identify 上 → 关掉"站点识别"连站点都不发现 → site 集合空 →
+# 归集 0 资产 → AI 渗透无目标（实测单位名任务 domain=12/resolve=11 却 site=0 asset=0 的直接原因）。
+# httpx 已带 -tech-detect 一次性出指纹随 site 落库给 AI，ARL 的 web_analyze 额外指纹层净室未迁移，
+# 故 site_identify 当前无独立执行体（保留字段兼容前端/schema，未来迁 web_analyze 补充指纹层再挂）。
 _STAGE_OPTION = {
-    "portscan": "port_scan", "cert": "ssl_cert", "site": "site_identify",
+    "portscan": "port_scan", "cert": "ssl_cert",
     "screenshot": "site_capture", "webinfo": "web_info_hunter", "crawl": "site_spider",
     "fileleak": "file_leak", "service": "service_detection", "poc": "nuclei_scan",
 }

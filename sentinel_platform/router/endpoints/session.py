@@ -118,7 +118,8 @@ class SessionList(Resource):
         source = {k.split(".", 1)[1]: v for k, v in b.items() if k.startswith("source.")}
         r = svc.create_session(site, asset_key=b.get("asset_key", ""), scene=b.get("scene", "pentest_exec"),
                                prompt=b.get("prompt"), mode=b.get("mode", "src"), source=source or None,
-                               auto_start=bool(b.get("auto_start", False)), owner=_current_username())
+                               auto_start=bool(b.get("auto_start", False)), owner=_current_username(),
+                               asset_type=b.get("asset_type", "web"))
         return err(CODE_BAD_REQUEST, r["error"]) if r.get("error") else ok(r)
 
 
@@ -197,6 +198,21 @@ def _stream_meta(sess: dict) -> dict:
             "tool_count": len(sess.get("tool_log") or [])}
 
 
+def _assist_text(content) -> str:
+    """从 assistant message 的 content 提取纯文本（双协议兼容）。
+    openai 协议：content 是扁平 str，直接返回（strip 后）。
+    claude 协议：content 是数组 content blocks（[{type:text,text},{type:tool_use,...}]），
+    取所有 type=text 块的 text 拼接——治 claude 会话实时台看不到 AI 思考文本（只 isinstance(str)
+    过滤会漏掉数组 content）。无文本（纯 tool_use 轮）返回空串（不推空 think）。"""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = [b.get("text", "") for b in content
+                 if isinstance(b, dict) and b.get("type") == "text" and b.get("text")]
+        return "\n".join(p for p in parts if p and p.strip()).strip()
+    return ""
+
+
 def _session_event_stream(session_id: str, svc):
     """只读实时观察生成器：轮询 get_session，增量推 tool_log + meta；终态推 end 后收尾。
     引擎每轮 checkpoint 落库(_engine._checkpoint)，故此处轮询能捕获每轮增量，新鲜度=每轮。
@@ -213,11 +229,14 @@ def _session_event_stream(session_id: str, svc):
             if not sess:
                 yield _sse("error", {"message": "会话不存在或已删除"})
                 return
-            # 增量推 AI 思考/研判文本（role=assistant 且有文本内容），按出现顺序推
+            # 增量推 AI 思考/研判文本（role=assistant 且有文本内容），按出现顺序推。
+            # **双协议兼容（治 claude 协议看不到 AI 讲话）**：openai 协议 content 是扁平 str；
+            # claude 协议 content 是数组 content blocks（[{type:text,text},{type:tool_use,...}]）。
+            # v1.21.139 只处理了 str → claude 会话的思考文本全被 isinstance(str) 过滤掉 → 实时台只显
+            # "AI执行中"看不到讲话。此处两种都提取（数组取所有 type=text 块 text 拼接）。
             msgs = sess.get("messages") or []
-            assist_texts = [m.get("content") for m in msgs
-                            if m.get("role") == "assistant" and isinstance(m.get("content"), str)
-                            and (m.get("content") or "").strip()]
+            assist_texts = [_assist_text(m.get("content")) for m in msgs
+                            if m.get("role") == "assistant" and _assist_text(m.get("content"))]
             if len(assist_texts) > think_sent:
                 for txt in assist_texts[think_sent:]:
                     yield _sse("think", {"text": txt})

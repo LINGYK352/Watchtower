@@ -220,10 +220,11 @@ class TaskCreateServiceImpl:
     def create_by_policy(self, name: str, policy_id: str, target: str, task_tag: str = "task",
                          priority: Any = 2, source: Optional[Dict[str, Any]] = None,
                          pentest_whitelist: str = "", mission_intel: str = "",
-                         pentest_provider_id: str = "") -> Dict[str, Any]:
+                         pentest_provider_id: str = "", pentest_egress_mode: str = "") -> Dict[str, Any]:
         """按策略下发任务（主入口，taskApi.policy）。经 policy_service 展开 options，按目标拆 task 落库。
         返回 {ok, items:[...], created:N} 或 {ok:False, error}。
-        pentest_provider_id=为本任务派发的 AI 渗透会话锁定 AI 模型（空=跟随全局默认）。"""
+        pentest_provider_id=为本任务派发的 AI 渗透会话锁定 AI 模型（空=跟随全局默认）。
+        pentest_egress_mode=本任务 AI 攻击出口（direct/global/smart，空=跟随策略默认）——出口选择从策略移到任务。"""
         name = (name or "").strip()
         policy_id = (policy_id or "").strip()
         if not name or not policy_id or not (target or "").strip():
@@ -240,6 +241,12 @@ class TaskCreateServiceImpl:
             options["mission_intel_raw"] = mission_intel   # 端点已可预清洗；此处原样贯穿供派发解析
         if (pentest_provider_id or "").strip():
             options["pentest_provider_id"] = pentest_provider_id.strip()   # 锁定 AI 模型，透传到派发会话
+        # AI 攻击出口（从策略移到任务）：任务传了就覆盖 options 的 pentest_egress.mode，rule_id 沿用策略。
+        _egm = (pentest_egress_mode or "").strip()
+        if _egm in ("direct", "global", "smart"):
+            _peg = dict(options.get("pentest_egress") or {})
+            _peg["mode"] = _egm
+            options["pentest_egress"] = _peg
         ip_list, domain_list, invalid = classify_targets(target)
         if not ip_list and not domain_list:
             return {"ok": False, "error": "无有效目标", "invalid": invalid}
@@ -257,7 +264,7 @@ class TaskCreateServiceImpl:
     def create_from_targets(self, name: str, targets: List[str], policy_id: str,
                             priority: Any = 2, source: Optional[Dict[str, Any]] = None,
                             pentest_whitelist: str = "", mission_intel: str = "",
-                            pentest_provider_id: str = "") -> Dict[str, Any]:
+                            pentest_provider_id: str = "", pentest_egress_mode: str = "") -> Dict[str, Any]:
         """从**已解析的目标列表**下发（FOFA 导入用；targets 由端点经 ext_source.fofa_query 解析）。
         创建 **1 个聚合任务**（type=fofa），对齐旧代码行为——任务列表只显示 1 条而非 N 条。
         目标列表存 options.fofa_ip 供 orchestration 拆解扫描。**FOFA 路径同步可用**
@@ -275,6 +282,10 @@ class TaskCreateServiceImpl:
             options["mission_intel_raw"] = mission_intel
         if (pentest_provider_id or "").strip():
             options["pentest_provider_id"] = pentest_provider_id.strip()
+        _egm = (pentest_egress_mode or "").strip()
+        if _egm in ("direct", "global", "smart"):
+            _peg = dict(options.get("pentest_egress") or {}); _peg["mode"] = _egm
+            options["pentest_egress"] = _peg
         # FOFA 聚合任务：1 个 task 文档包含所有 targets（对齐旧 taskFofa submit_fofa_task 行为）
         options["fofa_ip"] = targets   # orchestration 消费此字段拆解扫描
         display_target = "FOFA 目标 {}".format(len(targets))
@@ -295,7 +306,8 @@ class TaskCreateServiceImpl:
 
     def create_unit_task(self, name: str, units: List[str], policy_id: str, priority: Any = 2,
                          source: Optional[Dict[str, Any]] = None, pentest_whitelist: str = "",
-                         mission_intel: str = "", pentest_provider_id: str = "") -> Dict[str, Any]:
+                         mission_intel: str = "", pentest_provider_id: str = "",
+                         pentest_egress_mode: str = "") -> Dict[str, Any]:
         """单位名建任务（一个任务装多单位）。**反查(单位→资产)是 orchestration worker 职责**（ext_source
         未暴露反查），本叶子落一篇 type=unit 的 WAITING 任务，unit_names 存 options；orchestration 建成后
         读它异步反查种子 + 转 ip/domain 子任务（对齐旧 v2.7.62）。返回 {ok, task_id, name, unit_count}。"""
@@ -314,6 +326,10 @@ class TaskCreateServiceImpl:
             options["mission_intel_raw"] = mission_intel
         if (pentest_provider_id or "").strip():
             options["pentest_provider_id"] = pentest_provider_id.strip()
+        _egm = (pentest_egress_mode or "").strip()
+        if _egm in ("direct", "global", "smart"):
+            _peg = dict(options.get("pentest_egress") or {}); _peg["mode"] = _egm
+            options["pentest_egress"] = _peg
         try:
             coll = get_repo().collection(Collections.TASK)
             # type="unit"：orchestration dispatch 表消费（未建则留 WAITING，正确降级）。target 展示用单位名。

@@ -18,10 +18,7 @@
           <a-checkbox v-model:checked="model.file_leak">文件泄露</a-checkbox>
           <a-checkbox v-model:checked="model.search_engines">搜索引擎</a-checkbox>
           <a-checkbox v-model:checked="model.site_spider">站点爬虫</a-checkbox>
-          <a-checkbox v-model:checked="model.arl_search">历史查询</a-checkbox>
-          <a-checkbox v-model:checked="model.alt_dns">智能字典</a-checkbox>
           <a-checkbox v-model:checked="model.ssl_cert">SSL证书</a-checkbox>
-          <a-checkbox v-model:checked="model.dns_query_plugin">查询插件</a-checkbox>
           <a-checkbox v-model:checked="model.skip_scan_cdn_ip">跳过CDN</a-checkbox>
           <a-checkbox v-model:checked="model.nuclei_scan">nuclei</a-checkbox>
           <a-checkbox v-model:checked="model.findvhost">Host碰撞</a-checkbox>

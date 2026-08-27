@@ -15,8 +15,13 @@ class Dnsx(ExternalTool):
     binary = "dnsx"
     adapter = "dnsx"
 
-    def build_argv(self, concurrency: int = 200, **kwargs: Any) -> List[str]:
-        return ["-silent", "-json", "-a", "-cname", "-resp", "-t", str(concurrency)]
+    def build_argv(self, concurrency: int = 200, resolvers: str = "", **kwargs: Any) -> List[str]:
+        argv = ["-silent", "-json", "-a", "-cname", "-resp", "-t", str(concurrency)]
+        # -r 指定 resolver 文件：dnsx 内置默认 resolver 含境外 DNS，某些网络环境全超时 → 解析恒空跑。
+        # 显式喂项目的 dnsserver.txt（与 massdns 共用），dnsx 轮询列表，个别不通不影响整体（实测根治空跑）。
+        if resolvers:
+            argv += ["-r", str(resolvers)]
+        return argv
 
     def parse_record(self, obj: Dict[str, Any]) -> Optional[DomainRec]:
         host = obj.get("host")
@@ -31,5 +36,6 @@ class Dnsx(ExternalTool):
             return DomainRec(domain=domain, record=cname, type="CNAME", ips=a, source="dns_resolve")
         return DomainRec(domain=domain, record=a, type="A", ips=a, source="dns_resolve")
 
-    def resolve(self, hosts: Iterable[str], concurrency: int = 200) -> List[DomainRec]:
-        return self.run(stdin_lines=hosts, concurrency=concurrency)
+    def resolve(self, hosts: Iterable[str], concurrency: int = 200,
+                resolvers: str = "") -> List[DomainRec]:
+        return self.run(stdin_lines=hosts, concurrency=concurrency, resolvers=resolvers)

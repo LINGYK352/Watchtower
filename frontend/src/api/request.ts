@@ -74,7 +74,9 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     headers.set('Token', token)
   }
 
-  const response = await fetch(path, { ...options, headers })
+  // API 数据不走浏览器 HTTP 缓存：否则 GET(如 console/info 设备状态、exit_ip)会命中缓存返回旧数据，
+  // 自动刷新(30s)拉不到新数据(表现为"显示旧数据、不更新")。API 响应本就不该被浏览器缓存。
+  const response = await fetch(path, { ...options, headers, cache: 'no-store' })
   const contentType = response.headers.get('content-type') || ''
   if (!contentType.includes('application/json')) {
     if (!response.ok) throw new Error(`请求失败：${response.status}`)

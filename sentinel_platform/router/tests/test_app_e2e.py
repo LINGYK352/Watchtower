@@ -26,7 +26,7 @@ class TestAppEndToEnd(unittest.TestCase):
     def test_version(self):
         body = self.client.get("/api/meta/version").get_json()
         self.assertEqual(body["code"], 200)
-        self.assertIn("哨兵", body["data"]["name"])
+        self.assertIn("瞭望塔", body["data"]["name"])
 
     def test_modules_readiness_reports_kernel(self):
         """经 registry 探模块就绪度：kernel 已注册的能力应为 True（证明 registry 装配生效）。"""

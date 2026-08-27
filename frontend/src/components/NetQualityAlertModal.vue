@@ -1,0 +1,102 @@
+<!--
+  网络质量告警弹窗：定时轮询 /api/network/quality/latest，当综合体检分数 < 40（严重/差的下沿）时弹窗，
+  提示当前网络问题 + 按失败维度列举排查选项。**每次新的自检若仍 <40 就再弹一次**：
+  用 localStorage 记 last_alerted_ts（上次已弹过的那次体检的 checked_ts），只有当 latest 的 checked_ts
+  比它新（=跑了新一轮自检）且分数仍 <40 时才再弹——同一次体检不重复弹，用户关掉后不打扰，直到下一轮自检。
+  纯前端消费既有端点，无后端改动。数据源：overall_assessment 的 assess{score,dims,summary}。
+-->
+<template>
+  <a-modal v-model:open="open" title="⚠ 网络质量告警" :footer="null" :width="600" :mask-closable="false" wrap-class-name="netq-alert">
+    <a-alert type="error" show-icon style="margin-bottom:14px"
+      :message="`当前网络质量评分 ${score} 分（${levelText}），已低于健康阈值（40 分）`"
+      :description="summary" />
+    <div class="netq-dims" v-if="weakDims.length">
+      <div class="netq-sub">存在问题的检测项：</div>
+      <a-tag v-for="d in weakDims" :key="d.key" :color="d.grade==='dead' ? 'red' : 'orange'">
+        {{ d.label }}：{{ d.grade==='dead' ? '不可达' : '质量差' }}
+      </a-tag>
+    </div>
+    <div class="netq-sub" style="margin-top:14px">建议排查：</div>
+    <ul class="netq-tips">
+      <li v-for="(t,i) in tips" :key="i">{{ t }}</li>
+    </ul>
+    <div style="text-align:right;margin-top:18px">
+      <a-space>
+        <a-button @click="goProxy">去代理中心</a-button>
+        <a-button type="primary" @click="goNetCheck">去网络检测</a-button>
+        <a-button @click="dismiss">稍后处理</a-button>
+      </a-space>
+    </div>
+  </a-modal>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { request } from '../api/request'
+
+const THRESHOLD = 40                              // 分数 < 40 触发告警
+const SEEN_KEY = 'netq_alert_last_ts'             // localStorage：上次已弹过告警的那次体检 checked_ts
+const POLL_MS = 120000                            // 2 分钟轮询一次 latest（服务端 30min 自检一次，够抓到新一轮）
+
+const router = useRouter()
+const open = ref(false)
+const score = ref(0)
+const levelText = ref('')
+const summary = ref('')
+const weakDims = ref<Array<{ key: string; label: string; grade: string }>>([])
+let timer: number | null = null
+
+const DIM_LABEL: Record<string, string> = { deps: '平台依赖', stability: '出网稳定性', ping: '链路质量', dns: 'DNS 解析', proxy: '代理出口' }
+
+// 按失败维度给针对性排查建议（哪项坏给哪项的建议，无短板给通用建议）
+const tips = computed<string[]>(() => {
+  const keys = weakDims.value.map(d => d.key)
+  const out: string[] = []
+  if (keys.includes('dns')) out.push('DNS 解析异常：检查系统/自定义 DNS 是否可达，可在「网络检测」页更换 DNS（如 223.5.5.5 / 114.114.114.114）后重测。')
+  if (keys.includes('stability') || keys.includes('deps')) out.push('出网不稳定/依赖不可达：确认主机能正常访问公网（TCP 出站是否被防火墙/NAT/VPN 拦截），检查默认路由与网关。')
+  if (keys.includes('ping')) out.push('链路质量差：丢包率高或延迟大，检查本地网络、网关到公网的链路（可能是无线信号弱或带宽拥塞）。')
+  if (keys.includes('proxy')) out.push('代理出口异常：到「代理中心」检查当前代理节点是否存活、订阅是否过期，或临时切换为直连。')
+  if (!out.length) out.push('各单项未明确标记短板但总分偏低：到「网络检测」页手动跑一次完整体检，查看各项明细。')
+  out.push('排查后可在「网络检测」页点击「开始体检」重新评估；若仍低于阈值，下一轮自动自检会再次提醒。')
+  return out
+})
+
+async function poll() {
+  try {
+    const r = await request<any>('/api/network/quality/latest')
+    if (!r || !r.has_data || !r.assess) return
+    const a = r.assess
+    const s = typeof a.score === 'number' ? a.score : null
+    const ts = Number(r.checked_ts || 0)
+    if (s == null || ts <= 0) return
+    // 只在"新一轮自检"且分数 <阈值 时弹：checked_ts 比上次已弹的新，才认为是新一轮体检
+    const lastTs = Number(localStorage.getItem(SEEN_KEY) || 0)
+    if (s < THRESHOLD && ts > lastTs) {
+      score.value = s
+      levelText.value = a.level_text || '差'
+      summary.value = a.summary || '网络质量偏低'
+      const dims = a.dims || {}
+      weakDims.value = Object.keys(dims)
+        .filter(k => dims[k] === 'dead' || dims[k] === 'poor')
+        .map(k => ({ key: k, label: DIM_LABEL[k] || k, grade: dims[k] }))
+      open.value = true
+      try { localStorage.setItem(SEEN_KEY, String(ts)) } catch { /* ignore */ }
+    }
+  } catch { /* 取不到不打扰，下轮再试 */ }
+}
+
+function dismiss() { open.value = false }
+function goProxy() { open.value = false; router.push('/proxy') }
+function goNetCheck() { open.value = false; router.push('/network-check') }
+
+onMounted(() => { poll(); timer = window.setInterval(poll, POLL_MS) })
+onUnmounted(() => { if (timer) { clearInterval(timer); timer = null } })
+</script>
+
+<style scoped>
+.netq-sub { font-weight: 600; color: #333; margin-bottom: 6px; }
+.netq-dims { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.netq-tips { margin: 6px 0 0; padding-left: 20px; }
+.netq-tips li { line-height: 1.8; color: #444; }
+</style>

@@ -439,27 +439,43 @@ def _unit_handler(task_id: str, ctx: "TaskContext") -> Dict[str, Any]:
         logger.warning("orchestration: unit %s 反查失败: %s", task_id, e)
         return {"unit": "reverse_lookup_error", "error": str(e)}
     seeds = res.get("seeds") or []
-    if not seeds:
-        logger.info("orchestration: unit 任务 %s 反查 %d 单位无种子（无备案域名/无 Hunter key）", task_id, len(units))
+    ip_seeds = res.get("ip_seeds") or []
+    if not seeds and not ip_seeds:
+        logger.info("orchestration: unit 任务 %s 反查 %d 单位无种子（无备案资产/无 Hunter key）", task_id, len(units))
         return {"unit": "no_seeds", "unit_count": len(units), "seed_count": 0}
     ctx.checkpoint()
     recon = ctx.recon
     if not (recon and hasattr(recon, "run_recon")):
-        logger.info("orchestration: unit %s 反查得 %d 种子但 RECON 未就绪，降级", task_id, len(seeds))
-        return {"unit": "recon_unavailable", "seed_count": len(seeds)}
+        logger.info("orchestration: unit %s 反查得 %d 域名/%d IP 种子但 RECON 未就绪，降级",
+                    task_id, len(seeds), len(ip_seeds))
+        return {"unit": "recon_unavailable", "seed_count": len(seeds), "ip_seed_count": len(ip_seeds)}
     opts = dict(ctx.options or {})
     opts["cancel_check"] = ctx.is_stopped
     opts["unit_map"] = res.get("unit_map", {})   # fld→单位 归属（供归集参考）
-    logger.info("orchestration: unit 任务 %s 反查 %d 单位得 %d 种子域名，转 domain 侦察",
-                task_id, len(units), len(seeds))
-    try:
-        r = recon.run_recon("domain", task_id, seeds, **opts) or {}
-        r.setdefault("unit", "reverse_lookup_done")
-        r["seed_count"] = len(seeds)
-        return r
-    except Exception as e:
-        logger.warning("orchestration: unit %s 侦察失败: %s", task_id, e)
-        return {"unit": "recon_error", "error": str(e), "seed_count": len(seeds)}
+    logger.info("orchestration: unit 任务 %s 反查 %d 单位得 %d 域名 + %d IP 种子，转侦察（域名/IP 两路互补）",
+                task_id, len(units), len(seeds), len(ip_seeds))
+    # 域名种子走 domain pipeline（子域名/解析/建站）；IP 种子走 ip pipeline（省 subdomain/resolve，
+    # 直接 portscan/site，绕开 DNS 瓶颈——治主域无 A 记录时反查资产被丢）。两路都幂等落库+流式派发。
+    result: Dict[str, Any] = {"unit": "reverse_lookup_done", "seed_count": len(seeds),
+                              "ip_seed_count": len(ip_seeds)}
+    errs = []
+    if seeds:
+        try:
+            rd = recon.run_recon("domain", task_id, seeds, **opts) or {}
+            result["domain_result"] = rd.get("result")
+        except Exception as e:
+            logger.warning("orchestration: unit %s 域名侦察失败: %s", task_id, e)
+            errs.append("domain: {}".format(e))
+    if ip_seeds and not ctx.is_stopped():
+        try:
+            ri = recon.run_recon("ip", task_id, ip_seeds, **opts) or {}
+            result["ip_result"] = ri.get("result")
+        except Exception as e:
+            logger.warning("orchestration: unit %s IP 侦察失败: %s", task_id, e)
+            errs.append("ip: {}".format(e))
+    if errs:
+        result["error"] = "; ".join(errs)
+    return result
 
 
 def _normalize_fofa_target(raw: str) -> str:

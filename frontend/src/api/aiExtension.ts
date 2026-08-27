@@ -15,6 +15,7 @@ export interface ExtensionItem {
 export interface BuiltinTool {
   name: string; category: string; summary: string; description: string
   implemented: boolean; available: boolean; unavailable_reason?: string
+  origin?: 'self' | 'third_party'   // self=平台自研; third_party=封装 external/ 外部工具
   params?: { name: string; desc: string; required: boolean }[]
 }
 

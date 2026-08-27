@@ -3,7 +3,7 @@
     <template #extra>
       <a-space>
         <a-button type="primary" @click="router.push('/tasks/create')">新建任务</a-button>
-        <a-button @click="openPolicy">按策略下发</a-button>
+        <a-button @click="openOrphan" :loading="orphanScanning">清理孤儿资产</a-button>
       </a-space>
     </template>
     <SearchBar :model="query" @search="load" @reset="reset">
@@ -72,6 +72,25 @@
         message="仅删除任务本身，采集的资产保留在资产检索中。" />
     </a-modal>
 
+    <!-- 清理孤儿资产（task_id 指向已删除任务的残留结果） -->
+    <a-modal v-model:open="orphanOpen" title="清理孤儿资产" @ok="confirmPurgeOrphan"
+      :confirm-loading="orphanPurging" ok-type="danger" ok-text="清理"
+      :ok-button-props="{ disabled: !orphanResult || orphanResult.total === 0 }">
+      <a-spin :spinning="orphanScanning">
+        <template v-if="orphanResult">
+          <p v-if="orphanResult.total === 0" style="color:#52c41a">未发现孤儿资产，数据干净。</p>
+          <template v-else>
+            <a-alert type="warning" show-icon style="margin-bottom:12px"
+              :message="`发现 ${orphanResult.total} 条孤儿资产（对应任务已删除，残留在资产集合中，污染统计）`" />
+            <p style="color:#888;font-size:12px;margin-bottom:8px">现存任务 {{ orphanResult.live_task_count }} 个。以下集合有孤儿记录，清理不可恢复：</p>
+            <div v-for="(n, coll) in orphanResult.by_collection" :key="coll" style="display:flex;justify-content:space-between;padding:2px 0">
+              <span>{{ coll }}</span><b>{{ n }}</b>
+            </div>
+          </template>
+        </template>
+      </a-spin>
+    </a-modal>
+
     <!-- 同步到资产组 -->
     <a-modal v-model:open="syncOpen" title="同步结果到资产组" @ok="submitSync" :confirm-loading="syncing">
       <p>任务：<a-typography-text code>{{ syncTaskName }}</a-typography-text></p>
@@ -79,23 +98,6 @@
         <a-select v-model:value="syncScopeId" :options="scopeOptions" placeholder="选择资产组" show-search :filter-option="filterOpt" style="width: 100%" />
       </a-form-item>
       <a-alert v-if="matchedScopes.length" type="info" show-icon :message="`检测到 ${matchedScopes.length} 个匹配该目标的资产组，已优先列出`" />
-    </a-modal>
-
-    <!-- 按策略下发 -->
-    <a-modal v-model:open="policyOpen" title="按策略下发任务" @ok="submitPolicy" :confirm-loading="policySubmitting">
-      <a-form layout="vertical">
-        <a-form-item label="任务名" required><a-input v-model:value="policyForm.name" placeholder="任务名" /></a-form-item>
-        <a-form-item label="目标"><a-textarea v-model:value="policyForm.target" :rows="2" placeholder="域名 / IP，多目标换行" /></a-form-item>
-        <a-form-item label="任务类别" required>
-          <a-radio-group v-model:value="policyForm.task_tag">
-            <a-radio value="task">资产侦察</a-radio>
-            <a-radio value="risk_cruising">风险巡航</a-radio>
-          </a-radio-group>
-        </a-form-item>
-        <a-form-item label="策略" required>
-          <a-select v-model:value="policyForm.policy_id" :options="policyOptions" placeholder="选择策略" show-search :filter-option="filterOpt" style="width: 100%" />
-        </a-form-item>
-      </a-form>
     </a-modal>
 
     <!-- Fofa 任务 -->
@@ -212,6 +214,39 @@ const delOpen = ref(false)
 const deleting = ref(false)
 const delIds = ref<string[]>([])
 const delAssets = ref(true)
+
+// 孤儿资产清理
+const orphanOpen = ref(false)
+const orphanScanning = ref(false)
+const orphanPurging = ref(false)
+const orphanResult = ref<{ total: number; by_collection: Record<string, number>; live_task_count: number } | null>(null)
+async function openOrphan() {
+  orphanResult.value = null
+  orphanScanning.value = true
+  orphanOpen.value = true
+  try {
+    orphanResult.value = await taskApi.scanOrphan()
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : '扫描孤儿资产失败')
+    orphanOpen.value = false
+  } finally {
+    orphanScanning.value = false
+  }
+}
+async function confirmPurgeOrphan() {
+  orphanPurging.value = true
+  try {
+    const r = await taskApi.purgeOrphan()
+    if (r.skipped) message.warning(r.note || '已跳过清理')
+    else message.success(`已清理 ${r.purged} 条孤儿资产`)
+    orphanOpen.value = false
+    load()
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : '清理失败')
+  } finally {
+    orphanPurging.value = false
+  }
+}
 function openDelete(ids: string[]) {
   if (!ids.length) return
   delIds.value = ids
@@ -280,25 +315,6 @@ async function submitSync() {
   finally { syncing.value = false }
 }
 
-/* 按策略下发 */
-const policyOpen = ref(false)
-const policySubmitting = ref(false)
-const policyForm = reactive({ name: '', target: '', task_tag: 'task' as 'task' | 'risk_cruising', policy_id: undefined as string | undefined })
-async function openPolicy() {
-  policyForm.name = ''; policyForm.target = ''; policyForm.task_tag = 'task'; policyForm.policy_id = undefined
-  policyOpen.value = true
-  await ensurePolicies()
-}
-async function submitPolicy() {
-  if (!policyForm.name || !policyForm.policy_id) return message.warning('请填写任务名并选择策略')
-  policySubmitting.value = true
-  try {
-    await taskApi.policy({ name: policyForm.name, task_tag: policyForm.task_tag, policy_id: policyForm.policy_id, target: policyForm.target || undefined })
-    message.success('已下发'); policyOpen.value = false; load()
-  } catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
-  finally { policySubmitting.value = false }
-}
-
 /* Fofa 任务 */
 const fofaOpen = ref(false)
 const fofaSubmitting = ref(false)
@@ -332,10 +348,14 @@ const _DONE_STATUS = ['done', 'stop', 'error']
 let _timer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   load()
-  // 任务扫描进度(站点/IP/WIH/AI派发)流式变化,有运行中任务时每15秒静默刷新(不闪loading)
+  // 任务扫描进度(站点/IP/WIH/AI派发)流式变化,有运行中任务时每15秒静默刷新(不闪loading)。
+  // 关键(修逆优化):任务扫描 done 但 auto_pentest 派发的 AI 会话还在渗透时,任务本身已是 done、
+  // 只看任务状态会误判"无运行中"→停刷新→"AI渗透中"徽标的 active 永不更新(表现为任务显示"已完成"
+  // 却不更新渗透进度)。故刷新条件必须并上"任一任务的 AI 会话还 active(aiProg.active>0)"。
   _timer = setInterval(() => {
-    const hasRunning = items.value.some(t => !_DONE_STATUS.includes(String(t.status)))
-    if (hasRunning) load(true)
+    const taskRunning = items.value.some(t => !_DONE_STATUS.includes(String(t.status)))
+    const aiRunning = Object.values(aiProg.value).some(p => p && p.active > 0)
+    if (taskRunning || aiRunning) load(true)
   }, 15000)
 })
 onUnmounted(() => { if (_timer) clearInterval(_timer) })

@@ -36,6 +36,28 @@ def get_dns_config() -> Dict[str, Any]:
         return {"servers": []}
 
 
+def get_builtin_dns() -> Dict[str, Any]:
+    """读内置 DNS 解析器表（dicts/dnsserver.txt，侦察 dnsx/massdns 用 + 探活轮换）。
+    只读展示给前端（用户不可改，改要改代码分发）。去注释/空行。缺失返空列表（不报错）。
+    返回 {servers: [...], readonly: True}。与用户自定义 DNS(get_dns_config，可改删)分开展示。"""
+    import os
+    servers: List[str] = []
+    try:
+        # network_check 在 modules/system/，dnsserver.txt 在项目根 dicts/ → 上溯到根
+        here = os.path.dirname(os.path.abspath(__file__))
+        root = os.path.abspath(os.path.join(here, "..", "..", ".."))
+        path = os.path.join(root, "dicts", "dnsserver.txt")
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    w = line.strip()
+                    if w and not w.startswith("#"):
+                        servers.append(w)
+    except Exception:
+        pass
+    return {"servers": servers, "readonly": True}
+
+
 def save_dns_config(servers: List[str]) -> Dict[str, Any]:
     """保存 DNS 配置。校验格式后写入。"""
     cleaned = []
@@ -293,7 +315,7 @@ def _http_probe(url: str, timeout: float = 8.0) -> Dict[str, Any]:
     t0 = time.time()
     try:
         r = s.get(url, timeout=timeout, allow_redirects=True,
-                  headers={"User-Agent": "Mozilla/5.0 (SentinelNetCheck)"})
+                  headers={"User-Agent": "Mozilla/5.0 (WatchtowerNetCheck)"})
         return {"ok": True, "status": r.status_code, "ms": round((time.time() - t0) * 1000)}
     except Exception as exc:
         return {"ok": False, "status": 0, "ms": round((time.time() - t0) * 1000),
@@ -390,20 +412,36 @@ def _dep_targets() -> List[Dict[str, str]]:
     return deps
 
 
+# 依赖"慢但通"延迟阈值（ms）：连得上但慢过此值，判为可达性打折——
+# 治"国外源(GitHub)慢到2000ms+仍算满分把总分抬高"（v1.21.153，实测GitHub-www~2500ms vs国内源<300ms）。
+# 按客观延迟判定，不硬编码国内外：有梯子GitHub快就不扣、没梯子慢才扣（守 no-hardcoded-target-knowledge）。
+_DEP_SLOW_MS = 1500
+
+
 def deps_healthcheck() -> Dict[str, Any]:
     """④ 关键依赖一键体检：批量探平台依赖可达性（LLM/更新源/情报源/GitHub/订阅站）。
-    本次 LLM 中转站失效、订阅站波动——一屏看清哪些依赖不通、哪个功能(AI渗透/情报/更新)会瘫。"""
+    本次 LLM 中转站失效、订阅站波动——一屏看清哪些依赖不通、哪个功能(AI渗透/情报/更新)会瘫。
+
+    可达性分三档（v1.21.153 引入延迟感知，治国外源"慢但通"虚高总分）：
+      - 断（reachable=False）：0/超时，host 不可达。
+      - 慢（reachable=True, slow=True）：连得上但延迟 ≥ _DEP_SLOW_MS，能用但体验差（国外源常见）。
+      - 通（reachable=True, slow=False）：连得上且快。
+    """
     deps = _dep_targets()
     out = []
     for d in deps:
         p = _http_probe(d["url"], timeout=8.0)
         # 依赖可达判定：连得上就算通（4xx/401/403 也算 host 可达，只是要鉴权）；0/超时=不可达
         reachable = p["ok"] or (p.get("status", 0) > 0)
+        ms = p.get("ms", 0)
+        slow = bool(reachable and ms >= _DEP_SLOW_MS)   # 连得上但慢：可达性打折，不再算满分
         out.append({"name": d["name"], "url": d["url"], "kind": d.get("kind", ""),
-                    "reachable": reachable, "status": p.get("status", 0), "ms": p.get("ms", 0),
+                    "reachable": reachable, "slow": slow, "status": p.get("status", 0), "ms": ms,
                     "err": p.get("err", "") if not reachable else ""})
     down = [x["name"] for x in out if not x["reachable"]]
-    return {"deps": out, "total": len(out), "down_count": len(down), "down": down}
+    slow_list = [x["name"] for x in out if x.get("slow")]
+    return {"deps": out, "total": len(out), "down_count": len(down), "down": down,
+            "slow_count": len(slow_list), "slow": slow_list}
 
 
 def proxy_egress_quality() -> Dict[str, Any]:
@@ -440,18 +478,51 @@ _GRADE_SCORE = {"good": 100, "fair": 70, "poor": 40, "dead": 0}
 # 各维度权重（关键依赖最重——LLM/情报断=AI渗透/情报直接瘫；出网稳定性次之；代理未启用不参与）。
 _DIM_WEIGHT = {"deps": 0.35, "stability": 0.30, "ping": 0.15, "dns": 0.15, "proxy": 0.05}
 
+# 依赖"慢"梯度扣分参数（v1.21.153-梯度版）：超 _DEP_SLOW_MS 后，每 _STEP ms 扣 1 分，
+# 单项不低于 _FLOOR（再慢只要还通就保底，断才是 0）。治"慢=一刀切降档扣太狠"——
+# 改为延迟越高扣越多的平滑梯度：GitHub 2610ms 与 NVD 4593ms 得到不同分，而非同一档。
+_DEP_SLOW_STEP_MS = 60     # 超阈值每 60ms 扣 1 分
+_DEP_SLOW_FLOOR = 40       # 慢但通的单项分下限（再慢也不低于此；断=0，永远比最慢更低）
+
+
+def _dep_item_score(d: Dict[str, Any]) -> float:
+    """单个依赖质量分(0-100)：断=0；快(<_DEP_SLOW_MS)=100；慢=按超阈值延迟线性梯度扣分(floor 兜底)。"""
+    if not d.get("reachable"):
+        return 0.0
+    ms = d.get("ms", 0) or 0
+    if ms < _DEP_SLOW_MS:
+        return 100.0
+    over = ms - _DEP_SLOW_MS
+    return max(float(_DEP_SLOW_FLOOR), 100.0 - over / _DEP_SLOW_STEP_MS)
+
+
+def _deps_score(deps: Dict[str, Any]) -> float:
+    """关键依赖维度分(0-100) = 各依赖质量分均值（梯度：越慢扣越多、断=0）。无数据回退 70。"""
+    items = deps.get("deps") or []
+    if not items:
+        return 70.0
+    return round(sum(_dep_item_score(d) for d in items) / len(items), 1)
+
 
 def _deps_grade(deps: Dict[str, Any]) -> str:
-    """关键依赖体检没有单项 grade，按可达比例折算：全通=good / 断1个=fair / 断多个=poor / 全断=dead。"""
+    """关键依赖展示档位——由梯度维度分 _deps_score 派生（单一事实源，与总分口径一致）：
+      - 全断特判 dead（都不可达）。
+      - 否则按维度分：≥90 good / ≥70 fair / ≥40 poor / <40 dead。
+    慢只会平滑拉低分数（进而可能降到 fair），不再一刀切降 poor。"""
     total = deps.get("total", 0) or 0
     down = deps.get("down_count", 0) or 0
     if total == 0:
         return "fair"
-    if down == 0:
-        return "good"
     if down >= total:
         return "dead"
-    return "fair" if down == 1 else "poor"
+    s = _deps_score(deps)
+    if s >= 90:
+        return "good"
+    if s >= 70:
+        return "fair"
+    if s >= 40:
+        return "poor"
+    return "dead"
 
 
 def overall_assessment(ping: Any, stability: Any, dns: Any, deps: Any, proxy: Any) -> Dict[str, Any]:
@@ -476,9 +547,14 @@ def overall_assessment(ping: Any, stability: Any, dns: Any, deps: Any, proxy: An
     if not dims:
         return {"score": 0, "level": "unknown", "level_text": "未知", "summary": "无有效检测数据",
                 "dims": {}}
+    # 各维度数值分：deps 用梯度分（越慢扣越多、断=0，平滑不断崖）；其余维度用 grade→档位分。
+    def _dim_score(k: str, g: str) -> float:
+        if k == "deps" and isinstance(deps, dict):
+            return _deps_score(deps)
+        return float(_GRADE_SCORE.get(g, 70))
     # 加权平均（只对参与的维度按其权重归一化）
     tw = sum(_DIM_WEIGHT.get(k, 0.1) for k in dims)
-    score = sum(_GRADE_SCORE.get(g, 70) * _DIM_WEIGHT.get(k, 0.1) for k, g in dims.items()) / (tw or 1)
+    score = sum(_dim_score(k, g) * _DIM_WEIGHT.get(k, 0.1) for k, g in dims.items()) / (tw or 1)
     score = round(score)
     # 关键维度 dead → 封顶（就低不就高）
     key_dead = dims.get("deps") == "dead" or dims.get("stability") == "dead"
@@ -564,6 +640,9 @@ class NetworkCheckServiceImpl:
 
     def get_dns_config(self) -> Dict[str, Any]:
         return get_dns_config()
+
+    def get_builtin_dns(self) -> Dict[str, Any]:
+        return get_builtin_dns()
 
     def save_dns_config(self, servers: List[str]) -> Dict[str, Any]:
         return save_dns_config(servers)

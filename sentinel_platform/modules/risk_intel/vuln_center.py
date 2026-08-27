@@ -1,6 +1,6 @@
 """risk_intel/vuln_center —— 漏洞中心（实现 FINDING / FindingService）。
 
-三来源漏洞统一治理：AI 渗透（intel_finding）+ 哨兵 PoC（vuln）+ Nuclei（nuclei_result）混排。
+三来源漏洞统一治理：AI 渗透（intel_finding）+ 瞭望塔 PoC（vuln）+ Nuclei（nuclei_result）混排。
 核心能力：
   - 证据强制：verified 仅在工具实抓「请求 + 正向响应」（confirmed）时为真，否则降 lead（治假验证）。
   - CVSS 3.1 定级 + triage 校准（信息型/指纹型降级，向量硬闸防误降真漏洞）——见 `_cvss.py`。
@@ -66,6 +66,24 @@ def _norm_vuln_type(vuln_type: str) -> str:
     s = re.sub(r"^(信息泄露|敏感信息泄露|漏洞|风险|缺陷|配置缺陷)[\s\-:：]+", "", s)
     s = re.sub(r"[\s\-_:：、,，.。()（）\[\]【】]+", "", s)
     return s
+
+
+def _resolve_asset_type(finding: Dict[str, Any], ctx: Dict[str, Any]) -> str:
+    """finding 的资产类型(web/miniapp)：显式给了用给的；否则按 session_id 继承会话的 asset_type；
+    都无 → 缺省 web（存量数据/普通 Web 渗透向后兼容）。"""
+    at = str(finding.get("asset_type") or ctx.get("asset_type") or "").strip()
+    if at:
+        return at
+    sid = str(finding.get("session_id") or ctx.get("session_id") or "")
+    if sid:
+        try:
+            sess = get_repo().collection(Collections.PENTEST_SESSION).find_one(
+                {"_id": _oid(sid)}, {"asset_type": 1})
+            if sess and sess.get("asset_type"):
+                return str(sess["asset_type"])
+        except Exception:
+            pass
+    return "web"
 
 
 def _result_obj(res: Any) -> Dict[str, Any]:
@@ -251,7 +269,7 @@ def parse_findings_md(md_text: str) -> Tuple[List[Dict[str, Any]], List[Dict[str
 
 
 def is_identify_poc(plg_name: str = "", vul_name: str = "") -> bool:
-    """判断一条哨兵 PoC 命中是否属于「纯识别类」（指纹/服务发现，非漏洞，不进漏洞中心）。
+    """判断一条瞭望塔 PoC 命中是否属于「纯识别类」（指纹/服务发现，非漏洞，不进漏洞中心）。
     判定：① plugin_name 以 _identify 结尾（大小写不敏感）；② 或 vul_name 以"发现"开头且不含"漏洞"。"""
     pn = (plg_name or "").strip()
     vn = (vul_name or "").strip()
@@ -403,6 +421,7 @@ class FindingServiceImpl:
                 "norm_target": norm_target, "norm_type": norm_type,
                 "asset_key": finding.get("asset_key", "") or ctx.get("asset_key", ""),
                 "subdomain": finding.get("subdomain", "") or ctx.get("subdomain", ""),
+                "asset_type": _resolve_asset_type(finding, ctx),   # web/miniapp 类型标识(会话继承+缺省web)
                 "unit": unit, "verified": verified, "evidence_level": ev_level, "evidence": evidence,
                 "status": "finding" if verified else "lead", "save_date": now, "update_date": now,
             }
@@ -702,7 +721,7 @@ def mark_unified(source: str, ids: List[str], handle_status: str, handle_by: str
 
 
 def finding_stat(unit=None) -> Dict[str, Any]:
-    """漏洞统计：AI 渗透（intel_finding）已验证 vs 线索分开计 + 哨兵扫描（vuln/nuclei）合计。"""
+    """漏洞统计：AI 渗透（intel_finding）已验证 vs 线索分开计 + 瞭望塔扫描（vuln/nuclei）合计。"""
     repo = get_repo()
     fq: Dict[str, Any] = {"source": "ai"}
     if unit:

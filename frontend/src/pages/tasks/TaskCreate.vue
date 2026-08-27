@@ -20,18 +20,39 @@
         <a-form-item label="目标类型">
           <a-radio-group v-model:value="form.target_type" button-style="solid">
             <a-radio-button value="normal">域名/IP</a-radio-button>
-            <a-radio-button value="fofa">FOFA 查询</a-radio-button>
+            <a-radio-button value="fofa">源查询</a-radio-button>
             <a-radio-button value="unit">单位名</a-radio-button>
           </a-radio-group>
-          <span v-if="form.target_type === 'fofa'" class="muted" style="margin-left:8px">FOFA:用语句导入资产(host 自动剥协议、域名+IP 都收、next 游标拉更全)</span>
+          <span v-if="form.target_type === 'fofa'" class="muted" style="margin-left:8px">源查询:多测绘源各写各语法,结果去重互补(域名按主机名/纯IP按IP+端口)</span>
           <span v-else-if="form.target_type === 'unit'" class="muted" style="margin-left:8px">单位名:填单位全称(一行一个,可多单位),自动按 ICP 备案反查资产(鹰图 icp.name 主力 + FOFA 兜底)→ 每单位建一个任务</span>
         </a-form-item>
-        <a-form-item :label="form.target_type === 'fofa' ? 'FOFA 查询语句' : (form.target_type === 'unit' ? '单位全称(一行一个)' : '任务目标')" required>
+        <!-- 普通目标 / 单位名：共用文本框 -->
+        <a-form-item v-if="form.target_type !== 'fofa'"
+          :label="form.target_type === 'unit' ? '单位全称(一行一个)' : '任务目标'" required>
           <a-textarea v-model:value="form.target" :rows="3"
-            :placeholder="form.target_type === 'fofa' ? '如 domain=&quot;example.com&quot; && port=&quot;443&quot;(注意授权范围,语句太宽会捞到无关资产)' : (form.target_type === 'unit' ? '单位 ICP 备案全称,一行一个(带「有限公司」等全称命中率高)。如:\n北京某某科技有限公司\n某某市人民政府' : '支持域名、IP、IP段；多目标换行')" />
-          <div v-if="form.target_type === 'fofa'" style="margin-top:4px">
-            <a-button type="link" size="small" :loading="fofaTesting" @click="testFofa">测试查询(预估数量)</a-button>
-            <span v-if="fofaSize !== null" class="muted">预估 {{ fofaSize }} 条(受 FOFA 会员单查询上限约束,超量需拆分查询)</span>
+            :placeholder="form.target_type === 'unit' ? '单位 ICP 备案全称,一行一个(带「有限公司」等全称命中率高)。如:\n北京某某科技有限公司\n某某市人民政府' : '支持域名、IP、IP段；多目标换行'" />
+        </a-form-item>
+
+        <!-- 源查询：多测绘源各写各语法，去重互补 -->
+        <a-form-item v-else label="源查询" required>
+          <div v-if="!sources.length" class="muted">加载可用测绘源中…</div>
+          <div class="src-grid">
+            <div v-for="s in sources" :key="s.id" class="src-block">
+              <div class="src-head">
+                <span :class="s.available ? 'src-ok' : 'src-off'">{{ s.available ? '✓' : '✗' }} {{ s.name }}</span>
+                <span v-if="!s.available" class="muted">（未配 key）</span>
+                <span v-if="srcEst[s.id]" class="src-est"
+                  :style="{ color: srcEst[s.id].error ? '#cf1322' : '#52c41a' }">
+                  {{ srcEst[s.id].error ? ('错误: ' + srcEst[s.id].errmsg) : ('命中约 ' + srcEst[s.id].size + ' 条') }}
+                </span>
+              </div>
+              <a-textarea v-model:value="srcQueries[s.id]" :rows="2" :disabled="!s.available"
+                :placeholder="s.placeholder" />
+            </div>
+          </div>
+          <div style="margin-top:6px">
+            <a-button type="link" size="small" :loading="fofaTesting" @click="testSources">测试查询(各源预估)</a-button>
+            <span v-if="mergedTip" class="muted">{{ mergedTip }}</span>
           </div>
         </a-form-item>
 
@@ -55,6 +76,19 @@
               <BulbOutlined /> 留空将跟随全局默认 AI：<b>{{ globalDefaultName }}</b>
             </div>
             <div class="muted">锁定本任务派发的渗透会话所用 AI 模型，全程不受后续全局默认切换影响。留空=跟随全局默认（如上）。切换限同协议（OpenAI 系互切 / Claude 系互切），跨协议需新开会话。</div>
+          </a-form-item>
+
+          <a-form-item label="AI 攻击出口">
+            <a-radio-group v-model:value="form.pentest_egress_mode" button-style="solid" size="small">
+              <a-radio-button value="direct">直连</a-radio-button>
+              <a-tooltip :title="egressOpts.global && !egressOpts.global.available ? egressOpts.global.reason : ''">
+                <a-radio-button value="global" :disabled="egressOpts.global && !egressOpts.global.available">全局</a-radio-button>
+              </a-tooltip>
+              <a-tooltip :title="egressOpts.smart && !egressOpts.smart.available ? egressOpts.smart.reason : ''">
+                <a-radio-button value="smart" :disabled="egressOpts.smart && !egressOpts.smart.available">智能</a-radio-button>
+              </a-tooltip>
+            </a-radio-group>
+            <div class="muted">AI 渗透打目标的出口。直连=不走代理;全局=走代理中心「全局代理」绑定的源;智能=代理可达走代理、不可达自动降级直连(推荐)。未绑定代理源的模式已置灰(去代理中心配置)。留空跟随所选策略默认。</div>
           </a-form-item>
 
           <a-form-item label="禁渗透白名单">
@@ -125,6 +159,7 @@ import PageContainer from '../../layouts/PageContainer.vue'
 import { taskApi, taskFofaApi } from '../../api/task'
 import { policyApi } from '../../api/policy'
 import { aiConfigApi, type AIProvider } from '../../api/aiConfig'
+import { proxyApi } from '../../api/proxy'
 import { getSetupStatus, type SetupStatusResult } from '../../api/meta'
 import type { RowRecord } from '../../api/types'
 
@@ -146,8 +181,12 @@ const form = reactive({
   priority: 2,
   pentest_whitelist: '',
   pentest_provider_id: '',                       // 指定 AI 模型（空=跟随全局默认）
+  pentest_egress_mode: 'direct',                 // AI 攻击出口（direct/global/smart，从策略移到任务）
   'source.unit': ''
 })
+
+// AI 攻击出口各模式可选性（后端 egress_options：未绑定源的模式变灰 + 悬停 reason）
+const egressOpts = ref<Record<string, { available: boolean; reason: string }>>({})
 
 // 当前所选策略的完整对象 + 是否启用扫描后 AI 渗透（决定渗透相关选项是否显示）
 const selectedPolicy = computed(() => policyRaw.value.find(p => String(p._id) === String(form.policy_id)))
@@ -163,6 +202,13 @@ const globalDefaultName = computed(() => {
 })
 const fofaTesting = ref(false)
 const fofaSize = ref<number | null>(null)
+const fofaErr = ref('')          // FOFA 报错原文（限流/语法/额度等），有则如实展示而非笼统归因
+// 源查询：多测绘源
+interface SrcItem { id: string; name: string; placeholder: string; available: boolean }
+const sources = ref<SrcItem[]>([])
+const srcQueries = reactive<Record<string, string>>({})       // 各源输入语句
+const srcEst = reactive<Record<string, { size: number; error: boolean; errmsg: string }>>({})  // 各源预估
+const mergedTip = ref('')
 
 // 临时情报:每行 {scope, scopeVal, text},提交时转 {match:{unit,target},text} JSON
 type MiScope = 'task' | 'unit' | 'target'
@@ -279,9 +325,52 @@ async function testFofa() {
   if (!form.target) return message.warning('请先填写 FOFA 查询语句')
   fofaTesting.value = true
   fofaSize.value = null
+  fofaErr.value = ''
   try {
     const res = await taskFofaApi.test(form.target)
-    fofaSize.value = res.size
+    if (res.error) {
+      fofaErr.value = res.errmsg || 'FOFA 查询出错'
+    } else {
+      fofaSize.value = res.size
+    }
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    fofaTesting.value = false
+  }
+}
+
+async function loadSources() {
+  try {
+    const r = await taskFofaApi.sources()
+    sources.value = r.sources || []
+    for (const s of sources.value) if (!(s.id in srcQueries)) srcQueries[s.id] = ''
+  } catch { /* ignore */ }
+}
+
+// 收集非空的源查询语句 {fofa, hunter, ...}
+function collectQueries(): Record<string, string> {
+  const q: Record<string, string> = {}
+  for (const s of sources.value) {
+    const v = (srcQueries[s.id] || '').trim()
+    if (v && s.available) q[s.id] = v
+  }
+  return q
+}
+
+async function testSources() {
+  const queries = collectQueries()
+  if (!Object.keys(queries).length) return message.warning('请至少填写一个可用源的查询语句')
+  fofaTesting.value = true
+  mergedTip.value = ''
+  for (const k of Object.keys(srcEst)) delete srcEst[k]
+  try {
+    const res = await taskFofaApi.test({ queries })
+    const per = res.per_source || {}
+    for (const [sid, v] of Object.entries(per)) {
+      srcEst[sid] = { size: (v as any).size || 0, error: !!(v as any).error, errmsg: (v as any).errmsg || '' }
+    }
+    mergedTip.value = '各源命中数如上；去重合并后实际条数以建任务为准（跨源域名/IP+端口去重互补）'
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
   } finally {
@@ -291,17 +380,18 @@ async function testFofa() {
 
 async function submit() {
   // unit 模式:任务名(第一级)+ 单位全称(第二级,多行)都要;其余模式需任务名+目标
+  let srcQ: Record<string, string> = {}
   if (form.target_type === 'unit') {
     if (!form.name) return message.warning('请填写任务名称')
     if (!form.target) return message.warning('请填写单位全称(一行一个)')
+  } else if (form.target_type === 'fofa') {
+    if (!form.name) return message.warning('请填写任务名称')
+    srcQ = collectQueries()
+    if (!Object.keys(srcQ).length) return message.warning('请至少填写一个可用源的查询语句')
   } else if (!form.name || !form.target) {
     return message.warning('请填写任务名称和目标')
   }
   if (!form.policy_id) return message.warning('请选择扫描策略')
-  // FOFA 目标需要 FOFA 密钥已配置且启用
-  if (form.target_type === 'fofa' && setupStatus.value && !setupStatus.value.fofa_configured) {
-    return message.warning('FOFA API 密钥未配置或未启用，请先到「系统设置 → API 密钥」配置并启用')
-  }
   loading.value = true
   const missionIntelJson = buildMissionIntel()
   try {
@@ -315,21 +405,23 @@ async function submit() {
         pentest_whitelist: form.pentest_whitelist || '',
         mission_intel: missionIntelJson,
         pentest_provider_id: form.pentest_provider_id || '',
+        pentest_egress_mode: pentestEnabled.value ? form.pentest_egress_mode : '',
       })
       message.success(`任务「${form.name}」已建(${res.unit_count} 个单位,后台反查中)`)
       router.push('/tasks')
       return
     }
     if (form.target_type === 'fofa') {
-      // FOFA 目标:语句导入,带上优先级/白名单/来源(与普通任务一致)
+      // 源查询:多源语句导入,去重互补(带上优先级/白名单/来源)
       await taskFofaApi.submit({
         name: form.name,
-        query: form.target,
+        queries: srcQ,
         policy_id: form.policy_id,
         priority: form.priority,
         pentest_whitelist: form.pentest_whitelist || '',
         mission_intel: missionIntelJson,
         pentest_provider_id: form.pentest_provider_id || '',
+        pentest_egress_mode: pentestEnabled.value ? form.pentest_egress_mode : '',
         'source.unit': form['source.unit'],
       })
     } else {
@@ -342,6 +434,7 @@ async function submit() {
         pentest_whitelist: form.pentest_whitelist || '',
         mission_intel: missionIntelJson,
         pentest_provider_id: form.pentest_provider_id || '',
+        pentest_egress_mode: pentestEnabled.value ? form.pentest_egress_mode : '',
         'source.unit': form['source.unit'],
       })
     }
@@ -357,7 +450,10 @@ async function submit() {
 onMounted(() => {
   loadPolicies()
   loadProviders()
+  loadSources()
   getSetupStatus().then(r => { setupStatus.value = r }).catch(() => {})
+  // AI 攻击出口可选性：未绑定源的模式变灰。取不到默认全可用（不阻塞建任务）。
+  proxyApi.egressOptions().then(r => { egressOpts.value = r || {} }).catch(() => {})
 })
 </script>
 
@@ -366,4 +462,12 @@ onMounted(() => {
 .default-hint { color: #1677ff; font-size: 12px; margin-top: 6px; display: flex; align-items: center; gap: 4px; }
 .default-hint b { font-weight: 600; }
 .mi-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; }
+/* 源查询：两个一排（2 列网格）；窄屏自动降为单列 */
+.src-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+@media (max-width: 720px) { .src-grid { grid-template-columns: 1fr; } }
+.src-block { margin-bottom: 0; min-width: 0; }
+.src-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 13px; }
+.src-ok { color: #52c41a; font-weight: 600; }
+.src-off { color: #bbb; font-weight: 600; }
+.src-est { font-size: 12px; margin-left: auto; }
 </style>

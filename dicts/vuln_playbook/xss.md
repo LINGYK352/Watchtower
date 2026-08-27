@@ -5,7 +5,7 @@ aliases: 跨站脚本, cross site scripting, xss, 存储型XSS, 反射型XSS, DO
 
 # XSS
 
-> 思路参考,非清单。分上下文的 payload/绕 WAF 变体/绕 CSP 等技法你已具备且可 web_search 补,这里只补【哨兵工具编排 + 验证判据】。
+> 思路参考,非清单。分上下文的 payload/绕 WAF 变体/绕 CSP 等技法你已具备且可 web_search 补,这里只补【瞭望塔工具编排 + 验证判据】。
 
 ## 先判这是不是 XSS 面 + 三型
 - 反射型:输入即时回显在响应(搜索/报错/参数回显)。
@@ -13,7 +13,7 @@ aliases: 跨站脚本, cross site scripting, xss, 存储型XSS, 反射型XSS, DO
 - DOM 型:前端 JS 把 source(location/hash/postMessage)写进危险 sink(innerHTML/eval)。
 先探转义:输入 `<test"'>` 看响应原样还是变 `&lt;`。
 
-## 哨兵工具怎么打(独有价值)
+## 瞭望塔工具怎么打(独有价值)
 - **真渲染验执行(关键)**:`browser_navigate`/`browser_login` 真浏览器渲染看 payload **真弹窗/真触发 JS**——反射/DOM 型必须真渲染,不能只看响应里有 payload 字符串。
 - **存储型跨端**:A 提交 payload,切管理员 cookie `browser_navigate` 看后台是否执行。
 - **找 DOM 数据流**:`fetch_sourcemap`/`collect_js` 看前端 source→sink 路径。

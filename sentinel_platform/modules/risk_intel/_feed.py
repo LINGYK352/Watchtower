@@ -187,9 +187,9 @@ def fetch_nvd_recent(days: int = 3, limit: int = 0) -> List[Dict[str, Any]]:
     return out
 
 
-# ============================ 本地可执行源（哨兵能直接打） ============================
+# ============================ 本地可执行源（瞭望塔能直接打） ============================
 def fetch_arl_npoc() -> List[Dict[str, Any]]:
-    """哨兵本地 NPoC 插件（poc 集合）→ 情报（source=arl_npoc，executable=可直接执行）。
+    """瞭望塔本地 NPoC 插件（poc 集合）→ 情报（source=arl_npoc，executable=可直接执行）。
 
     poc 集合每条是「组件(app_name)→ 可执行验证手段(vul_name)」映射，纳入情报库，
     AI 查组件时能拿到本地直接能打的 PoC，而非只有外部 CVE 编号。
@@ -229,7 +229,7 @@ def _nuclei_templates_dir() -> str:
 
 
 def fetch_nuclei_templates(limit: int = 0) -> List[Dict[str, Any]]:
-    """哨兵本地 nuclei 模板 → 情报（source=nuclei，executable=可直接扫）。模板目录不存在则跳过（返回空不报错）。"""
+    """瞭望塔本地 nuclei 模板 → 情报（source=nuclei，executable=可直接扫）。模板目录不存在则跳过（返回空不报错）。"""
     import os
     import glob
     base = _nuclei_templates_dir()
@@ -484,7 +484,7 @@ SOURCE_PLATFORMS = {
     "cisa_kev": {"label": "CISA KEV (美 CISA 在野利用目录)", "kind": "official",
                  "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"},
     "nvd": {"label": "NVD (美 NIST 国家漏洞库)", "kind": "official", "url": "https://nvd.nist.gov/"},
-    "arl_npoc": {"label": "哨兵本地 NPoC 插件", "kind": "local", "url": ""},
+    "arl_npoc": {"label": "瞭望塔本地 NPoC 插件", "kind": "local", "url": ""},
     "nuclei": {"label": "Nuclei 模板库", "kind": "local",
                "url": "https://github.com/projectdiscovery/nuclei-templates"},
     "poc_monitor": {"label": "Poc-Monitor (GitHub CVE PoC 监控)", "kind": "github",
@@ -551,7 +551,7 @@ def _notify_new_highrisk(new_highrisk: List[Dict[str, Any]]) -> None:
         for v in top:
             tag = "[KEV]" if v.get("in_kev") else "[{}]".format(v.get("severity", ""))
             lines.append("{} {} {}".format(tag, v.get("cve_id") or "", (v.get("title") or "")[:60]))
-        svc.notify("\n".join(lines), title="Sentinel · 漏洞情报更新", level="high")
+        svc.notify("\n".join(lines), title="瞭望塔 Watchtower · 漏洞情报更新", level="high")
     except Exception as exc:
         logger.debug("vuln_feed notify failed: %s", exc)
 

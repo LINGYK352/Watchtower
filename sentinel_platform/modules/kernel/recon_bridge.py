@@ -18,6 +18,9 @@ from .recon.registry import (ROLE_HTTP_PROBE, ROLE_PORT_SCAN, ROLE_RESOLVE,
                              ROLE_VULN_SCAN, ROLE_WEAK_BRUTE, ROLE_WEBINFO,
                              ROLE_SERVICE_POC)
 
+from sentinel_platform.core import get_logger
+logger = get_logger()          # 模块级 logger（resolver 探活等模块级函数用；原仅函数内局部定义 → NameError）
+
 
 # —— 字典供给（净室迁移缺口 D2/D4 补救）————————————————————————————————
 # 净室重写把字典解耦成"运行时传参"（pipeline 读 ctx.options 的 brute_words/resolvers/
@@ -85,9 +88,80 @@ def _load_wordlist(filename: str) -> List[str]:
 
 
 def _resolvers_path() -> str:
-    """resolvers 文件绝对路径（massdns -r 需文件路径，非列表）。缺失返空串。"""
-    path = os.path.join(_dicts_dir(), "dnsserver.txt")
-    return path if os.path.isfile(path) else ""
+    """resolvers 文件绝对路径（massdns -r 需文件路径，非列表）。缺失返空串。
+    **优先返回探活排序后的健康 resolver 临时文件**（当前网络真能通的 DNS 排前/剔除不通的），
+    探活失败或无可用时降级返回原始 dnsserver.txt。治「表里某 DNS 在当前网络不通导致解析拖慢/失败」。"""
+    healthy = _healthy_resolvers_file()
+    if healthy:
+        return healthy
+    # 降级：探活全不通/异常 → 用去注释的纯 IP 表（dnsserver.txt 含 # 注释行，dnsx/massdns -r 不一定认，
+    # 故经 _load_wordlist 去注释后重写临时文件，绝不把带注释的原文件直接喂工具）。
+    servers = _load_wordlist("dnsserver.txt")
+    return _write_temp_resolvers(servers) if servers else ""
+
+
+# 探活结果进程级缓存（探活有网络开销，同一进程内 TTL 内复用；多 worker 各自探各自的，天然贴合各自网络）
+_RESOLVER_CACHE = {"path": "", "ts": 0.0}
+_RESOLVER_TTL = 600.0          # 10 分钟内复用探活结果（DNS 可达性变化慢）
+_RESOLVER_PROBE_TIMEOUT = 2.0  # 单个 DNS 探活超时（秒），短超时防拖慢
+_RESOLVER_PROBE_WORKERS = 8    # 并发探活宽度
+
+
+def _probe_dns(server: str, timeout: float = _RESOLVER_PROBE_TIMEOUT) -> bool:
+    """UDP/53 探测单个 DNS 是否可用：发一个标准 A 查询（baidu.com），收到应答即通。
+    比 ping 更准（ping 通不代表 53 端口的 DNS 服务通，尤其容器 NAT 下 UDP 可能被挡）。"""
+    import socket, struct, random
+    try:
+        tid = random.randint(0, 0xFFFF)
+        pkt = struct.pack(">HHHHHH", tid, 0x0100, 1, 0, 0, 0)
+        for part in b"baidu.com".split(b"."):
+            pkt += bytes([len(part)]) + part
+        pkt += b"\x00" + struct.pack(">HH", 1, 1)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(timeout)
+        try:
+            s.sendto(pkt, (server, 53))
+            data, _ = s.recvfrom(512)
+            return len(data) >= 12 and data[:2] == pkt[:2]   # 事务ID匹配的应答=通
+        finally:
+            s.close()
+    except Exception:
+        return False
+
+
+def _healthy_resolvers_file() -> str:
+    """读 dnsserver.txt（去注释）→ 并发探活 → 通的排前（保原序）、不通的剔除 → 写临时文件返回路径。
+    「DNS 表 + 失效顺延 + 回环」的落地：只把当前网络真能通的 DNS 交给 dnsx/massdns（它们本身多 resolver
+    轮询失效自动跳下一个），故某个 DNS 挂了不影响解析。全部不通→降级返 ""（调用方回退原始表，不致解析全废）。
+    进程级 TTL 缓存，避免每次扫描都探活拖慢启动。"""
+    import time as _t
+    now = _t.time()
+    if _RESOLVER_CACHE["path"] and (now - _RESOLVER_CACHE["ts"] < _RESOLVER_TTL):
+        p = _RESOLVER_CACHE["path"]
+        if os.path.isfile(p):
+            return p
+    servers = _load_wordlist("dnsserver.txt")   # 已去注释/空行（_load_wordlist 处理）
+    if not servers:
+        return ""
+    # 并发探活（短超时，别拖慢扫描）
+    healthy = []
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=_RESOLVER_PROBE_WORKERS) as ex:
+            results = list(ex.map(lambda s: (s, _probe_dns(s)), servers))
+        healthy = [s for s, ok in results if ok]   # 保 dnsserver.txt 原序（通的排前=原序过滤）
+    except Exception as exc:
+        logger.debug("resolver 探活降级: %s", exc)
+        return ""
+    if not healthy:
+        logger.warning("resolver 探活：表内 %d 个 DNS 当前网络全不通，降级用原始表", len(servers))
+        return ""
+    logger.info("resolver 探活：%d/%d 个 DNS 可用（%s...）", len(healthy), len(servers), ",".join(healthy[:3]))
+    path = _write_temp_resolvers(healthy)
+    if path:
+        _RESOLVER_CACHE["path"] = path
+        _RESOLVER_CACHE["ts"] = now
+    return path
 
 
 def _supply_default_dicts(opts: Dict[str, Any]) -> None:
@@ -98,8 +172,10 @@ def _supply_default_dicts(opts: Dict[str, Any]) -> None:
     if opts.get("domain_brute", True) and not opts.get("brute_words"):
         custom = _parse_lines(opts.get("subdomain_dict"))
         opts["brute_words"] = custom if custom else _load_wordlist("domain_2w.txt")
-    # resolvers（massdns 依赖）：自定义 IP 列表写临时文件优先，否则默认公共 DNS 文件
-    if opts.get("brute_words") and not opts.get("resolvers"):
+    # resolvers（massdns 爆破 + dnsx resolve 都依赖）：无条件供给——dnsx 不传 -r 会用内置境外默认
+    # resolver，某些网络全超时致解析恒空（single 模式不爆破但仍要 resolve，故不能再绑 brute_words）。
+    # 自定义 IP 列表写临时文件优先，否则默认公共 DNS 文件 dnsserver.txt。
+    if not opts.get("resolvers"):
         custom_r = _parse_lines(opts.get("resolvers_custom"))
         opts["resolvers"] = _write_temp_resolvers(custom_r) if custom_r else _resolvers_path()
     # 文件泄露（D4）：file_leak 开 且 未传 fileleak_words → 自定义文本优先，否则 file_top_2000 默认

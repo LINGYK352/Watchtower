@@ -448,7 +448,7 @@ def batch_import_poc(zip_bytes: bytes, overwrite: bool = False) -> Dict[str, Any
 
 def import_template() -> str:
     """返回批量导入的 .py POC 模板骨架（含 npoc 结构示例 + 非结构脚本说明）。供前端下载。"""
-    return '''# 哨兵 POC 模板 —— 统一 .py 形态。两类都支持，导入时自动识别：
+    return '''# 瞭望塔 POC 模板 —— 统一 .py 形态。两类都支持，导入时自动识别：
 #
 # 【类型一】npoc 结构插件（含 class Plugin(BasePlugin)）→ 落 external/npoc/xing/plugins/imported/，
 #           内核 xing 引擎自动扫描并可在扫描任务/AI 渗透中执行。示例：

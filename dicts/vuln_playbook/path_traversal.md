@@ -5,7 +5,7 @@ aliases: 目录遍历, path traversal, directory traversal, LFI, RFI, 文件包�
 
 # 路径遍历 / 文件读取下载 / 文件包含
 
-> 思路参考,非清单。`../` 编码绕过/LFI→RCE(日志/session/wrapper)等技法你已具备且可 web_search 补,这里只补【哨兵工具编排 + 验证判据 + 读什么最值钱】。
+> 思路参考,非清单。`../` 编码绕过/LFI→RCE(日志/session/wrapper)等技法你已具备且可 web_search 补,这里只补【瞭望塔工具编排 + 验证判据 + 读什么最值钱】。
 
 ## 先判这是不是文件读取面
 `file/path/filename/filepath/dir/download/read/template/page/include/doc` 参数;下载/预览/导出/模板加载/头像读取功能。`fetch_sourcemap`/`collect_js` 挖前端的文件读取接口。
@@ -13,7 +13,7 @@ aliases: 目录遍历, path traversal, directory traversal, LFI, RFI, 文件包�
 ## 读什么最值钱(比 /etc/passwd 有用)
 优先读应用配置拿凭证:`WEB-INF/web.xml`、`application.yml`、`.env`、`config.php`、`database.yml`——直接给数据库连接串/密钥。其次读源码(反编译看逻辑)、备份、数据库文件。
 
-## 哨兵工具怎么打(独有价值)
+## 瞭望塔工具怎么打(独有价值)
 - **下大文件提数据**:读到的源码/备份/db 用 `fetch_large_file` 下载沙盒 grep 敏感数据。
 - **读到源码接代码审计**:`record_stack` 精确指纹→`get_code_audit` 看源码层已知洞。
 - **查组件已知任意文件读**:`query_vuln_intel`(FE/致远/泛微/金蝶多有,记忆库有对应 POC)。

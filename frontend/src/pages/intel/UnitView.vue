@@ -1,17 +1,25 @@
 <template>
   <PageContainer title="单位视图" description="按单位汇总渗透情报,点卡片看该单位的漏洞、子域名、系统、报告与攻击链">
     <a-spin :spinning="loading">
-      <div style="margin-bottom:16px;display:flex;gap:12px;align-items:center">
+      <div style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <a-input-search v-model:value="keyword" placeholder="搜索单位名" allow-clear style="max-width:320px" />
         <a-segmented v-model:value="sortBy" :options="[{label:'按渗透时间',value:'time'},{label:'按漏洞数',value:'vuln'}]" />
         <span class="muted">共 {{ filteredUnits.length }} 个单位</span>
+        <!-- 多选批量删除：勾选卡片后出现 -->
+        <a-checkbox :checked="allChecked" :indeterminate="someChecked" @change="toggleAll">全选本页</a-checkbox>
+        <a-popconfirm v-if="selected.length" :title="`确认删除选中的 ${selected.length} 个单位的全部数据？(资产/漏洞/报告/会话/攻击链/线索)`"
+          ok-text="确认删除" cancel-text="取消" @confirm="batchDelete">
+          <a-button danger size="small">批量删除 ({{ selected.length }})</a-button>
+        </a-popconfirm>
       </div>
       <a-empty v-if="!filteredUnits.length" :description="units.length ? '无匹配单位' : '暂无已渗透单位'" />
       <a-row :gutter="[16, 16]">
         <a-col v-for="u in filteredUnits" :key="u.unit" :xs="24" :sm="12" :md="8" :lg="6">
-          <a-card hoverable class="unit-card" @click="openUnit(u.unit)">
+          <a-card hoverable class="unit-card" :class="{ 'unit-checked': selected.includes(u.unit) }" @click="openUnit(u.unit)">
             <div class="unit-name">
-              {{ u.unit }}
+              <a-checkbox class="unit-check" :checked="selected.includes(u.unit)"
+                @click.stop @change="toggleOne(u.unit)" />
+              <span class="unit-name-txt">{{ u.unit }}</span>
               <a-popconfirm title="确认删除该单位所有数据？(资产/漏洞/报告/渗透会话/攻击链/线索)" ok-text="确认删除" cancel-text="取消" @confirm.stop="deleteUnit(u.unit)">
                 <a-button type="text" danger size="small" class="unit-del-btn" @click.stop>删除</a-button>
               </a-popconfirm>
@@ -163,11 +171,43 @@ async function deleteUnit(unit: string) {
     load()
   } catch (e) { message.error(e instanceof Error ? e.message : String(e)) }
 }
+
+// —— 多选批量删除 ——
+const selected = ref<string[]>([])
+const allChecked = computed(() => filteredUnits.value.length > 0 && filteredUnits.value.every(u => selected.value.includes(u.unit)))
+const someChecked = computed(() => selected.value.length > 0 && !allChecked.value)
+function toggleOne(unit: string) {
+  const i = selected.value.indexOf(unit)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(unit)
+}
+function toggleAll() {
+  if (allChecked.value) selected.value = []
+  else selected.value = filteredUnits.value.map(u => u.unit)
+}
+async function batchDelete() {
+  const units = selected.value.slice()
+  if (!units.length) return
+  let ok = 0, total = 0
+  for (const unit of units) {
+    try {
+      const res = await intelApi.deleteUnit(unit)
+      total += Object.values(res.deleted).reduce((a, b) => a + b, 0)
+      ok++
+    } catch { /* 单个失败不中断 */ }
+  }
+  message.success(`已删除 ${ok}/${units.length} 个单位，共 ${total} 条数据`)
+  selected.value = []
+  load()
+}
 onMounted(load)
 </script>
 <style scoped>
-.unit-card { cursor: pointer; }
-.unit-name { font-weight: 600; font-size: 15px; margin-bottom: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; justify-content: space-between; align-items: center; }
+.unit-card { cursor: pointer; transition: box-shadow .2s, border-color .2s; }
+.unit-card.unit-checked { border-color: #1677ff; box-shadow: 0 0 0 1px #1677ff inset, 0 2px 10px rgba(22,119,255,.15); }
+.unit-name { font-weight: 600; font-size: 15px; margin-bottom: 10px; display: flex; gap: 6px; align-items: center; }
+.unit-check { flex: none; }
+.unit-name-txt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .unit-del-btn { font-size: 11px; opacity: 0; transition: opacity .2s; }
 .unit-card:hover .unit-del-btn { opacity: 1; }
 .unit-metrics { display: flex; gap: 14px; margin-bottom: 6px; }

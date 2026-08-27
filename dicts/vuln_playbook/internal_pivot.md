@@ -1,6 +1,6 @@
 # 内网立足 / 后渗透方法论（internal pivot）
 
-> 面向哨兵「内网立足」工具链（foothold_register / foothold_exec / internal_recon / internal_portscan /
+> 面向瞭望塔「内网立足」工具链（foothold_register / foothold_exec / internal_recon / internal_portscan /
 > harvest_creds）。**前提**：你已通过 Web 层漏洞（RCE/命令注入/webshell 上传/反序列化等）**合法拿到命令
 > 执行落点**。这些工具不替你打点、不植入常驻后门——它们把你已控的 Web 点当跳板，帮你看清内网、执行命令、
 > 探端口、收凭据。**仅红队/授权模式可用；只在客户明确授权的内网范围内使用。**

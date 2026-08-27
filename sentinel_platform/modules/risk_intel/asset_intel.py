@@ -609,9 +609,19 @@ def build_pentest_context(asset_key: str) -> Dict[str, Any]:
     fq: Dict[str, Any] = {"asset_key": asset_key}
     if host:
         fq = {"$or": [{"asset_key": asset_key}, {"target": target_rx}, {"site": target_rx}]}
-    findings = _samples(Collections.INTEL_FINDING, fq,
-                        {"vuln_type": 1, "target": 1, "severity": 1, "evidence_level": 1,
-                         "status": 1, "verified": 1, "title": 1})
+    # known_findings 保留 _id + 标记 source="ai"：供会话台左侧"已确认漏洞"点击 → 调
+    # vuln_center.unified_detail("ai", _id) 拉完整详情（证据/CVSS/PoC/key_response）。
+    # 不复用 _samples（它 pop 掉 _id），这里单独查并把 _id 转成字符串带出。
+    findings = []
+    try:
+        for d in repo.collection(Collections.INTEL_FINDING).find(
+                fq, {"vuln_type": 1, "target": 1, "severity": 1, "evidence_level": 1,
+                     "status": 1, "verified": 1, "title": 1}).limit(20):
+            d["_id"] = str(d.get("_id", ""))
+            d["source"] = "ai"
+            findings.append(d)
+    except Exception:
+        findings = []
     return {
         "identity": {"asset_key": asset_key, "hostname": host, "fld": asset.get("fld", ""),
                      "unit": asset.get("unit", ""), "system_name": asset.get("system_name", ""),

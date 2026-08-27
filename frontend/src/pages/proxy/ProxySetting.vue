@@ -69,7 +69,10 @@
         </a-col>
         <a-col :xs="24" :sm="16">
           <a-descriptions :column="{ xs: 1, sm: 2 }" size="small" bordered>
-            <a-descriptions-item label="内核">{{ coreReady ? '已就绪' : '缺失' }} · {{ status?.running ? '运行中' : '未运行' }}</a-descriptions-item>
+            <a-descriptions-item label="内核">
+              <a-tag :color="status?.running ? 'success' : 'default'">{{ status?.running ? '运行中' : '未运行' }}</a-tag>
+              <span class="muted" style="font-size:12px">由容器编排自动托管（restart:unless-stopped 自愈）</span>
+            </a-descriptions-item>
             <a-descriptions-item label="进程 PID">{{ status?.pid || '-' }}</a-descriptions-item>
             <a-descriptions-item label="活跃配置">{{ status?.config?.active_profile_id || '未激活' }}</a-descriptions-item>
             <a-descriptions-item label="代理出口地址"><a-typography-text :copyable="!!status?.proxy_url" :content="status?.proxy_url || '-'" /></a-descriptions-item>
@@ -84,9 +87,8 @@
       <a-alert v-if="exitResult && !exitResult.proxied && exitProxyUnreachable" type="error" show-icon style="margin-top:12px"
         :message="'⚠ 代理不可用·网络异常：代理已开启但无法连接（' + (exitResult.error || '经代理探出口失败') + '）。请检查代理源/节点是否可用。'" />
       <a-space class="card-actions" wrap style="margin-top: 14px">
-        <a-button type="primary" :loading="loading" :disabled="status?.running" @click="runCore('start')">启动内核</a-button>
-        <a-button :loading="loading" :disabled="!status?.running" @click="runCore('restart')">重启内核</a-button>
-        <a-button danger :loading="loading" :disabled="!status?.running" @click="runCore('stop')">停止内核</a-button>
+        <!-- mihomo 独立容器由 compose 管生命周期(restart:unless-stopped 自愈)，无需手动启停内核，故删启动/停止/重启按钮。
+             改配置(节点/订阅)经 controller 热 reload 生效。保留出口 IP 检测。 -->
         <a-button :loading="exitLoading" @click="checkExitIp">检测出口 IP</a-button>
       </a-space>
     </a-card>
@@ -208,7 +210,8 @@
         <a-divider orientation="left" style="margin-top:14px">内核基础配置（端口 / 熔断检测 / DoH）</a-divider>
         <a-form layout="vertical" :model="form">
           <a-row :gutter="16">
-            <a-col :xs="24" :md="6"><a-form-item label="启用代理"><a-switch v-model:checked="form.enabled" checked-children="启用" un-checked-children="关闭" /></a-form-item></a-col>
+            <!-- 删「启用代理」开关：mihomo 独立容器由 compose 常驻自愈，内核恒启用（是否真走代理由顶层「直连/启用代理」
+                 总开关 + 各模式源绑定决定，不需内核级启用开关）。form.enabled 保存时恒置 true(见 saveConfig)。 -->
             <a-col :xs="24" :md="6"><a-form-item label="自动优选"><a-switch v-model:checked="form.auto_select" checked-children="启用" un-checked-children="关闭" /></a-form-item></a-col>
             <a-col :xs="24" :md="6"><a-form-item label="Controller端口"><a-input-number v-model:value="form.controller_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
             <a-col :xs="24" :md="6"><a-form-item label="HTTP端口"><a-input-number v-model:value="form.http_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
@@ -404,7 +407,7 @@ const customCols = [
   { title: '操作', key: 'act', width: 150 }
 ]
 
-const coreReady = computed(() => !!status.value?.mihomo_bin)
+// coreReady 已删：独立容器架构下 mihomo_bin(web容器内探二进制)恒空→误判"缺失"，内核状态改只看 controller 探活(status.running)
 const selectableGroups = computed(() => Object.entries(proxies.value)
   .filter(([, info]) => Array.isArray(info?.all))
   .map(([name, info]) => ({ name, ...info })))
@@ -609,21 +612,14 @@ async function savePoolCfg() {
 }
 async function saveConfig() {
   await withLoading(async () => {
-    const payload = { ...form, doh_endpoints: dohText.value }
+    // enabled 恒 true：mihomo 独立容器常驻，内核级 enabled 开关已删（是否走代理由顶层总开关+源绑定决定）
+    const payload = { ...form, enabled: true, doh_endpoints: dohText.value }
     applyConfig(await proxyApi.saveConfig(payload))
     message.success('配置已保存')
     await loadStatus()
   })
 }
-async function runCore(action: 'start' | 'stop' | 'restart') {
-  await withLoading(async () => {
-    const result = await proxyApi.core(action)
-    if (action === 'stop') message.success('内核已停止')
-    else if (result.health_ok) message.success('内核已启动，代理可用')
-    else message.warning(`内核进程已启动，但代理不可用${result.health_error ? '：' + result.health_error : '，请检查节点/订阅'}`)
-    await loadAll()
-  })
-}
+// runCore 已删：mihomo 独立容器由 compose 自愈，不再手动启停内核（见状态卡说明）
 async function importUrl() {
   if (!importForm.url) return message.warning('请输入订阅 URL')
   await withLoading(async () => {

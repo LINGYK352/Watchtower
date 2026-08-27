@@ -10,6 +10,10 @@ export interface HealthResult {
 export interface VersionResult {
   name: string
   api: string
+  tz_name?: string        // 服务器 OS 时区名（IANA 或缩写，如 Etc/UTC、UTC、CST）
+  tz_abbr?: string        // 时区缩写
+  tz_label?: string       // 人类可读中文地理名（协调世界时/美国东部时间/北京时间…；映射不到为空）
+  utc_offset_min?: number // 与 UTC 的分钟偏移（东区为正，如 UTC+8=480）
 }
 
 export interface ModulesResult {
@@ -24,6 +28,8 @@ export interface ActivationResult {
   expires_at?: string
   source_url: string
   remaining_days?: number
+  tz_label?: string       // 激活到期/剩余天数所用的服务器时区中文名（协调世界时/北京时间…）
+  utc_offset_min?: number // UTC 偏移分钟
 }
 
 /** 健康检查（公开，探活） */

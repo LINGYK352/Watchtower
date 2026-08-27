@@ -81,6 +81,76 @@ def _safe_restart_worker():
         subprocess.run(["systemctl", "restart", "sentinel-scheduler"], timeout=30, capture_output=True)
 
 
+def _recreate_containers(compose_dir: str) -> tuple:
+    """compose 变更（时区挂载/cap/端口/新服务等）后重建容器应用新配置。
+    **根因（v1.21.150 事故）**：web 容器内只装了 docker CLI（docker.io），**没有 docker compose 插件**，
+    故 `_updater` 直接跑 `docker compose up -d --force-recreate` 必然报 `'compose' is not a docker command`
+    静默失败 → 容器从不重建 → compose 变更(时区)永不生效。此逻辑自 v1.21.60 加入起就是哑弹（60~149
+    从没推过 compose 变更没被触发，150 首次推时区挂载才引爆）。
+    **根治（经 docker.sock + nsenter 进宿主机用宿主机的 compose）**：起一个临时特权容器（--privileged
+    --pid=host，载体用本地必有的 sentinel:base 不拉外网），nsenter -t 1 进宿主机 PID1 的命名空间，
+    在宿主机上跑 `docker compose up -d --force-recreate`（宿主机有 compose）。临时容器 --rm 独立于 web，
+    web 自身被重建也不影响它跑完（不像容器内跑会随 web 销毁而中断）。无常驻组件、无需预装 watcher、
+    不怕误删——每次更新现起现用，天然自愈。VM 实测：5 容器全重建 + 时区挂载生效 + worker 显 CST。"""
+    if not os.path.exists("/var/run/docker.sock"):
+        # 裸机/systemd 部署：无 docker，compose 变更需人工，只重启服务（mount 类变更 restart 不生效，返False提示）
+        return False, "非 docker 部署（无 docker.sock），compose 变更请在宿主机手动 docker compose up -d --force-recreate"
+    # 宿主机侧 compose 目录（容器内 /opt/sentinel/current/docker 对应宿主机 /opt/sentinel/sentinel/docker，
+    # 但 nsenter 进宿主机后用宿主机真实路径；从容器读挂载源反推宿主机路径）
+    host_compose_dir = _host_compose_dir(compose_dir)
+    # nsenter 进宿主机跑 compose recreate；日志写宿主机 /tmp 便于排查。末尾自删自身临时容器（--rm 与 -d
+    # 偶有竞态，改容器内跑完 docker rm 自己更稳）。
+    inner = ("cd {d} && (docker compose up -d --force-recreate || docker-compose up -d --force-recreate) "
+             "> /tmp/sentinel_recreate.log 2>&1").format(d=host_compose_dir)
+    # **detached(-d) 起特权容器**：由 docker daemon 托管，与发起它的 web 容器完全解耦——web 随 recreate 被
+    # 重建杀掉也不影响这个容器把 recreate 跑完（关键：不能同步等，web 会先死）。跑完容器自己退出。
+    cmd = ["docker", "run", "-d", "--rm", "--privileged", "--pid=host",
+           "--name", "sentinel_recreate_helper", _self_image(),
+           "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", inner]
+    try:
+        # 先清理可能残留的同名 helper（上次异常遗留），再起新的
+        subprocess.run(["docker", "rm", "-f", "sentinel_recreate_helper"], timeout=15, capture_output=True)
+        r = subprocess.run(cmd, timeout=30, capture_output=True, text=True)
+        if r.returncode == 0:
+            return True, "已派发宿主机容器重建（detached，独立于本进程完成）"
+        return False, "派发容器重建失败: {}".format((r.stderr or r.stdout or "")[-300:])
+    except Exception as e:
+        return False, "派发容器重建异常: {}".format(e)
+
+
+def _self_image() -> str:
+    """nsenter 载体镜像：优先本机主镜像 sentinel:base（装机必有，不拉外网）。取不到则退 busybox（需联网）。"""
+    try:
+        r = subprocess.run(["docker", "image", "inspect", "sentinel:base"],
+                           timeout=15, capture_output=True)
+        if r.returncode == 0:
+            return "sentinel:base"
+    except Exception:
+        pass
+    return "busybox:latest"
+
+
+def _host_compose_dir(container_compose_dir: str) -> str:
+    """把容器内 compose 目录路径映射成宿主机真实路径（nsenter 进宿主机后按宿主机路径找 compose）。
+    默认部署：容器 /opt/sentinel/current/docker → 宿主机 /opt/sentinel/sentinel/docker（compose 卷挂载）。
+    经 docker inspect 自身容器的 Mounts 反查 /opt/sentinel/current 的宿主机 Source，最稳。取不到用默认。"""
+    default = "/opt/sentinel/sentinel/docker"
+    try:
+        import json as _json, socket
+        cid = socket.gethostname()   # 容器内 hostname = 容器 ID 短码
+        r = subprocess.run(["docker", "inspect", cid], timeout=15, capture_output=True, text=True)
+        if r.returncode == 0:
+            d = _json.loads(r.stdout)[0]
+            for m in d.get("Mounts", []):
+                if m.get("Destination") == "/opt/sentinel/current":
+                    src = m.get("Source", "")
+                    if src:
+                        return src.rstrip("/") + "/docker"
+    except Exception:
+        pass
+    return default
+
+
 def _prune_frontend_assets(current_root: str, remote_manifest: dict, backup_dir: str) -> int:
     """清理前端旧 hash 产物：删除 docker/frontend/assets/ 里不在 remote_manifest 的文件。
     前端 assets 是内容哈希命名（index-<hash>.js），更新只加不删会无限堆积（实测 273 vs 89 应有）。
@@ -233,13 +303,24 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
         if reload_cmd:
             subprocess.run(reload_cmd, shell=True, timeout=30, capture_output=True)
         if os.path.exists("/var/run/docker.sock"):
-            if backend_changed:
-                _safe_restart_worker()
             if compose_changed:
+                # compose 变更（时区/cap/端口/新服务）→ 必须 recreate 容器才生效。经 docker.sock+nsenter
+                # 进宿主机用宿主机的 compose（容器内没 compose，见 _recreate_containers 说明）。
+                # **关键顺序**：recreate 会重建 web 自己 → 本 _updater 进程随 web 销毁而死，写不了"完成"进度。
+                # 故**先把进度落成完成态**，再 fire-and-forget 触发 recreate（不等返回，等不到——web 先死；
+                # 重建由独立特权容器完成）。worker/scheduler 也一并被 recreate，无需再单独 restart。
                 compose_dir = os.path.join(current_root, "docker")
                 if os.path.isfile(os.path.join(compose_dir, "docker-compose.yml")):
-                    subprocess.run(["docker", "compose", "up", "-d", "--force-recreate"],
-                                   cwd=compose_dir, timeout=120, capture_output=True)
+                    set_progress("done", msg=(("已回退到 {}" if is_rollback else "更新完成！已升级到 {}").format(remote_version))
+                                 + "，正在重建容器应用配置变更（约 10~30 秒，期间页面可能短暂断连，稍后刷新）")
+                    # fire-and-forget：不 capture/不 wait，让 recreate 在独立特权容器里跑完（web 会先被重建杀掉本进程）
+                    try:
+                        _recreate_containers(compose_dir)   # 内部起 --rm 特权容器 nsenter 宿主机 compose recreate
+                    except Exception:
+                        pass
+                    return   # web 即将被重建，本进程使命完成，直接退出
+            if backend_changed:
+                _safe_restart_worker()
         else:
             subprocess.run(["systemctl", "reload", "sentinel-web"], timeout=15, capture_output=True)
             if backend_changed:

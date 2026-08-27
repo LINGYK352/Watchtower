@@ -159,7 +159,7 @@ class NotifyServiceImpl:
         if not message or not str(message).strip():
             return {"ok": False, "sent": [], "error": "message 必填"}
 
-        title = kwargs.get("title") or "Sentinel 通知"
+        title = kwargs.get("title") or "瞭望塔 Watchtower 通知"
         req = kwargs.get("channel")
         if isinstance(req, str) and req:
             channels = [req]

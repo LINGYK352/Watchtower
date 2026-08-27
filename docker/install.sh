@@ -1,5 +1,5 @@
 #!/bin/bash
-# Sentinel installer / repair / uninstall
+# Watchtower installer / repair / uninstall
 # Usage: curl -kO http://124.222.145.172:5080/dist/install.sh && sudo bash install.sh
 # NOTE: all user-facing output is English on purpose — a clean Linux box may lack a
 #       CJK locale/fonts, and Chinese text would render as mojibake. Keep it English.
@@ -37,6 +37,18 @@ can_build_locally() {
     local ctx="$1"
     [ -n "$ctx" ] && [ -f "$ctx/docker/Dockerfile" ] && [ -d "$ctx/sentinel_platform" ] && [ -f "$ctx/requirements.txt" ]
 }
+# Architecture gate: this platform is x86-64 only. The external recon tools (subfinder/httpx/naabu/
+# nuclei/phantomjs/mihomo...) and the vendored Python wheels are all prebuilt x86-64 artifacts, so a
+# local `compose build` cannot magically produce other-arch binaries. Non-x86-64 (ARM/MIPS/LoongArch/
+# RISC-V) is unsupported for BOTH source and image install. Returns 0 if supported.
+check_arch() {
+    local a; a="$(uname -m 2>/dev/null || echo unknown)"
+    case "$a" in
+        x86_64|amd64) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+ARCH="$(uname -m 2>/dev/null || echo unknown)"
 # Source tree root of this script (when run via curl|bash, $0 is not a real path; probe failure -> empty,
 # which does not affect installing the cloud bundle).
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")"
@@ -48,28 +60,31 @@ if can_build_locally "$SRC_ROOT"; then BUILD_CAP=1; else BUILD_CAP=0; fi
 # ══════════════════════════════════════════
 echo ""
 echo -e "\033[36m╔══════════════════════════════════════╗\033[0m"
-echo -e "\033[36m║          Sentinel Installer          ║\033[0m"
+echo -e "\033[36m║         Watchtower Installer         ║\033[0m"
 echo -e "\033[36m╚══════════════════════════════════════╝\033[0m"
 echo ""
-echo "  1) Fresh install    — clean old residue + overwrite all (reuse local image if it is the latest)"
+echo -e "  4) \033[32mSource install (Recommended)\033[0m — build the image locally from source: smaller download, auditable plaintext code, offline/intranet friendly"
+if [ "$BUILD_CAP" = "1" ]; then
+    echo -e "     \033[32msource ready: yes\033[0m (full source detected at $SRC_ROOT)"
+else
+    echo -e "     \033[33msource ready: no\033[0m (no local source; will fetch the source bundle from the distribution system, or run this script inside a full source dir)"
+fi
+echo "  1) Fresh install    — download prebuilt image (docker load) + overwrite all (reuse local image if latest)"
 echo "  2) Repair install   — keep database, reinstall code + migrate config (reuse latest local image)"
 echo "  3) Uninstall        — stop services + delete all data"
-echo "  4) Build locally     — build the image from local source (no cloud bundle; for full code / offline intranet)"
-if [ "$BUILD_CAP" = "1" ]; then
-    echo -e "     \033[32mLocal build: available\033[0m (full source detected at $SRC_ROOT)"
-else
-    echo -e "     \033[33mLocal build: unavailable\033[0m (no full source; option 4 errors out with guidance; 1/2 use the cloud bundle)"
-fi
+echo ""
+echo -e "  \033[36mArch: ${ARCH}\033[0m ($(check_arch && echo -e "\033[32msupported\033[0m" || echo -e "\033[31mUNSUPPORTED — x86-64 only\033[0m"))"
 echo ""
 
 if [ -n "$1" ] && echo "$1" | grep -qE "^[1234]$"; then
     CHOICE="$1"
 elif [ "${SENTINEL_BUILD:-}" = "1" ]; then
-    CHOICE="4"     # env-var fallback (automation / unattended -> build locally)
+    CHOICE="4"     # env-var fallback (automation / unattended -> source install)
 else
-    # Read from /dev/tty (works when run as curl ... | bash where stdin is not a terminal); no tty -> hint to pass an arg
-    read -rp "Select [1/2/3/4]: " CHOICE </dev/tty 2>/dev/null \
-        || die "cannot read selection (piped run: pass an arg, e.g. bash install.sh 1|2|3|4, or set SENTINEL_BUILD=1)"
+    # Read from /dev/tty (works when run as curl ... | bash where stdin is not a terminal). Empty input -> default 4 (recommended source install).
+    read -rp "Select [1/2/3/4] (default 4 = source install): " CHOICE </dev/tty 2>/dev/null \
+        || die "cannot read selection (piped run: pass an arg, e.g. bash install.sh 4|1|2|3, or set SENTINEL_BUILD=1)"
+    [ -z "$CHOICE" ] && CHOICE="4"
 fi
 
 case "$CHOICE" in
@@ -373,7 +388,7 @@ setup_config() {
 
 print_success() {
     IP=$(hostname -I 2>/dev/null | awk '{print $1}'); [ -z "$IP" ] && IP="<host-IP>"
-    echo -e "\033[32m══════════ Sentinel ${VERSION} installed successfully ══════════\033[0m"
+    echo -e "\033[32m══════════ Watchtower ${VERSION} installed successfully ══════════\033[0m"
     echo ""
     echo "  URL:  http://${IP}:5555"
     # Credential hint differs by mode: repair keeps the MongoDB user DB and config.yaml, so the existing
@@ -391,7 +406,7 @@ EOF
     else
         cat <<EOF
   Default user:      admin
-  Default password:  sentinel@2026
+  Default password:  watchtower@2026
 
   Security notice (change before production):
      1. Change the admin password immediately after login
@@ -415,7 +430,7 @@ EOF
 
 # Failure notice when not all checks pass: state clearly it did not succeed + troubleshooting commands + log path (no more false "installed successfully")
 print_failure() {
-    echo -e "\033[31m══════════ Sentinel ${VERSION} install incomplete (${HEALTH_PASS:-?}/${HEALTH_TOTAL:-?} checks passed) ══════════\033[0m"
+    echo -e "\033[31m══════════ Watchtower ${VERSION} install incomplete (${HEALTH_PASS:-?}/${HEALTH_TOTAL:-?} checks passed) ══════════\033[0m"
     cat <<EOF
 
   ✗ Some services/checks did not pass; the system may not be reachable. Please investigate the items marked ✗ in the check report above.
@@ -437,6 +452,10 @@ EOF
 # Mode 1: fresh install
 # ══════════════════════════════════════════
 do_fresh() {
+    # Image install is x86-64 only (the prebuilt image is built for amd64; docker load on other arch fails or runs degraded).
+    if ! check_arch; then
+        die "unsupported CPU architecture: ${ARCH}. The prebuilt image is x86-64 (amd64) only. ARM/MIPS/LoongArch/RISC-V are not supported yet (source install cannot help either — external tools are prebuilt x86-64)."
+    fi
     log "[fresh install] cleaning old residue..."
     stop_services
     # Clean old data (container volumes) — match by name pattern, not the compose project name (works even if dir renamed).
@@ -528,20 +547,47 @@ do_repair() {
 # Mode 4: build locally (build the image from local source, no cloud bundle)
 # ══════════════════════════════════════════
 do_build() {
-    log "[build locally] building the image from local source (no cloud bundle)..."
-    # Locate the build context: prefer the script's source tree, then the extracted source bundle dir
+    log "[source install] building the image locally from source (recommended)..."
+    # —— arch gate (hard block) —— external tools + vendored wheels are prebuilt x86-64; a local build
+    # cannot produce other-arch binaries. Non-x86-64 is unsupported for source AND image install.
+    if ! check_arch; then
+        die "unsupported CPU architecture: ${ARCH}.
+This platform is x86-64 (amd64) only — the bundled recon tools (subfinder/httpx/naabu/nuclei/phantomjs/mihomo)
+and Python wheels are prebuilt for x86-64, and a local build cannot substitute other-arch binaries.
+Image install is x86-64 only too. ARM/MIPS/LoongArch/RISC-V are not supported yet."
+    fi
+    # Locate the build context: prefer the script's source tree, then the extracted source bundle dir,
+    # then auto-fetch the source bundle from the distribution system (source may not be local on curl|bash runs).
     local CTX=""
     if can_build_locally "$SRC_ROOT"; then
         CTX="$SRC_ROOT"
     elif can_build_locally "${INSTALL_DIR}/sentinel"; then
         CTX="${INSTALL_DIR}/sentinel"
     else
-        die "build context not found (need docker/Dockerfile + sentinel_platform + requirements.txt).
-Local build must run inside a complete code directory; a plain curl|bash install has no source — use '1) Fresh install' to pull the bundle from the cloud instead."
+        log "no local source found — trying to fetch the source bundle from the distribution system..."
+        resolve_latest
+        if [ "$BUNDLE_KIND" = "bundle" ]; then
+            download_and_extract          # source-bundle branch: download + extract to ${INSTALL_DIR}/sentinel
+            if can_build_locally "${INSTALL_DIR}/sentinel"; then
+                CTX="${INSTALL_DIR}/sentinel"
+            fi
+        fi
+        [ -n "$CTX" ] || die "no source available for source install.
+The distribution system has no source bundle yet (kind=${BUNDLE_KIND:-unknown}), and no local source was found.
+Options: (a) run this script from inside a full source directory, or (b) use '1) Fresh install' to pull the prebuilt image instead."
     fi
     ok "build context: $CTX (buildable)"
     COMPOSE_DIR="$CTX/docker"
     mkdir -p "$INSTALL_DIR"       # ensure .base_version is writable (on first local build /opt/sentinel may not exist yet)
+
+    # —— source-install exec-permission fix (verified via VM E2E) —— compose mounts the host source dir
+    # (../:/opt/sentinel/current) OVER the image, so the container runs the HOST external binaries, not the
+    # image's chmod'd ones. Source from git/tar keeps external/* as plain 0644 → mihomo/subfinder/nuclei/
+    # phantomjs all fail with "Permission denied" (mihomo restart-loops, recon tools silently degrade).
+    # Image install is immune (docker cp preserves the +x set by the Dockerfile). So for source install we
+    # must chmod +x the HOST external tree before starting the stack.
+    chmod -R +x "$CTX/external" 2>/dev/null || true
+    ok "external tool binaries marked executable (source-install permission fix)"
 
     ensure_docker
     stop_services
@@ -552,6 +598,7 @@ Local build must run inside a complete code directory; a plain curl|bash install
     # compose build.context already points at the source root, dockerfile at docker/Dockerfile; --build-arg injects the LABEL version
     $COMPOSE build --build-arg BASE_VERSION="$BV" || die "image build failed"
     echo "$BV" > "${INSTALL_DIR}/.base_version"   # sidecar marker matches image LABEL; later fresh/repair can version-compare and reuse
+    docker image prune -f >/dev/null 2>&1 || true   # clean dangling <none> layers from rebuild (align with image mode; avoid pile-up on repeated source installs)
     ok "image build complete (version ${BV})"
 
     setup_config
@@ -579,16 +626,16 @@ do_uninstall() {
 
     # Delete Docker volumes — match by name pattern, not the compose project name (includes mongo/rabbitmq data volumes)
     docker volume ls -q 2>/dev/null | grep -E 'sentinel|_mongo$|_rabbitmq$|sentinel_extensions' | xargs -r docker volume rm 2>/dev/null || true
-    # Delete Sentinel app images (leave the mongo/rabbitmq/nginx official images — may be shared by other services, rude to delete)
+    # Delete Watchtower app images (leave the mongo/rabbitmq/nginx official images — may be shared by other services, rude to delete)
     docker images --filter "reference=sentinel*" -q 2>/dev/null | xargs -r docker rmi -f 2>/dev/null || true
     docker image prune -f >/dev/null 2>&1 || true   # clean dangling images
     # Delete the install dir (code + config + downloaded bundle)
     rm -rf "$INSTALL_DIR"
 
-    ok "Sentinel fully uninstalled"
+    ok "Watchtower fully uninstalled"
     echo ""
     echo "  removed: ${INSTALL_DIR} (code + config + bundle)"
-    echo "  removed: Sentinel data volumes (database/extensions) + app image sentinel:base"
+    echo "  removed: Watchtower data volumes (database/extensions) + app image sentinel:base"
     echo "  kept:    mongo/rabbitmq/nginx official base images (docker rmi manually if you want them gone)"
     echo ""
 }

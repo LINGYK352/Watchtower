@@ -42,6 +42,31 @@ def _source_from(body: dict) -> dict:
     return {k: (body.get("source." + k) or "") for k in ("platform", "category", "unit", "src_id")}
 
 
+def _ext():
+    """取 ext_source 门面（模块级函数集合，无 ROLE）。未注册返 None。"""
+    return get_registry().get("ext_source_service")
+
+
+# 测绘源清单（源查询多源架构；新增源=加一项 + ext_source 加对应 xxx_query/xxx_count）。
+_SOURCE_DEFS = [
+    {"id": "fofa", "name": "FOFA", "key_id": "fofa",
+     "placeholder": 'FOFA 语法，如 domain="example.com" && port="443"（domain= 是精确主域匹配）'},
+    {"id": "hunter", "name": "鹰图 Hunter", "key_id": "hunter",
+     "placeholder": '鹰图语法，如 domain="gov.cn"（domain= 是模糊匹配，命中全部 *.gov.cn）'},
+]
+
+
+def _source_available(ext, key_id: str) -> bool:
+    """某源是否已配 key 可用（用 ext_source._apikey，与查询侧同源判断）。"""
+    if not ext:
+        return False
+    try:
+        from sentinel_platform.modules.kernel.ext_source import _apikey
+        return bool(_apikey(key_id))
+    except Exception:
+        return False
+
+
 def _fofa_targets(query: str):
     """经 kernel/ext_source.fofa_query 把 FOFA 语句解析成 target 列表（host 优先，回退 ip）。
     经 registry 取 ext_source_service 门面（不 import 叶子内部）；未注册/未配 key/失败返 []。"""
@@ -94,7 +119,8 @@ class TaskByPolicy(Resource):
             priority=body.get("priority", 2), source=_source_from(body),
             pentest_whitelist=body.get("pentest_whitelist", ""),
             mission_intel=body.get("mission_intel", ""),
-            pentest_provider_id=body.get("pentest_provider_id", ""))
+            pentest_provider_id=body.get("pentest_provider_id", ""),
+            pentest_egress_mode=body.get("pentest_egress_mode", ""))
         if not r.get("ok"):
             return err(CODE_BAD_REQUEST, r.get("error", "下发失败"))
         return ok({"items": r["items"], "created": r["created"], "invalid": r.get("invalid", [])})
@@ -107,27 +133,56 @@ _fofa_submit_req = ns_fofa.model("FofaSubmitReq", {})
 _fofa_unit_req = ns_fofa.model("FofaUnitReq", {})
 
 
+@ns_fofa.route("/sources")
+class Sources(Resource):
+    @ns_fofa.doc(security="token", description="可用测绘源列表（源查询用，前端渲染绿√+输入框）")
+    def get(self):
+        """返回测绘源清单 + 各源是否已配 key 可用。"""
+        ext = _ext()
+        items = [{"id": s["id"], "name": s["name"], "placeholder": s["placeholder"],
+                  "available": _source_available(ext, s["key_id"])} for s in _SOURCE_DEFS]
+        return ok({"sources": items})
+
+
 @ns_fofa.route("/test")
 class FofaTest(Resource):
-    @ns_fofa.doc(security="token", description="需权限 task:write：FOFA 语句预览命中数")
+    @ns_fofa.doc(security="token", description="需权限 task:write：源查询预估命中数（多源/单源兼容）")
     @ns_fofa.expect(_fofa_test_req)
     def post(self):
-        """FOFA 语句预览（返回解析出的目标数，不建任务）"""
+        """源查询预估：body 支持 {queries:{fofa,hunter}} 多源 或 {query} 单源(兼容)。
+        各源分别预估命中数（count 只查首页读官方 total，省配额，不浪费）。"""
         if not _svc():
             return err(CODE_ERROR, "任务下发服务未就绪")
-        query = (request.get_json(silent=True) or {}).get("query", "")
-        if not query:
-            return err(CODE_BAD_REQUEST, "query 必填")
-        # 字段名拼写校验
-        validation_err = _validate_fofa(query)
-        if validation_err:
-            return err(CODE_BAD_REQUEST, validation_err)
-        try:
-            targets = _fofa_targets(query)
-        except Exception as exc:
-            logger.debug("fofa test failed: %s", exc)
-            return err(CODE_ERROR, "FOFA 查询失败（检查 key/网络）")
-        return ok({"size": len(targets), "query": query})
+        ext = _ext()
+        body = request.get_json(silent=True) or {}
+        queries = body.get("queries") if isinstance(body.get("queries"), dict) else None
+        if not queries:
+            q = (body.get("query") or "").strip()      # 兼容旧单 query（走 fofa）
+            if not q:
+                return err(CODE_BAD_REQUEST, "query 或 queries 必填")
+            queries = {"fofa": q}
+        per = {}
+        for sid, q in queries.items():
+            q = (q or "").strip()
+            if not q:
+                continue
+            if sid == "fofa":
+                verr = _validate_fofa(q)
+                if verr:
+                    per["fofa"] = {"size": 0, "ok": False, "error": True, "errmsg": verr}
+                    continue
+                r = ext.fofa_count(q) if (ext and hasattr(ext, "fofa_count")) else {"ok": False, "errmsg": "源未就绪"}
+            elif sid == "hunter":
+                r = ext.hunter_count(q) if (ext and hasattr(ext, "hunter_count")) else {"ok": False, "errmsg": "源未就绪"}
+            else:
+                continue
+            per[sid] = {"size": int(r.get("size") or 0), "ok": bool(r.get("ok")),
+                        "error": bool(r.get("error")), "errmsg": r.get("errmsg", "")}
+        # 兼容旧前端（单 fofa）：平铺 size/ok/error/errmsg
+        flat = per.get("fofa", {}) if list(queries.keys()) == ["fofa"] else {}
+        return ok({"per_source": per, "size": flat.get("size", 0),
+                   "ok": flat.get("ok", True), "error": flat.get("error", False),
+                   "errmsg": flat.get("errmsg", "")})
 
 
 @ns_fofa.route("/submit")
@@ -140,29 +195,56 @@ class FofaSubmit(Resource):
         if not svc:
             return err(CODE_ERROR, "任务下发服务未就绪")
         body = request.get_json(silent=True) or {}
-        query = body.get("query", "")
         name = body.get("name", "")
-        if not query or not name:
-            return err(CODE_BAD_REQUEST, "query 与 name 必填")
-        # 字段名拼写校验
-        validation_err = _validate_fofa(query)
-        if validation_err:
-            return err(CODE_BAD_REQUEST, validation_err)
-        try:
-            targets = _fofa_targets(query)
-        except Exception as exc:
-            logger.debug("fofa submit resolve failed: %s", exc)
-            return err(CODE_ERROR, "FOFA 查询失败（检查 key/网络）")
+        if not name:
+            return err(CODE_BAD_REQUEST, "name 必填")
+        ext = _ext()
+        queries = body.get("queries") if isinstance(body.get("queries"), dict) else None
+        # 归一 queries：兼容旧单 query（走 fofa）
+        if not queries:
+            q = (body.get("query") or "").strip()
+            if not q:
+                return err(CODE_BAD_REQUEST, "query 或 queries 必填")
+            queries = {"fofa": q}
+        queries = {k: (v or "").strip() for k, v in queries.items() if (v or "").strip()}
+        if not queries:
+            return err(CODE_BAD_REQUEST, "至少填写一个源的查询语句")
+        # FOFA 语句字段名校验（有 fofa 源时）
+        if queries.get("fofa"):
+            verr = _validate_fofa(queries["fofa"])
+            if verr:
+                return err(CODE_BAD_REQUEST, verr)
+        # 多源查询 + 去重合并（域名 hostname / 纯IP ip+port）
+        if ext and hasattr(ext, "multi_source_targets"):
+            try:
+                mr = ext.multi_source_targets(queries)
+            except Exception as exc:
+                logger.debug("multi_source resolve failed: %s", exc)
+                return err(CODE_ERROR, "源查询失败（检查 key/网络）")
+            targets = mr.get("targets") or []
+            per_source = mr.get("per_source") or {}
+            errors = mr.get("errors") or {}
+        else:
+            # 降级：无 multi_source_targets 时走旧 fofa 单源
+            targets = _fofa_targets(queries.get("fofa", ""))
+            per_source, errors = {"fofa": len(targets)}, {}
         if not targets:
-            return err(CODE_BAD_REQUEST, "FOFA 未解析到目标（0 命中或 key 未配）")
+            emsg = "；".join("{}:{}".format(k, v) for k, v in errors.items()) if errors else ""
+            return err(CODE_BAD_REQUEST, "未解析到目标（0 命中或 key 未配）{}".format(("：" + emsg) if emsg else ""))
+        src = _source_from(body)
+        src["platform"] = src.get("platform") or "multi_source"
+        src["sources"] = list(queries.keys())
         r = svc.create_from_targets(name=name, targets=targets, policy_id=body.get("policy_id", ""),
-                                    priority=body.get("priority", 2), source=_source_from(body),
+                                    priority=body.get("priority", 2), source=src,
                                     pentest_whitelist=body.get("pentest_whitelist", ""),
                                     mission_intel=body.get("mission_intel", ""),
-                                    pentest_provider_id=body.get("pentest_provider_id", ""))
+                                    pentest_provider_id=body.get("pentest_provider_id", ""),
+                                    pentest_egress_mode=body.get("pentest_egress_mode", ""))
         if not r.get("ok"):
             return err(CODE_BAD_REQUEST, r.get("error", "下发失败"))
-        return ok({"created": r["created"], "items": r["items"], "fofa_size": len(targets)})
+        return ok({"created": r["created"], "items": r["items"],
+                   "fofa_size": len(targets), "merged": len(targets),
+                   "per_source": per_source, "errors": errors})
 
 
 @ns_fofa.route("/submit_by_unit")
@@ -183,7 +265,8 @@ class FofaSubmitByUnit(Resource):
                                  policy_id=body.get("policy_id", ""), priority=body.get("priority", 2),
                                  source=_source_from(body), pentest_whitelist=body.get("pentest_whitelist", ""),
                                  mission_intel=body.get("mission_intel", ""),
-                                 pentest_provider_id=body.get("pentest_provider_id", ""))
+                                 pentest_provider_id=body.get("pentest_provider_id", ""),
+                                 pentest_egress_mode=body.get("pentest_egress_mode", ""))
         if not r.get("ok"):
             return err(CODE_BAD_REQUEST, r.get("error", "下发失败"))
         return ok({"task_id": r["task_id"], "name": r["name"], "unit_count": r["unit_count"]})

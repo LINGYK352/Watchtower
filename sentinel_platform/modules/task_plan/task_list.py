@@ -175,6 +175,68 @@ def delete_tasks(task_ids: List[str], del_task_data: bool = False) -> Dict[str, 
     return {"deleted": deleted, "purged": purged, "del_task_data": bool(del_task_data), "task_id": task_ids}
 
 
+def _live_task_ids() -> set:
+    """现存任务 _id 全集（字符串形态）。结果集合 task_id 存字符串，故统一转字符串比对。"""
+    ids = set()
+    try:
+        for t in _coll().find({}, {"_id": 1}):
+            ids.add(str(t.get("_id")))
+    except Exception:
+        pass
+    return ids
+
+
+def _orphan_match(live_ids: set) -> Dict[str, Any]:
+    """孤儿匹配条件：task_id 存在且非空、且不在现存任务集合。
+    **安全护栏**：task_id 为空/null/缺失的记录绝不算孤儿（可能是手动导入/非任务资产，误删=数据事故）。"""
+    return {"$and": [
+        {"task_id": {"$exists": True, "$nin": ["", None]}},
+        {"task_id": {"$nin": list(live_ids)}},
+    ]}
+
+
+def scan_orphan_assets() -> Dict[str, Any]:
+    """扫描孤儿资产（task_id 指向已删除任务的结果记录）——只统计不删。
+    返回 {total, by_collection:{coll:count}, live_task_count}。供前端清理前预览。"""
+    repo = get_repo()
+    live = _live_task_ids()
+    match = _orphan_match(live)
+    by_coll: Dict[str, int] = {}
+    total = 0
+    for name in _CASCADE_COLLS:
+        try:
+            n = repo.collection(name).count_documents(match)
+        except Exception:
+            n = 0
+        if n:
+            by_coll[name] = n
+            total += n
+    return {"total": total, "by_collection": by_coll, "live_task_count": len(live)}
+
+
+def purge_orphan_assets() -> Dict[str, Any]:
+    """清理孤儿资产（删 task_id 指向已删除任务的结果记录）。返回 {purged, by_collection}。
+    护栏同 scan：task_id 空/null 绝不删。live 集合为空时（无任何任务）跳过（防误删全部）。"""
+    repo = get_repo()
+    live = _live_task_ids()
+    if not live:
+        # 一个任务都没有时，无法可靠区分"孤儿"与"合法保留资产"，保守不删（防清空全部资产）。
+        return {"purged": 0, "by_collection": {}, "skipped": "no_live_task", "note": "无现存任务，跳过清理以防误删"}
+    match = _orphan_match(live)
+    by_coll: Dict[str, int] = {}
+    purged = 0
+    for name in _CASCADE_COLLS:
+        try:
+            r = repo.collection(name).delete_many(match)
+            n = int(getattr(r, "deleted_count", 0) or 0)
+        except Exception:
+            n = 0
+        if n:
+            by_coll[name] = n
+            purged += n
+    return {"purged": purged, "by_collection": by_coll, "live_task_count": len(live)}
+
+
 def sync_to_scope(task_id: str, scope_id: str) -> Dict[str, Any]:
     """把任务结果同步进资产库 → 经 registry 调 asset_group_service.sync_task_to_scope（**闭合 groups 对接**）。
     资产分组叶子未注册时降级报错（不崩）。能力在 groups、路由归本叶子（/api/task/sync）。"""
@@ -216,6 +278,8 @@ class TaskListServiceImpl:
     def delete_tasks(self, task_ids, del_task_data=False): return delete_tasks(task_ids, del_task_data)
     def sync_to_scope(self, task_id, scope_id): return sync_to_scope(task_id, scope_id)
     def sync_scope_candidates(self, target): return sync_scope_candidates(target)
+    def scan_orphan_assets(self): return scan_orphan_assets()
+    def purge_orphan_assets(self): return purge_orphan_assets()
 
 
 _service = TaskListServiceImpl()

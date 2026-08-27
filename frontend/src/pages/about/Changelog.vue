@@ -1,5 +1,5 @@
 <template>
-  <PageContainer title="更新日志" kicker="Changelog" description="哨兵 Sentinel 版本迭代记录。">
+  <PageContainer title="更新日志" kicker="Changelog" description="瞭望塔 Watchtower 版本迭代记录。">
     <a-card class="page-card">
       <a-spin v-if="loading" tip="加载中…" style="display:block;padding:24px 0" />
       <a-timeline v-else class="cl-timeline">
