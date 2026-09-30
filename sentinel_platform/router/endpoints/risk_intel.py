@@ -206,6 +206,8 @@ _unified_parser.add_argument("date_from", type=str, location="args", help="起�
 _unified_parser.add_argument("date_to", type=str, location="args", help="截止日期")
 _unified_parser.add_argument("page", type=int, location="args", help="页码, 默认1")
 _unified_parser.add_argument("size", type=int, location="args", help="每页条数, 默认20")
+_unified_parser.add_argument("dedup", type=str, location="args",
+                             help="漏洞去重：默认1(同漏洞点只留最新一条,隐藏重复)；传0=全部漏洞(含重复)")
 
 _detail_parser = ns_finding.parser()
 _detail_parser.add_argument("source", type=str, required=True, location="args", help="来源 ai/poc/nuclei")
@@ -248,6 +250,8 @@ class PentestFindingUnified(Resource):
             source=a.get("source") or None, keyword=a.get("keyword") or None,
             verified=_tri_bool(a.get("verified")), handle_status=a.get("handle_status") or None,
             date_from=a.get("date_from") or None, date_to=a.get("date_to") or None,
+            # dedup 默认 True（漏洞去重，隐藏重复）；显式传 "0"/"false" = 全部漏洞（含重复条目）
+            dedup=_tri_bool(a.get("dedup")) is not False,
             page=page, size=size)
         return ok(data)
 
@@ -310,6 +314,28 @@ class PentestFindingUnifiedMark(Resource):
         except ValueError as e:
             return err(CODE_BAD_REQUEST, str(e))
         return ok({"modified": n})
+
+
+@ns_finding.route("/finding/unified/downgrade")
+class PentestFindingUnifiedDowngrade(Resource):
+    @ns_finding.doc(security="token", description="需权限 vuln:write：人工降低漏洞危害等级（只降不升，仅 AI 漏洞）")
+    def post(self):
+        """漏洞中心人工降级危害等级。body {source:'ai', ids:[], target_severity:'info|low|medium'}。"""
+        svc = _finding_svc()
+        if not svc or not hasattr(svc, "downgrade_severity"):
+            return err(CODE_ERROR, "漏洞中心服务未就绪")
+        body = request.get_json(silent=True) or {}
+        source = (body.get("source") or "").strip()
+        ids = body.get("ids") or []
+        target_severity = (body.get("target_severity") or "").strip()
+        if not source or not isinstance(ids, list) or not ids or not target_severity:
+            return err(CODE_BAD_REQUEST, "source / ids(非空数组) / target_severity 必填")
+        from flask import g
+        handle_by = getattr(g, "current_user", {}).get("username", "") if hasattr(g, "current_user") else ""
+        r = svc.downgrade_severity(source, ids, target_severity, handle_by=handle_by)
+        if r.get("error"):
+            return err(CODE_BAD_REQUEST, r["error"])
+        return ok(r)
 
 
 # —— PoC 信息（/api/poc/*，Claude-Opus[recon] 2026-07-05）——

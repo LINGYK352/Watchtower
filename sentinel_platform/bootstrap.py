@@ -69,13 +69,27 @@ INDEX_SPECS: List = [
     (Collections.INTEL_SYSTEM, [([("key", 1)], {"unique": True}), ([("units", 1)], {}),
                                ([("instance_keys", 1)], {})]),
     (Collections.INTEL_FINDING, [([("norm_target", 1), ("norm_type", 1)], {}),
+                                 ([("point_key", 1), ("save_date", -1)], {}), ([("source", 1), ("point_index_version", 1)], {}),
                                  ([("unit", 1)], {}), ([("severity", 1)], {}),
                                  ([("session_id", 1)], {}), ([("handle_status", 1)], {})]),
     (Collections.INTEL_REPORT, [([("session_id", 1)], {}), ([("unit", 1)], {}),
                                 ([("asset_key", 1)], {})]),
+    # 人看成品报告（报告编辑处，与 intel_report 情报报告物理隔离）；report_key 唯一 sparse：
+    # task:{tid}/session:{sid} 派生标量键 + upsert，防多 worker 并发双插同一报告（同打法库 pb_key 范式）。
+    (Collections.PENTEST_REPORT, [([("report_key", 1)], {"unique": True, "sparse": True}),
+                                  ([("source_task_id", 1)], {}), ([("source_session", 1)], {}),
+                                  ([("unit", 1)], {}), ([("asset_key", 1)], {})]),
+    # 报告模板学习：按状态/创建时间列模板
+    (Collections.REPORT_TEMPLATE, [([("status", 1)], {}), ([("created_by", 1)], {})]),
     (Collections.INTEL_EXPLOIT_CLUE, [([("unit", 1)], {}),
                                       ([("unit", 1), ("clue_type", 1), ("title", 1)], {"unique": True})]),
     (Collections.INTEL_ATTACK_CHAIN, [([("unit", 1)], {}), ([("sessions", 1)], {})]),
+    # 打法库 pb_key 唯一（P2 并发原子化：派生标量键 + upsert，防多 worker 双插同一打法）；
+    # sparse 兼容存量无 pb_key 的旧文档。指纹匹配走 fingerprints 多键索引。
+    (Collections.INTEL_PLAYBOOK, [([("pb_key", 1)], {"unique": True, "sparse": True}),
+                                  ([("fingerprints", 1)], {}), ([("fingerprint_layer", 1)], {})]),
+    # 单位画像 key 唯一（P2：upsert 幂等建档，防并发双建）。
+    (Collections.UNIT_INTEL_PROFILE, [([("key", 1)], {"unique": True})]),
     # 漏洞情报
     (Collections.VULN_INTEL, [([("dedup_key", 1)], {"unique": True, "sparse": True}),
                               ([("sources.name", 1)], {}), ([("severity", 1)], {})]),
@@ -83,6 +97,9 @@ INDEX_SPECS: List = [
     (Collections.PENTEST_SESSION, [([("status", 1)], {}), ([("active_key", 1)], {"unique": True, "sparse": True}),
                                    ([("asset_key", 1)], {}),
                                    ([("source_task_id", 1)], {})]),
+    # 任务级派发去重表：(source_task_id,dedup_key) 唯一——原子 insert 冲突即"本任务已派过"跳过（防并发双派）。
+    (Collections.TASK_DEDUP, [([("source_task_id", 1), ("dedup_key", 1)], {"unique": True}),
+                              ([("source_task_id", 1)], {})]),
     (Collections.AI_EXTENSION, [([("extension_id", 1), ("version", 1)], {"unique": True}),
                                 ([("enabled", 1), ("available", 1)], {}),
                                 ([("source", 1)], {})]),
@@ -151,6 +168,14 @@ def ensure_indexes() -> Dict[str, Any]:
             logger.info("bootstrap: AI 提示词播种 %d 个场景", seeded)
     except Exception as exc:
         logger.debug("bootstrap seed_prompts skip: %s", exc)
+    # 内置默认报告模板播种（会话级/任务级，携带 POC；幂等，按 builtin_version 增量覆盖）
+    try:
+        from sentinel_platform.modules.risk_intel.report_template_builtin import seed_builtin_templates
+        n_tpl = seed_builtin_templates()
+        if n_tpl:
+            logger.info("bootstrap: 内置报告模板播种/更新 %d 个", n_tpl)
+    except Exception as exc:
+        logger.debug("bootstrap seed_builtin_templates skip: %s", exc)
     return {"created": created, "skipped": skipped}
 
 
@@ -173,5 +198,20 @@ def create_app() -> Any:
         ensure_indexes()          # 幂等：建索引 + 空库播种默认 admin（多进程/多入口重复调无副作用）
     except Exception as exc:
         logger.debug("create_app ensure_indexes skip: %s", exc)
+    # 攻击告警日志监控（方案 B'）：web 容器挂了 docker.sock，起后台线程 docker logs -f 读 nginx 日志流做检测。
+    # 每个 gunicorn worker 都调，但靠 MongoDB 锁保证只一个真跑；非 docker/未挂 sock 自动降级不启动。
+    try:
+        from sentinel_platform.modules.honeypot_defense.attack_alert import start_monitor
+        start_monitor()
+    except Exception as exc:
+        logger.debug("create_app attack_alert monitor skip: %s", exc)
+    # 一级一级更新·启动续跑钩子：web 启动（create_app 跑到底=本级代码确定完整运行）时，若链路仍
+    # active（攀爬中），派发独立子进程应用下一级；到达最新则收尾。非攀爬中零副作用（立即返回，不联网）。
+    # 放最后：确保所有 Namespace 挂载 + ensure_indexes 播种 + 监控启动全就绪后，才认定"本级完整运行"再续拉。
+    try:
+        from sentinel_platform.modules.about._updater import resume_chain_if_pending
+        resume_chain_if_pending()
+    except Exception as exc:
+        logger.debug("create_app resume_chain_if_pending skip: %s", exc)
     return app
 

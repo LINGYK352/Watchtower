@@ -26,7 +26,11 @@
         </a-space>
       </template>
       <template v-else-if="column.key === 'shot'">
-        <a-image :src="shotUrl(record) || SHOT_PLACEHOLDER" :fallback="SHOT_PLACEHOLDER"
+        <a-tooltip v-if="!shotUrl(record) && record._shot_off" title="该任务策略未勾选“站点截图”(site_capture),故未采集截图——不是截图失败。需截图请在新建任务/策略里勾选“站点截图”。">
+          <a-image :src="SHOT_OFF_PLACEHOLDER" :preview="false"
+            :width="80" :height="48" style="object-fit: cover; border-radius: 2px" />
+        </a-tooltip>
+        <a-image v-else :src="shotUrl(record) || SHOT_PLACEHOLDER" :fallback="shotPlaceholder(record)"
           :width="80" :height="48" style="object-fit: cover; border-radius: 2px" />
       </template>
       <template v-else-if="column.key === 'action'">
@@ -76,6 +80,17 @@ const SHOT_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponen
   '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="48"><rect width="80" height="48" fill="#f0f0f0"/>' +
   '<path d="M20 30l8-8 6 6 8-10 12 14H20z" fill="#d0d0d0"/><circle cx="30" cy="18" r="3" fill="#d0d0d0"/>' +
   '<text x="40" y="44" font-size="7" fill="#aaa" text-anchor="middle">无截图</text></svg>')
+// “策略未截图”占位图:该站所属任务未勾选“站点截图”(site_capture=false),截图阶段被门控跳过——
+// 与“截图失败/空白”区分,免得反复误以为截图功能坏了。虚线框 + 提示文案。
+const SHOT_OFF_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="48"><rect width="79" height="47" x="0.5" y="0.5" ' +
+  'fill="#fafafa" stroke="#e0e0e0" stroke-dasharray="3 2"/>' +
+  '<text x="40" y="22" font-size="7" fill="#bbb" text-anchor="middle">策略未</text>' +
+  '<text x="40" y="34" font-size="7" fill="#bbb" text-anchor="middle">开启截图</text></svg>')
+// 无截图时选占位:任务策略未开截图(_shot_off) → “策略未截图”;否则 → 通用“无截图”。
+function shotPlaceholder(record: RowRecord) {
+  return record._shot_off ? SHOT_OFF_PLACEHOLDER : SHOT_PLACEHOLDER
+}
 const columns = [
   { title: '站点', key: 'site', ellipsis: true, fixed: 'left', width: 260 },
   { title: '标题', dataIndex: 'title', key: 'title', ellipsis: true, width: 180 },

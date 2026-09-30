@@ -42,6 +42,10 @@ class WeakBrute:
         self.timeout = timeout
         self.users = users or _USERS
         self.passwords = passwords or _PASSES
+        #: 资源门（pipeline 经 Tools 注入 / None）：NSE 爆破吃内存 → 执行前申请、让位 AI（问题11）。
+        self.resource_gate = None
+        #: 取消回调（Tools 注入 / None）。
+        self.cancel_check = None
 
     def locate(self) -> str:
         if self._path:
@@ -70,12 +74,23 @@ class WeakBrute:
                 argv += ["--script-args",
                          "userdb={},passdb={},brute.firstonly=true".format(udb, pdb)]
             argv.append(host)
-            try:
-                proc = subprocess.run(argv, capture_output=True, text=True,
-                                      timeout=self.timeout + 30, encoding="utf-8", errors="replace")
-            except subprocess.TimeoutExpired:
-                return []
-            return self.parse_output(proc.stdout or "", host, port, scheme, script)
+
+            def _run():
+                try:
+                    proc = subprocess.run(argv, capture_output=True, text=True,
+                                          timeout=self.timeout + 30, encoding="utf-8", errors="replace")
+                except subprocess.TimeoutExpired:
+                    return []
+                return self.parse_output(proc.stdout or "", host, port, scheme, script)
+
+            # 资源门（问题11）：注入了 gate 则申请内存、让位 AI；超时诚实降级返 []。
+            gate = getattr(self, "resource_gate", None)
+            if gate is not None:
+                with gate("recon_weakbrute") as h:
+                    if getattr(h, "degraded", False):
+                        return []
+                    return _run()
+            return _run()
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

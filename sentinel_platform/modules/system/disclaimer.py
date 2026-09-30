@@ -18,31 +18,38 @@ import time
 from typing import Any, Dict, Optional
 
 
-def _config_dir() -> Optional[str]:
-    """config 文件所在目录（复用 activation 的候选路径逻辑）。取不到返回 None。"""
+def _marker_candidates() -> list:
+    """签署标记文件候选路径（**写和读共用这一份，杜绝路径打架**）。
+    顺序即优先级——**config 目录排第一且必含**：docker 部署下 config 是挂载卷（宿主机 docker/config），
+    容器重建/关机重启都不丢（治"VM 关机后容器 recreate 签署丢失、每次重弹"）。
+    其余（当前目录/tmp）仅作极端不可写时的兜底。所有候选枚举 _config_candidates 的每个目录，
+    保证 _config_dir 动态返回不同值时写读仍落在同一集合内（治"写A读B"）。"""
+    candidates = []
     try:
-        from sentinel_platform.core.config import _first_existing, _config_candidates
-        cfg_path = _first_existing(_config_candidates())
-        if cfg_path:
-            return os.path.dirname(cfg_path)
+        from sentinel_platform.core.config import _config_candidates
+        for cfg_path in _config_candidates():
+            if cfg_path:
+                p = os.path.join(os.path.dirname(cfg_path), ".disclaimer_accepted")
+                if p not in candidates:
+                    candidates.append(p)
     except Exception:
         pass
-    return None
-
-
-def _marker_candidates() -> list:
-    """签署标记文件候选（与 .activation_key 同目录策略，多处兜底保证可写）。"""
-    d = _config_dir()
-    return [
-        os.path.join(d, ".disclaimer_accepted") if d else "",
-        os.path.join(os.getcwd(), ".disclaimer_accepted"),
-        "/tmp/.sentinel_disclaimer_accepted",
-    ]
+    cwd_path = os.path.join(os.getcwd(), ".disclaimer_accepted")
+    if cwd_path not in candidates:
+        candidates.append(cwd_path)
+    tmp_path = "/tmp/.sentinel_disclaimer_accepted"
+    if tmp_path not in candidates:
+        candidates.append(tmp_path)
+    return candidates
 
 
 def get_status() -> Dict[str, Any]:
     """读签署状态。返回 {accepted, accepted_version, accepted_at}。
-    读不到任何标记文件 → accepted=False（未签署）。"""
+    读不到任何标记文件 → accepted=False（未签署）。
+
+    与 accept() 共用 _marker_candidates() 同一份路径列表（写读一致，杜绝"写A读B"）。
+    """
+    # 遍历统一候选路径，找到第一个有效签署（与 accept 写入用同一列表）
     for fp in _marker_candidates():
         if fp and os.path.isfile(fp):
             try:
@@ -56,29 +63,43 @@ def get_status() -> Dict[str, Any]:
                     }
             except Exception:
                 pass
+
     return {"accepted": False, "accepted_version": "", "accepted_at": ""}
 
 
 def accept(version: str = "") -> Dict[str, Any]:
-    """记录同意：写标记文件（首个可写候选即成功）。返回签署后的状态。
-    version = 前端 DISCLAIMER_VERSION（条款版本），据此判断旧签署对新条款是否仍有效。"""
+    """记录同意：向**所有可写候选路径都写一份**（冗余持久化）。返回签署后的状态。
+    version = 前端 DISCLAIMER_VERSION（条款版本），据此判断旧签署对新条款是否仍有效。
+
+    **根治"签署后立即读不到/重启丢失"**：
+    - 写和读共用 _marker_candidates() 同一列表（config 目录持久卷排第一）；
+    - **写所有可写候选**（不止第一个）——多处冗余，get_status 任一命中即算已签，
+      不再有"写A删B/写A读B"的路径打架（旧 _cleanup_stale_markers 会误删唯一签署文件，已移除）。
+    """
     payload = {
         "accepted": True,
         "accepted_version": str(version or ""),
         "accepted_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     blob = json.dumps(payload, ensure_ascii=False)
+
+    ok_count = 0
     for fp in _marker_candidates():
         if not fp:
             continue
         try:
-            os.makedirs(os.path.dirname(fp), exist_ok=True)
+            d = os.path.dirname(fp)
+            if d:
+                os.makedirs(d, exist_ok=True)
             tmp = fp + ".tmp"
             with open(tmp, "w", encoding="utf-8") as fh:
                 fh.write(blob)
             os.replace(tmp, fp)
-            return payload
+            ok_count += 1
         except Exception:
             continue
-    # 全部候选都写不进（极端只读环境）：不抛错，返回 accepted 但标记未持久化
-    return {**payload, "persisted": False}
+
+    # 一个都没写进（极端只读环境）：不抛错，返回 accepted 但标记未持久化
+    return {**payload, "persisted": ok_count > 0}
+
+

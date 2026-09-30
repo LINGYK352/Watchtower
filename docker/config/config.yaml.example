@@ -17,6 +17,10 @@ SENTINEL:
   API_KEY: "CHANGE_ME_TO_A_RANDOM_SECRET"
   # 口令哈希盐（user_manage 用；生产务必改）
   SALT: "CHANGE_ME_SALT"
+  # 激活硬门控：未激活/激活过期时，网关对核心业务端点（AI 渗透/扫描任务/情报/小程序/
+  # 探针/PoC/GitHub 采集/调度）直接返回 402，只读展示类（仪表盘/设置/日志/代理/激活页）不拦。
+  # 无宽限期，到期即拦。默认 true（不配即强制）；仅特殊部署/调试才设 false 临时关闭。
+  ACTIVATION_ENFORCE: true
 
 # —— 系统版本（about/update_check 读；ops 升级时改，前端比对提示更新）——
 SYSTEM:
@@ -27,9 +31,10 @@ SYSTEM:
 # 默认查上游 /version 比对，能如实报出上游新版本。留空=退回纯本地比对（服务端 vs 前端构建）。
 # CHECK_REMOTE:false 可显式关闭查上游（强制本地比对）。KEY=授权 key（捐赠者实例填，走 X-Update-Key 头）。
 UPDATE:
-  SOURCE_URL: ""          # 例: "http://124.222.145.172:5080"
+  SOURCE_URL: ""          # 例: "https://watchtowers.info"
   KEY: ""
   CHECK_REMOTE: true
+  INTEL_PULL: true        # 漏洞情报从分发系统中心拉取(默认开)；false=各实例本地直拉外部源(旧行为)。中心不可达自动降级本地
   # RELOAD_CMD：一键更新写完文件后执行的重启命令（systemd 部署重启 worker/scheduler 让新代码生效）。
   # 留空则不执行（docker/gunicorn --reload 会自动热重载 web，前端产物落盘后浏览器刷新即生效）。
   RELOAD_CMD: ""          # 例: "systemctl restart sentinel-worker-v20260607001942 sentinel-scheduler"

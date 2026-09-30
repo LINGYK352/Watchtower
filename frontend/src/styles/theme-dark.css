@@ -20,6 +20,8 @@ html[data-theme="dark"] {
   --dt-shadow-hover: 0 0 22px rgba(0,229,255,.18), 0 6px 20px rgba(0,0,0,.5);
   --dt-shadow-primary: 0 0 14px rgba(0,229,255,.3);
   --dt-fill: #0d1424;
+  --dt-hover: #12203a;
+  --dt-link: #4c9aff;
 }
 
 /* body / 内容区网格底纹（弱化，呼应会话台不喧宾夺主） */
@@ -74,6 +76,30 @@ html[data-theme="dark"] .page-card:hover, html[data-theme="dark"] .metric-card:h
   box-shadow: var(--dt-shadow-hover);
 }
 
+/* 设备状态·资源运行可靠性面板：给比卡底(#0d1424)略亮的填充+描边，暗色下能看出是块面板
+   （原用未定义的 --dt-hover 恒 fallback 近白，夜间刺眼；见 Dashboard.vue .res-verdict 注释）。 */
+html[data-theme="dark"] .res-verdict {
+  background: rgba(255,255,255,.04);
+  border-color: var(--dt-border-strong);
+}
+
+/* 网络质量体检「网络环境总评」横幅 + 分区（v1.21.157-48）：原用未定义的 --dt-line(恒 fallback #eee)
+   + .ov-* 各级硬编码浅色背景(#f6ffed 等) → 夜间白板压亮字。暗色下横幅底改半透明彩色(按级保留语义色相)，
+   边框走 --dt-border，标题/摘要文字用 --dt-* 变量(已自适应)。同理 Dashboard 的 .netq 卡。 */
+html[data-theme="dark"] .q-overall, html[data-theme="dark"] .q-sec { border-color: var(--dt-border) !important; }
+html[data-theme="dark"] .ov-excellent, html[data-theme="dark"] .ov-good { background: rgba(82,196,26,.12) !important; }
+html[data-theme="dark"] .ov-fair { background: rgba(250,173,20,.12) !important; }
+html[data-theme="dark"] .ov-poor { background: rgba(250,140,22,.12) !important; }
+html[data-theme="dark"] .ov-critical { background: rgba(207,19,34,.14) !important; }
+
+/* 业务异常上报弹窗（ErrorReportModal，v1.21.157-58）：a-modal 内容 teleport 到 body，
+   scoped 变量作用域到位但保险起见全局兜底——原 .er-box 用从未定义的 --dt-panel/--dt-line 恒 fallback
+   浅色 → 夜间白盒黑字看不清（用户报「错误详细信息无夜间 UI」）。此处全局强制暗底可读。 */
+html[data-theme="dark"] .er-box { background: var(--dt-card) !important; border-color: var(--dt-border) !important; }
+html[data-theme="dark"] .er-k, html[data-theme="dark"] .er-hint { color: var(--dt-muted) !important; }
+html[data-theme="dark"] .er-v { color: var(--dt-text) !important; }
+html[data-theme="dark"] .er-msg { color: #ff6b6b !important; }
+
 /* 表格：覆盖浅色表头，暗底 */
 html[data-theme="dark"] .ant-table-thead > tr > th {
   background: #0f1a2e !important;
@@ -120,6 +146,8 @@ html[data-theme="dark"] .t-result.fail { background: rgba(255,77,79,.12) !import
 html[data-theme="dark"] .log-box { background: #060a14; color: #9fc4dd; }
 /* 仪表盘指标卡图标底色（内联浅色 pastel）→ 暗色统一半透明,图标本身保留鲜色 */
 html[data-theme="dark"] .metric-icon { background: rgba(0,229,255,.08) !important; }
+/* 累计流量文字（Dashboard .proxy-traffic 写死 #1f2937 近黑，暗底看不清）→ 浅色变量 */
+html[data-theme="dark"] .proxy-traffic { color: var(--dt-text) !important; }
 
 /* 漏洞详情证据块（请求包/响应包/PoC，a-drawer teleport 到 body，scoped 作用不到，全局兜底）
    原浅绿/浅蓝底 + 黑字在暗色下白茫茫看不清（2026-08-12 fix）→ 深底浅字 */
@@ -168,3 +196,22 @@ html[data-theme="dark"] .mode-name { color: var(--dt-text) !important; }
 html[data-theme="dark"] .sub-block { background: #0d1424 !important; border-color: var(--dt-border) !important; }
 html[data-theme="dark"] .sub-title, html[data-theme="dark"] .cp-h { color: var(--dt-text) !important; }
 html[data-theme="dark"] .cp-sub, html[data-theme="dark"] .hint { color: var(--dt-muted) !important; }
+
+/* ===== 三个更新/合规弹窗夜间适配（v1.21.158）：均为 a-modal teleport 到 body，硬编码浅色在
+   夜间白底看不清（用户报「免责声明弹窗 / 更新说明日志 / 更新提示·请复查配置」无夜间 UI）。
+   scoped 已改用 var(--dt-*)，此处全局兜底强制暗色，确保 teleport 出去的 DOM 也命中。 */
+/* ① 免责声明弹窗 DisclaimerModal（.dc-*） */
+html[data-theme="dark"] .dc-scroll { background: var(--dt-hover) !important; border-color: var(--dt-border) !important; }
+html[data-theme="dark"] .dc-h { color: var(--dt-text) !important; }
+html[data-theme="dark"] .dc-list li { color: var(--dt-text) !important; }
+/* ② 发现新版本弹窗 UpdateNotice 的更新说明日志（.update-changelog / .changelog-*） */
+html[data-theme="dark"] .update-header h2 { color: var(--dt-text) !important; }
+html[data-theme="dark"] .update-changelog { background: var(--dt-hover) !important; }
+html[data-theme="dark"] .changelog-title { color: var(--dt-text) !important; }
+html[data-theme="dark"] .changelog-item { border-bottom-color: var(--dt-border) !important; }
+html[data-theme="dark"] .changelog-ver { color: var(--dt-link) !important; }
+html[data-theme="dark"] .changelog-text { color: var(--dt-muted) !important; }
+html[data-theme="dark"] .progress-msg, html[data-theme="dark"] .btn-later { color: var(--dt-muted) !important; }
+/* ③ 更新提示·请复查以下配置 UpgradeNoticeModal（.up-notice-*） */
+html[data-theme="dark"] .up-notice-item { border-bottom-color: var(--dt-border) !important; }
+html[data-theme="dark"] .up-notice-text { color: var(--dt-text) !important; }

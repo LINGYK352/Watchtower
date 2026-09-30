@@ -102,7 +102,7 @@ def _launch_updater(source_url: str, key: str, current_root: str, target_version
     subprocess.Popen(args, **kwargs)
 
 
-_DEFAULT_SOURCE = "http://124.222.145.172:5080"
+_DEFAULT_SOURCE = "https://watchtowers.info"
 
 
 def _source_url() -> str:
@@ -156,7 +156,9 @@ class _Apply(Resource):
         if not key:
             return err(CODE_ERROR, "未激活，请先激活系统获取授权凭证")
         current_root = _project_root()
-        _launch_updater(_source_url(), key, current_root)   # 独立子进程，免疫 --reload
+        # 一级一级更新：传哨兵 "__chain__" → _updater 走链式驱动，从当前版逐级升到最新，
+        # 每级走完整下载/校验/提交流程，只在最终级重启（中间级只落盘+改版本号，不重启）。
+        _launch_updater(_source_url(), key, current_root, "__chain__")   # 独立子进程，免疫 --reload
         return ok({"started": True})
 
 
@@ -244,6 +246,26 @@ class _ReportError(Resource):
             if e.code == 403:
                 return err(CODE_ERROR, "授权凭证无效或已过期，无法上传")
             return err(CODE_ERROR, "上传失败: {}".format(e.code))
+        except Exception as e:
+            return err(CODE_ERROR, "无法连接分发系统: {}".format(e))
+
+
+@ns.route("/my_reports")
+class _MyReports(Resource):
+    @ns.doc(security="token", description="查本用户上传过的报错 + 开发者回复（凭激活 key 向分发系统查）")
+    def get(self):
+        """我的上报：凭本实例激活凭证向分发系统拉取归属本人的报错记录 + 开发者回复。"""
+        key = _read_update_key()
+        if not key:
+            return err(CODE_ERROR, "未激活，无法查询（需授权凭证）")
+        try:
+            req = Request(_source_url() + "/my_reports", headers={"X-Update-Key": key})
+            with urlopen(req, timeout=12) as r:
+                return ok(json.loads(r.read()))
+        except urllib.error.HTTPError as e:
+            if e.code == 403:
+                return err(CODE_ERROR, "授权凭证无效或已过期")
+            return err(CODE_ERROR, "查询失败: {}".format(e.code))
         except Exception as e:
             return err(CODE_ERROR, "无法连接分发系统: {}".format(e))
 

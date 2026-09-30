@@ -21,6 +21,10 @@ def _match(doc: Dict[str, Any], query: Dict[str, Any]) -> bool:
             if not any(_match(doc, sub) for sub in cond):
                 return False
             continue
+        if k == "$and":
+            if not all(_match(doc, sub) for sub in cond):
+                return False
+            continue
         if k == "$nor":
             if any(_match(doc, sub) for sub in cond):
                 return False
@@ -159,6 +163,12 @@ class FakeCollection:
             for item in vals:
                 if item not in cur:
                     cur.append(item)
+        for k, v in (update.get("$push") or {}).items():
+            cur = target.setdefault(k, [])
+            vals = v["$each"] if isinstance(v, dict) and "$each" in v else [v]
+            cur.extend(vals)
+        for k in (update.get("$unset") or {}):
+            target.pop(k, None)
         return type("R", (), {"modified_count": 1})()
 
     def update_many(self, query, update):

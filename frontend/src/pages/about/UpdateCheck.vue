@@ -23,7 +23,9 @@
             <template #description>
               <a-tag color="green" style="margin-bottom:12px">热更新 · 不影响现有业务</a-tag>
               <div v-if="changelogs.length" class="changelog-box">
-                <div class="changelog-title">更新内容</div>
+                <div class="changelog-title">
+                  将直接升级到最新版 {{ latest }}<span v-if="changelogs.length > 1">（一次到位，涵盖以下 {{ changelogs.length }} 个版本的更新内容）</span>
+                </div>
                 <div class="changelog-item" v-for="item in changelogs" :key="item.ver">
                   <span class="changelog-ver">{{ item.ver }}</span>
                   <span class="changelog-text">{{ item.summary }}</span>
@@ -133,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { CloudSyncOutlined, HistoryOutlined } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -141,8 +143,11 @@ import { APP_VERSION } from '../../config/brand'
 import { checkUpdate, applyUpdate, getProgress, getChangelog,
   getVersions, getVersionChanges, rollbackTo, type VersionItem, type ChangesResult } from '../../api/about'
 import { hasPerm } from '../../api/request'
+import { useServerVersion } from '../../composables/useServerVersion'
 
-const version = APP_VERSION
+// 「当前版本」显示/版本表比对/回退资格/changelog 过滤都用**后端真实版本**（version.txt），
+// 非编译进包的 APP_VERSION——跳板逐级更新时前端产物 brand 标签可能滞后/错配。
+const { serverVersion: version } = useServerVersion()
 const canRollback = computed(() => hasPerm('system:update') || getRoleIsAdmin())
 function getRoleIsAdmin() { return (localStorage.getItem('arl_role') || '') === 'admin' }
 
@@ -166,7 +171,7 @@ function _cmpVer(a: string, b: string): number {
 // 模板可用包装：仅“严格低于当前版本”才是可回退目标（等于=当前，高于=前滚/升级不在此入口）。
 // 注：<script setup> 中以 _ 开头的绑定不暴露给模板，故用不带下划线的名字包一层给 v-if 用。
 function isOlderThanCurrent(v: string): boolean {
-  return _cmpVer(v, version) < 0
+  return _cmpVer(v, version.value) < 0
 }
 
 // —— 历史版本与回退 ——
@@ -234,7 +239,20 @@ async function doRollback(v: string) {
   }
 }
 
-onMounted(() => { if (canRollback.value) loadVersions() })
+onMounted(async () => {
+  if (canRollback.value) loadVersions()
+  // v1.21.159-x 后台更新：更新器是独立进程、进度落服务端文件——切菜单/刷新返回后，
+  // 若后台仍在更新，重新挂上进度轮询（不丢进度、不用重新点更新）。
+  try {
+    const p = await getProgress()
+    if (p && ['downloading', 'compiling', 'applying', 'checking'].includes(p.phase)) {
+      progress.value = p
+      updating.value = true
+      updateError.value = ''
+      pollProgress()
+    }
+  } catch { /* 取不到进度=没有在跑，忽略 */ }
+})
 const checking = ref(false)
 const checked = ref(false)
 const hasUpdate = ref(false)
@@ -247,12 +265,20 @@ const changelogs = ref<{ver: string, date: string, summary: string}[]>([])
 const updating = ref(false)
 const updateDone = ref(false)
 const updateError = ref('')
-const progress = ref<{phase: string, total: number, done: number, msg: string}>({phase: 'idle', total: 0, done: 0, msg: ''})
+const progress = ref<{phase: string, total: number, done: number, msg: string, ts?: number, error?: string}>({phase: 'idle', total: 0, done: 0, msg: ''})
 let pollTimer: ReturnType<typeof setInterval> | null = null
+// 链式更新 stale 检测：跟踪后端 progress 最近一次「有推进」的本地墙钟（用前端本地时钟，免前后端时钟不同步）。
+// 非终结相位(applying/checking/downloading)持续 STALE_MS 无推进 → 判链断，给重试（不再死等）。
+const _CHAIN_STALE_MS = 200000   // 200s：略大于后端 watchdog 兜底窗口(180s)，让自动续跑先兜底、仍不动才提示用户
+let _lastProgKey = ''
+let _lastProgWall = 0
 
 const percent = computed(() => {
   if (!progress.value.total) return _prevPct.value
   const cur = Math.round((progress.value.done / progress.value.total) * 100)
+  // 一级一级更新：每跳都从 done=0 重新计数。新跳开始（done 归 0）时重置棘轮，
+  // 否则进度条会被上一跳的 100% 钉死、后续跳看不到进度。跳内仍单调递增（不回跳抖动）。
+  if (progress.value.done === 0) _prevPct.value = 0
   if (cur > _prevPct.value) _prevPct.value = cur
   return _prevPct.value
 })
@@ -272,7 +298,8 @@ async function doCheck() {
   authError.value = false
   changelogs.value = []
   try {
-    const r = await checkUpdate(version)
+    // check?client= 上报**前端构建版本**(APP_VERSION)：后端据此判断「是否提示刷新拿新构建」，与后端 version 比对
+    const r = await checkUpdate(APP_VERSION)
     if (r.error_type === 'unauthorized') {
       authError.value = true
     } else if (r.error_type === 'network') {
@@ -280,14 +307,14 @@ async function doCheck() {
       serverMessage.value = r.message || ''
     } else {
       hasUpdate.value = r.has_update
-      latest.value = r.latest_version || r.server_version || version
+      latest.value = r.latest_version || r.server_version || version.value
       serverMessage.value = r.message || ''
       // Fetch changelog if update available
       if (r.has_update) {
         try {
           const logs = await getChangelog()
           changelogs.value = (logs || [])
-            .filter((l: any) => _cmpVer(l.ver, version) > 0)   // 数值比较：只留真正比当前新的版本
+            .filter((l: any) => _cmpVer(l.ver, version.value) > 0)   // 数值比较：只留真正比当前(后端真实版本)新的
             .sort((a: any, b: any) => _cmpVer(b.ver, a.ver))   // 新→旧排序
             .slice(0, 10)
         } catch { /* ignore */ }
@@ -314,6 +341,7 @@ async function startUpdate() {
 }
 
 function pollProgress() {
+  _lastProgKey = ''; _lastProgWall = Date.now()   // 每次挂轮询重置 stale 基准
   pollTimer = setInterval(async () => {
     try {
       const p = await getProgress()
@@ -328,12 +356,25 @@ function pollProgress() {
         if (pollTimer) clearInterval(pollTimer)
         updating.value = false
         updateError.value = p.error || '未知错误'
+      } else {
+        // 非终结相位：靠后端 ts + done/msg 组合判「是否有推进」。有变化则刷新墙钟；
+        // 持续 _CHAIN_STALE_MS 无任何推进 → 判链式续跑中断，停轮询给重试（后端 watchdog 已先兜底重派）。
+        const key = `${p.ts || 0}|${p.phase}|${p.done}|${p.msg}`
+        if (key !== _lastProgKey) { _lastProgKey = key; _lastProgWall = Date.now() }
+        else if (Date.now() - _lastProgWall > _CHAIN_STALE_MS) {
+          if (pollTimer) clearInterval(pollTimer)
+          updating.value = false
+          updateError.value = '更新似乎已中断（续跑未推进）。系统会自动尝试续跑，可点「重试」立即从当前版本继续，或稍后刷新页面查看。'
+        }
       }
     } catch { /* continue polling */ }
   }, 1000)
 }
 
 function resetUpdateState() { updating.value = false; updateError.value = ''; updateDone.value = false }
+
+// 切菜单/卸载只停本地轮询（后台更新进程照跑，进度落服务端文件）；返回时 onMounted 重新挂轮询。
+onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } })
 </script>
 
 <style scoped>

@@ -11,6 +11,9 @@
 """
 from __future__ import annotations
 
+import json
+import os
+import tempfile
 from typing import Any, Dict, Iterable, List, Optional, Set
 
 from ..base import ExternalTool
@@ -39,7 +42,8 @@ class Subfinder(ExternalTool):
         self.max_time = int(max_time)
         self.source_timeout = int(source_timeout)
 
-    def build_argv(self, all_sources: bool = False, **kwargs: Any) -> List[str]:
+    def build_argv(self, all_sources: bool = False, sources: Optional[List[str]] = None,
+                   provider_config: str = "", **kwargs: Any) -> List[str]:
         # -silent 只出结果不出 banner；-json 结构化；-all 用全部源（更全但更慢，默认关，由调用方按需开）
         # -max-time/-timeout 给枚举可控时间上限（默认值偏长，多域名串行会卡十几分钟，见排查记录）。
         argv = ["-silent", "-json"]
@@ -49,6 +53,10 @@ class Subfinder(ExternalTool):
             argv += ["-timeout", str(self.source_timeout)]
         if all_sources:
             argv.append("-all")
+        if sources:
+            argv += ["-s", ",".join(s for s in sources if s)]
+        if provider_config:
+            argv += ["-pc", provider_config]
         return argv
 
     def parse_record(self, obj: Dict[str, Any]) -> Optional[DomainRec]:
@@ -65,6 +73,43 @@ class Subfinder(ExternalTool):
                   scope: Optional[Set[str]] = None) -> List[DomainRec]:
         """被动枚举一批主域的子域名。scope 传入则额外按其过滤（多主域任务防串域）；去重同名。"""
         recs = self.run(stdin_lines=domains, all_sources=all_sources)
+        return self._filter_records(recs, scope)
+
+    def enumerate_sources(self, domains: Iterable[str], credentials: Dict[str, str],
+                          scope: Optional[Set[str]] = None) -> List[DomainRec]:
+        """仅运行策略选中的、已配置凭据的 API 来源。
+
+        subfinder 只接受 provider-config 文件，因此凭据写入 0600 临时文件；调用结束无论成功失败
+        都删除。不复用 HOME 全局配置，避免并发任务互相覆盖来源选择或把密钥留在热更新目录。
+        """
+        creds = {str(k).strip(): str(v).strip() for k, v in (credentials or {}).items()
+                 if str(k).strip() and str(v).strip()}
+        if not creds:
+            return []
+        path = ""
+        try:
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".yaml",
+                                             prefix="watchtower-subfinder-", delete=False) as fp:
+                path = fp.name
+                for source, credential in creds.items():
+                    # JSON 字符串是合法 YAML 标量，可安全承载冒号/@ 等复合凭据字符。
+                    fp.write("{}:\n  - {}\n".format(source, json.dumps(credential, ensure_ascii=False)))
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
+            recs = self.run(stdin_lines=domains, sources=list(creds), provider_config=path)
+            return self._filter_records(recs, scope)
+        finally:
+            if path:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+    @staticmethod
+    def _filter_records(recs: Iterable[DomainRec], scope: Optional[Set[str]]) -> List[DomainRec]:
+        """统一去重 + scope 过滤，供公共源和选定 API 源共用。"""
         out: List[DomainRec] = []
         seen: Set[str] = set()
         for r in recs:

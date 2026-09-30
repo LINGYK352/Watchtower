@@ -110,7 +110,7 @@ class Modules(Resource):
 
 # ---------- 激活状态（需登录） ----------
 
-_DEFAULT_SOURCE_URL = "http://124.222.145.172:5080"
+_DEFAULT_SOURCE_URL = "https://watchtowers.info"
 
 
 def _decode_jwt_payload(token: str) -> dict:
@@ -142,10 +142,12 @@ class ActivationInfo(Resource):
     def get(self):
         """激活信息（key 脱敏，不返回明文）"""
         import time as _time
+        import math
         key = _read_activation_key_fresh()
 
         if not _is_jwt(key):
-            return ok({"activated": False, "key_masked": "", "activated_at": "", "expires_at": "", "remaining_days": 0, "auth_days": 0, "username": ""})
+            return ok({"activated": False, "expired": False, "revoked": False, "key_masked": "",
+                       "activated_at": "", "expires_at": "", "remaining_days": 0, "auth_days": 0, "username": ""})
 
         payload = _decode_jwt_payload(key)
         exp = payload.get("exp", 0)
@@ -156,10 +158,24 @@ class ActivationInfo(Resource):
 
         expires_at_str = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(exp)) if exp else ""
         activated_at_str = _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(activated_at)) if activated_at else ""
-        remaining_days = max(0, int((exp - _time.time()) / 86400)) if exp else 0
+
+        # 与 local_status 一致：remaining_days 用 ceil（剩<1天显示1天）
+        remaining_days = max(1, math.ceil((exp - _time.time()) / 86400)) if (exp and exp > _time.time()) else 0
+
+        # 叠加吊销标记（与 local_status 口径一致）
+        from sentinel_platform.modules.system import activation
+        revoked = activation.is_revoked()
+        activated = (exp > _time.time()) if exp else False
+        expired = (exp <= _time.time()) if exp else False
+        if revoked:
+            activated = False
+            expired = True
+            remaining_days = 0
 
         return ok({
-            "activated": exp > _time.time() if exp else False,
+            "activated": activated,
+            "expired": expired,
+            "revoked": revoked,
             "key_masked": key_masked,
             "activated_at": activated_at_str,
             "expires_at": expires_at_str,
@@ -177,8 +193,9 @@ class Activation(Resource):
         from sentinel_platform.modules.system import activation
         st = activation.local_status()
         # 附服务器时区：剩余天数/到期时间按服务器 OS 时区计算，前端徽标标注时区避免误解（见 §7.8）。
-        return ok({"activated": st["activated"], "expired": st["expired"],
-                   "expires_at": st["expires_at"], "source_url": activation.source_url(),
+        return ok({"activated": st["activated"], "expired": st["expired"], "revoked": st["revoked"],
+                   "expires_at": st["expires_at"], "activated_at": st["activated_at"],
+                   "source_url": activation.source_url(),
                    "remaining_days": st["remaining_days"], **_os_timezone()})
 
     @ns.doc(security="token")
@@ -246,6 +263,12 @@ class Activation(Resource):
             reset_config_cache()
         except Exception:
             pass
+        # 激活成功 → 清除吊销标记（云端重新认可 / 用户重新激活后恢复已激活态）
+        try:
+            from sentinel_platform.modules.system import activation
+            activation.clear_revoked()
+        except Exception:
+            pass
         return ok({"activated_at": result.get("activated_at"),
                    "expires_at": result.get("expires_at"),
                    "auth_days": result.get("auth_days")})
@@ -306,15 +329,26 @@ class SetupStatus(Resource):
         except Exception:
             pass
 
-        # 4) FOFA specifically configured + enabled
-        fofa_configured = False
+        # 4) 逐个资产测绘源是否已配置（enabled + 密钥字段非空）——需求1：广域收集工具多选置灰依据。
+        #    单一事实源=KEY_DEFS 中 group「资产测绘/情报」的源（fofa/hunter/quake/zoomeye）。
+        sources_configured: Dict[str, bool] = {}
         try:
-            if doc:
-                fofa_sub = doc.get("fofa")
-                if isinstance(fofa_sub, dict) and fofa_sub.get("enabled") and fofa_sub.get("key"):
-                    fofa_configured = True
+            from sentinel_platform.modules.system.api_keys import KEY_DEFS, SECRET_FIELDS
+            for d in KEY_DEFS:
+                if d.get("group") != "资产测绘/情报":
+                    continue
+                sid = d["id"]
+                sources_configured[sid] = False
+                sub = doc.get(sid) if doc else None
+                if isinstance(sub, dict) and sub.get("enabled"):
+                    for f in d["fields"]:
+                        if f in SECRET_FIELDS and sub.get(f):
+                            sources_configured[sid] = True
+                            break
         except Exception:
             pass
+        # fofa_configured 保留（向后兼容旧前端），派生自 sources_configured
+        fofa_configured = bool(sources_configured.get("fofa"))
 
         return ok({
             "activated": activated,
@@ -322,6 +356,7 @@ class SetupStatus(Resource):
             "ai_configured": ai_configured,
             "keys_configured": keys_configured,
             "fofa_configured": fofa_configured,
+            "sources_configured": sources_configured,   # {fofa:bool, hunter:bool, quake:bool, zoomeye:bool}
         })
 
 

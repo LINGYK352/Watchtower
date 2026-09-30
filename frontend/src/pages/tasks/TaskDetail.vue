@@ -5,12 +5,21 @@
       <a-descriptions bordered size="small" :column="2">
         <a-descriptions-item label="任务 ID"><CopyText :text="id" /></a-descriptions-item>
         <a-descriptions-item label="任务名">{{ task.name || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="目标"><CopyText :text="String(task.target || '')" /></a-descriptions-item>
+        <a-descriptions-item label="目标">
+          <!-- unit 任务 target 可能是几千字符的单位名/域名清单，定高滚动截断防撑长页面；点击 CopyText 复制全量 -->
+          <div style="max-height:96px;overflow:auto;word-break:break-all"><CopyText :text="String(task.target || '')" /></div>
+        </a-descriptions-item>
         <a-descriptions-item label="状态"><StatusTag :value="String(task.status || '')" /></a-descriptions-item>
-        <a-descriptions-item label="类型">{{ task.type || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="类型">{{ typeLabel(task.type) }}</a-descriptions-item>
         <a-descriptions-item label="开始时间">{{ task.start_time || '-' }}</a-descriptions-item>
         <a-descriptions-item label="结束时间">{{ task.end_time || '-' }}</a-descriptions-item>
         <a-descriptions-item label="耗时">{{ duration }}</a-descriptions-item>
+        <a-descriptions-item v-if="sourceLabel" label="来源">{{ sourceLabel }}</a-descriptions-item>
+        <a-descriptions-item v-if="sourceQueries.length" label="源查询语句" :span="2">
+          <div v-for="q in sourceQueries" :key="q.src" style="margin-bottom:4px">
+            <a-tag color="blue">{{ q.src }}</a-tag><CopyText :text="q.query" />
+          </div>
+        </a-descriptions-item>
       </a-descriptions>
     </a-card>
 
@@ -86,6 +95,26 @@ const enabledOptions = computed(() => {
   const result: Record<string, boolean> = {}
   Object.entries(opts).forEach(([k, v]) => { if (v === true) result[k] = true })
   return result
+})
+// 来源信息（源查询任务归档 source.platform/sources；存量老任务无 source 则空，不显示）
+const sourceLabel = computed(() => {
+  const src = (task.value.source as Record<string, unknown>) || {}
+  const platform = String(src.platform || '')
+  const sources = Array.isArray(src.sources) ? (src.sources as string[]) : []
+  if (sources.length) return sources.join(' + ') + (platform && platform !== 'multi_source' ? `（${platform}）` : '')
+  return platform && platform !== 'multi_source' ? platform : ''
+})
+// 任务类型中文映射（type 内部数据值不改，仅展示友好化；未知原样兼容）
+const _TYPE_LABELS: Record<string, string> = {
+  domain: '域名', ip: 'IP', fofa: '源查询', risk_cruising: '风险巡航',
+  asset_site_update: '站点监控', asset_site_add: '站点新增', asset_wih_update: 'WIH 监控',
+}
+function typeLabel(t: unknown) { return _TYPE_LABELS[String(t || '')] || String(t || '-') }
+// 源查询语句（source.queries = {源名: 语句}；存量老任务无此字段则空数组，v-if 不显示）
+const sourceQueries = computed(() => {
+  const src = (task.value.source as Record<string, unknown>) || {}
+  const q = (src.queries as Record<string, string>) || {}
+  return Object.entries(q).map(([k, v]) => ({ src: k.toUpperCase(), query: String(v) })).filter(x => x.query)
 })
 
 async function load() {

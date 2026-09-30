@@ -41,12 +41,7 @@ _CDN_MARKERS = (
     "dnsv1", "tbcache", "yunjiasu", "ourwebcdn", "cachefly",
 )
 
-# 一级域名（eTLD+1）启发式：双级后缀集（数据驱动，可扩充）
-_TWO_LEVEL_SUFFIX = frozenset((
-    "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn",
-    "co.uk", "org.uk", "gov.uk", "com.hk", "org.hk", "com.tw",
-    "co.jp", "com.au", "net.au", "com.sg", "com.my",
-))
+# 二级后缀表已下沉 core.domains.SECOND_LEVEL_SUFFIXES（三处 fld 共用，缺陷4 修复）。
 
 # RFC 6598 CGNAT（运营商级 NAT）网段，跨 py 版本显式兜底 PRIVATE
 _CGNAT_NET = ipaddress.ip_network("100.64.0.0/10")
@@ -78,28 +73,10 @@ def classify_ip(ip: str) -> str:
 
 
 def extract_fld(host: str) -> str:
-    """粗略提取一级域名 (eTLD+1)。IP / 空 原样返回。
-
-    启发式降级实现（不引 tldextract/PSL）：保证 fld 非空且对多数常见域名正确。
-    双级后缀（com.cn/co.uk 等）取三段，其余取末两段。
-    """
-    if not host or not isinstance(host, str):
-        return ""
-    host = host.strip().strip(".").lower()
-    if not host:
-        return ""
-    # IP 原样返回（IPv4/IPv6 都不做域名切分）
-    try:
-        ipaddress.ip_address(host)
-        return host
-    except ValueError:
-        pass
-    parts = host.split(".")
-    if len(parts) <= 2:
-        return host
-    if ".".join(parts[-2:]) in _TWO_LEVEL_SUFFIX and len(parts) >= 3:
-        return ".".join(parts[-3:])
-    return ".".join(parts[-2:])
+    """提取主域 (eTLD+1)。委托 core.domains.extract_fld（三处 fld 共用同一权威二级后缀表，
+    治「enrich 与 unit_map 后缀表不一致 → 单位回填失灵 / *.mil.cn 打歪」缺陷4）。"""
+    from sentinel_platform.core import extract_fld as _core_fld
+    return _core_fld(host)
 
 
 def auto_tag(site: Dict[str, Any]) -> List[str]:

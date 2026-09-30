@@ -29,6 +29,15 @@ RESOURCE_HISTORY = "resource_history"
 
 # 兼容默认值；均可由 RESOURCE 配置覆盖。默认值是资源建议，不是目标数/结果数上限。
 _TH_LOW, _TH_HIGH, _TH_CRIT = 60, 80, 90
+# CPU / 磁盘水位阈值默认（可由 RESOURCE.CPU_HIGH/CPU_CRITICAL、RESOURCE.DISK_HIGH/DISK_CRITICAL 覆盖）。
+# 只设 high(tight)/critical 两档——CPU/磁盘无「relaxed 越空越好」语义，低于 high 即视为 normal。
+_TH_CPU_HIGH, _TH_CPU_CRIT = 85, 95
+_TH_DISK_HIGH, _TH_DISK_CRIT = 85, 95
+# CPU 采样可信时效（秒）：scheduler 每 tick(默认30s) 写一条真实 CPU 采样，超此时效视为 scheduler 停摆，
+# 改本地阻塞探测。约 6× 默认 tick。CPU 探测本地兜底窗口（秒）：绝不用 interval=0（冷进程返回 0 或虚高 100%）。
+_CPU_SAMPLE_MAX_AGE, _CPU_PROBE_INTERVAL = 180, 0.3
+# 水位分级序（比较严重程度用；tight 与 high 同义，见 get_resource_level）。
+_LEVEL_RANK = {"relaxed": 0, "normal": 1, "tight": 2, "critical": 3}
 _DEFAULT_BUDGETS = {
     "relaxed": {"task_slots": 5, "io_concurrency": 16, "scan_parallelism": 6},
     "normal": {"task_slots": 3, "io_concurrency": 10, "scan_parallelism": 4},
@@ -153,7 +162,10 @@ def stat_logs() -> Dict[str, int]:
         s["total"] = coll.count_documents({})
         return s
     except Exception:
-        return {lv: 0 for lv in _LEVELS} | {"total": 0}
+        # 注意：生产容器是 Python 3.8，dict|dict 合并（3.9+）会 TypeError 令降级路径二次崩溃，改用兼容写法。
+        degraded = {lv: 0 for lv in _LEVELS}
+        degraded["total"] = 0
+        return degraded
 
 
 def _oid(_id: str):
@@ -275,6 +287,42 @@ def get_memory_percent() -> Optional[float]:
             return None
 
 
+def get_cpu_percent() -> Optional[float]:
+    """当前 CPU 使用率。**优先读 scheduler 写入 resource_history 的最近采样**——它是长驻进程按 tick
+    间隔（默认 30s）算出的真实窗口均值，天然平滑、跨 gunicorn 多 worker 一致，且与态势总览趋势图同源。
+    绝不在此用 psutil.cpu_percent(interval=0)：非阻塞增量口径按「本进程距上次调用」计，web worker 冷基线
+    会返回 0 或虚高 100%（假 critical 告警的根因）。
+    采样缺失/过期（scheduler 停摆）才本地阻塞探测 _CPU_PROBE_INTERVAL 秒兜底；仍不可用返回 None（不参与分级）。"""
+    import time
+    try:
+        row = get_repo().collection(RESOURCE_HISTORY).find_one({}, sort=[("ts", -1)])
+        if row and row.get("cpu") is not None:
+            ts = row.get("ts")
+            if ts is not None and (time.time() - float(ts)) <= _CPU_SAMPLE_MAX_AGE:
+                return float(row["cpu"])
+    except Exception:
+        pass
+    # 无新鲜采样（scheduler 未运行/首启）：给足窗口的本地阻塞探测，绝不 interval=0
+    try:
+        import psutil
+        return float(psutil.cpu_percent(interval=_CPU_PROBE_INTERVAL))
+    except Exception:
+        return None
+
+
+def get_disk_percent() -> Optional[float]:
+    """当前根分区磁盘使用率。实时读失败回退最近采样；仍不可用返回 None（不参与分级）。"""
+    try:
+        import psutil
+        return float(psutil.disk_usage("/").percent)
+    except Exception:
+        try:
+            row = get_repo().collection(RESOURCE_HISTORY).find_one({}, sort=[("ts", -1)])
+            return float(row.get("disk")) if row and row.get("disk") is not None else None
+        except Exception:
+            return None
+
+
 def _resource_int(key: str, default: int) -> int:
     try:
         value = get_config().section("RESOURCE", key, default=default)
@@ -291,9 +339,9 @@ def _resource_float(key: str, default: float) -> float:
         return default
 
 
-def get_resource_level() -> str:
-    """资源水位 relaxed/normal/tight/critical。不可观测时保守降级 normal，不误判 relaxed。"""
-    mem = get_memory_percent()
+def _mem_level(mem: Optional[float]) -> str:
+    """内存维度分级（保留原四档语义：relaxed 供向上调度，critical 停投保命）。
+    不可观测→normal（保守，不误判 relaxed 放太开）。"""
     if mem is None:
         return "normal"
     low = _resource_int("MEMORY_LOW", _TH_LOW)
@@ -306,6 +354,43 @@ def get_resource_level() -> str:
     if mem < low:
         return "relaxed"
     return "normal"
+
+
+def _cpu_disk_level(value: Optional[float], high_key: str, high_def: int,
+                    crit_key: str, crit_def: int) -> str:
+    """CPU/磁盘维度分级——只在 high/critical 时**向上拉高**综合水位；低于 high 返回中性元 relaxed
+    （_worst_level 的单位元），不覆盖内存驱动的 relaxed 语义（否则综合永回不到 relaxed，破坏向上调度）。
+    不可观测→relaxed（中性，不参与拉高，也不误压内存判定）。"""
+    if value is None:
+        return "relaxed"
+    high = _resource_int(high_key, high_def)
+    critical = _resource_int(crit_key, crit_def)
+    if value >= critical:
+        return "critical"
+    if value >= high:
+        return "tight"
+    return "relaxed"
+
+
+def _worst_level(*levels: str) -> str:
+    """取最严重的水位（critical > tight > normal > relaxed）。多维告警的合成口径。"""
+    worst = "relaxed"
+    for lv in levels:
+        if _LEVEL_RANK.get(lv, 1) > _LEVEL_RANK.get(worst, 0):
+            worst = lv
+    return worst
+
+
+def get_resource_level() -> str:
+    """综合资源水位 relaxed/normal/tight/critical —— 取内存/CPU/磁盘三维中最严重的一档。
+    不可观测时保守降级 normal，不误判 relaxed。
+    **兼容性**：内存维度沿用原四档语义（含 relaxed 供 get_resource_budget 向上调度）；CPU/磁盘只在
+    high/critical 时把综合水位往上拉（满载不产生 relaxed）——三者皆空闲时结果仍取决于内存的 relaxed。
+    """
+    mem_lv = _mem_level(get_memory_percent())
+    cpu_lv = _cpu_disk_level(get_cpu_percent(), "CPU_HIGH", _TH_CPU_HIGH, "CPU_CRITICAL", _TH_CPU_CRIT)
+    disk_lv = _cpu_disk_level(get_disk_percent(), "DISK_HIGH", _TH_DISK_HIGH, "DISK_CRITICAL", _TH_DISK_CRIT)
+    return _worst_level(mem_lv, cpu_lv, disk_lv)
 
 
 def get_resource_budget() -> Dict[str, Any]:
@@ -343,7 +428,10 @@ def _has_config() -> bool:
 
 
 def sample_resource() -> Dict[str, Any]:
-    """采样 CPU/内存/磁盘写入 resource_history（scheduler 周期调；dash 读）。返回本次样本。异常降级不抛。"""
+    """采样 CPU/内存/磁盘写入 resource_history（scheduler 周期调；dash + get_cpu_percent 读）。返回本次样本。异常降级不抛。
+    这里 cpu_percent(interval=0) 是**正确**的：scheduler 是长驻进程，每 tick(默认30s) 调一次 → 非阻塞增量口径
+    自动算出「距上次 tick 的 30s 窗口均值」，天然平滑、不阻塞调度。get_cpu_percent 就是回读这条采样（见其注释），
+    从而让所有 web worker 拿到与趋势图同源的真实值——切勿把这里改成阻塞 interval，会拖慢每个 tick。"""
     try:
         import psutil
         import time
@@ -354,6 +442,86 @@ def sample_resource() -> Dict[str, Any]:
     except Exception as exc:
         logger.debug("sample_resource degraded: %s", exc)
         return {}
+
+
+# 维度中文名（告警文案用）
+_DIM_LABEL = {"memory": "内存", "cpu": "CPU", "disk": "磁盘"}
+# 告警推送去重节流：同一 level 在 TTL 内只推一次（防刷屏）；恢复后清除以便再次恶化能再推。
+_ALERT_DEDUP: Dict[str, float] = {"level": "", "ts": 0.0}
+_ALERT_TTL = 600  # 秒：同级别告警最短推送间隔（10 分钟）
+
+
+def get_resource_alert() -> Dict[str, Any]:
+    """当前资源水位明细（供前端弹窗轮询 /api/console/resource_alert）。
+    返回 {level, mem, cpu, disk, dims[], ts}：
+      - level：综合水位（内存/CPU/磁盘取最严重）；
+      - dims：超标维度列表 [{key,label,value,level}]（level=tight/critical 的维度）；
+      - ts：本次判定时间戳（前端据此去重，同 NetQualityAlertModal 的 checked_ts 语义）。
+    只读，不推送、不写库；纯查询给前端弹窗判定用。"""
+    import time
+    mem = get_memory_percent()
+    cpu = get_cpu_percent()
+    disk = get_disk_percent()
+    mem_lv = _mem_level(mem)
+    cpu_lv = _cpu_disk_level(cpu, "CPU_HIGH", _TH_CPU_HIGH, "CPU_CRITICAL", _TH_CPU_CRIT)
+    disk_lv = _cpu_disk_level(disk, "DISK_HIGH", _TH_DISK_HIGH, "DISK_CRITICAL", _TH_DISK_CRIT)
+    level = _worst_level(mem_lv, cpu_lv, disk_lv)
+    dims = []
+    for key, val, lv in (("memory", mem, mem_lv), ("cpu", cpu, cpu_lv), ("disk", disk, disk_lv)):
+        if lv in ("tight", "critical") and val is not None:
+            dims.append({"key": key, "label": _DIM_LABEL[key], "value": round(float(val), 1), "level": lv})
+    return {
+        "level": level,
+        "mem": round(float(mem), 1) if mem is not None else None,
+        "cpu": round(float(cpu), 1) if cpu is not None else None,
+        "disk": round(float(disk), 1) if disk is not None else None,
+        "dims": dims,
+        "ts": int(time.time()),
+    }
+
+
+def check_and_alert_resource() -> Dict[str, Any]:
+    """资源水位推送告警（scheduler 采样后调）：综合水位达 tight/critical → 经 notify 推送渠道告警。
+    去重节流：同级别 _ALERT_TTL(10min) 内只推一次；水位回落 normal/relaxed 时清除标记（下次恶化能再推）。
+    与前端弹窗解耦——弹窗只在 critical 弹（前端轮询 get_resource_alert 自判），推送在 tight+ 就发。
+    返回 {level, alerted:bool}。异常降级不抛（绝不因告警失败拖垮 scheduler tick）。"""
+    import time
+    out = {"level": "normal", "alerted": False}
+    try:
+        info = get_resource_alert()
+        level = info.get("level", "normal")
+        out["level"] = level
+        if level not in ("tight", "critical"):
+            # 回落：清除去重标记，让下次恶化能立即再推
+            if _ALERT_DEDUP["level"]:
+                _ALERT_DEDUP["level"] = ""
+                _ALERT_DEDUP["ts"] = 0.0
+            return out
+        now = time.time()
+        # 同级别节流：level 未变且在 TTL 内 → 跳过（critical 比 tight 更严重时允许立即升级推送）
+        same_or_lower = (_ALERT_DEDUP["level"] == level) or (
+            _ALERT_DEDUP["level"] == "critical" and level == "tight")
+        if same_or_lower and (now - _ALERT_DEDUP["ts"]) < _ALERT_TTL:
+            return out
+        _ALERT_DEDUP["level"] = level
+        _ALERT_DEDUP["ts"] = now
+        # 组织告警文案：列出超标维度当前值
+        parts = ["{}={}%".format(d["label"], d["value"]) for d in info.get("dims", [])]
+        detail = "、".join(parts) or "综合水位 {}".format(level)
+        sev = "critical" if level == "critical" else "high"
+        msg = "资源水位{}：{}（内存 {}% / CPU {}% / 磁盘 {}%）".format(
+            "严重" if level == "critical" else "偏高", detail,
+            info.get("mem"), info.get("cpu"), info.get("disk"))
+        try:
+            from sentinel_platform.modules.kernel import notify
+            notify.notify_critical_log("资源监控", msg)
+            out["alerted"] = True
+        except Exception as exc:
+            logger.debug("check_and_alert_resource notify degraded: %s", exc)
+        logger.warning("资源告警[%s]: %s", sev, msg)
+    except Exception as exc:
+        logger.debug("check_and_alert_resource degraded: %s", exc)
+    return out
 
 
 def query_resource_history(days: int = 1) -> List[Dict[str, Any]]:
@@ -424,6 +592,12 @@ class LogServiceImpl:
 
     def sample_resource(self) -> Dict[str, Any]:
         return sample_resource()
+
+    def get_resource_alert(self) -> Dict[str, Any]:
+        return get_resource_alert()
+
+    def check_and_alert_resource(self) -> Dict[str, Any]:
+        return check_and_alert_resource()
 
     def query_resource_history(self, days: int = 1) -> List[Dict[str, Any]]:
         return query_resource_history(days)

@@ -42,6 +42,20 @@ def _source_from(body: dict) -> dict:
     return {k: (body.get("source." + k) or "") for k in ("platform", "category", "unit", "src_id")}
 
 
+def _ctx_tokens_from(body: dict):
+    """从 body 抽单会话上下文上限（#3，上下文上限从策略移到新建任务）。
+    前端未传该字段 → None（叶子不覆盖策略值，向后兼容）；传了则转 int
+    （0=跟随全局默认/-1=原生上限「拉满」/正数=固定 token），不设上界（守禁硬限制铁律）。
+    非法值 → None（当未传处理，不打断建任务）。仅当所选策略 auto_pentest=True 时叶子才生效。"""
+    v = body.get("pentest_max_context_tokens", None)
+    if v is None or v == "":
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def _ext():
     """取 ext_source 门面（模块级函数集合，无 ROLE）。未注册返 None。"""
     return get_registry().get("ext_source_service")
@@ -120,7 +134,12 @@ class TaskByPolicy(Resource):
             pentest_whitelist=body.get("pentest_whitelist", ""),
             mission_intel=body.get("mission_intel", ""),
             pentest_provider_id=body.get("pentest_provider_id", ""),
-            pentest_egress_mode=body.get("pentest_egress_mode", ""))
+            pentest_backup_provider_id=body.get("pentest_backup_provider_id", ""),
+            pentest_egress_mode=body.get("pentest_egress_mode", ""),
+            pentest_fallback_egress_mode=body.get("pentest_fallback_egress_mode", ""),
+            observer_enabled=bool(body.get("observer_enabled", False)),
+            observer_provider_id=body.get("observer_provider_id", ""),
+            pentest_max_context_tokens=_ctx_tokens_from(body))
         if not r.get("ok"):
             return err(CODE_BAD_REQUEST, r.get("error", "下发失败"))
         return ok({"items": r["items"], "created": r["created"], "invalid": r.get("invalid", [])})
@@ -209,6 +228,16 @@ class FofaSubmit(Resource):
         queries = {k: (v or "").strip() for k, v in queries.items() if (v or "").strip()}
         if not queries:
             return err(CODE_BAD_REQUEST, "至少填写一个源的查询语句")
+        # 各源抓取数量限制（正整数=上限，缺省/非正=无限制，守禁硬限制铁律）——只保留有查询语句的源的有效正整数
+        _raw_limits = body.get("limits") if isinstance(body.get("limits"), dict) else {}
+        limits: Dict[str, int] = {}
+        for _sid, _lv in _raw_limits.items():
+            try:
+                _n = int(_lv)
+            except (TypeError, ValueError):
+                continue
+            if _n > 0 and _sid in queries:
+                limits[_sid] = _n
         # FOFA 语句字段名校验（有 fofa 源时）
         if queries.get("fofa"):
             verr = _validate_fofa(queries["fofa"])
@@ -217,7 +246,7 @@ class FofaSubmit(Resource):
         # 多源查询 + 去重合并（域名 hostname / 纯IP ip+port）
         if ext and hasattr(ext, "multi_source_targets"):
             try:
-                mr = ext.multi_source_targets(queries)
+                mr = ext.multi_source_targets(queries, limits or None)
             except Exception as exc:
                 logger.debug("multi_source resolve failed: %s", exc)
                 return err(CODE_ERROR, "源查询失败（检查 key/网络）")
@@ -234,12 +263,20 @@ class FofaSubmit(Resource):
         src = _source_from(body)
         src["platform"] = src.get("platform") or "multi_source"
         src["sources"] = list(queries.keys())
+        src["queries"] = dict(queries)        # 各源查询语句 {源名:语句}，随任务归档供详情页展示/复现
+        if limits:
+            src["limits"] = dict(limits)      # 各源抓取数量限制 {源名:上限}，随任务归档（仅记有限制的源）
         r = svc.create_from_targets(name=name, targets=targets, policy_id=body.get("policy_id", ""),
                                     priority=body.get("priority", 2), source=src,
                                     pentest_whitelist=body.get("pentest_whitelist", ""),
                                     mission_intel=body.get("mission_intel", ""),
                                     pentest_provider_id=body.get("pentest_provider_id", ""),
-                                    pentest_egress_mode=body.get("pentest_egress_mode", ""))
+                                    pentest_backup_provider_id=body.get("pentest_backup_provider_id", ""),
+                                    pentest_egress_mode=body.get("pentest_egress_mode", ""),
+                                    pentest_fallback_egress_mode=body.get("pentest_fallback_egress_mode", ""),
+                                    observer_enabled=bool(body.get("observer_enabled", False)),
+                                    observer_provider_id=body.get("observer_provider_id", ""),
+                                    pentest_max_context_tokens=_ctx_tokens_from(body))
         if not r.get("ok"):
             return err(CODE_BAD_REQUEST, r.get("error", "下发失败"))
         return ok({"created": r["created"], "items": r["items"],
@@ -266,7 +303,12 @@ class FofaSubmitByUnit(Resource):
                                  source=_source_from(body), pentest_whitelist=body.get("pentest_whitelist", ""),
                                  mission_intel=body.get("mission_intel", ""),
                                  pentest_provider_id=body.get("pentest_provider_id", ""),
-                                 pentest_egress_mode=body.get("pentest_egress_mode", ""))
+                                 pentest_backup_provider_id=body.get("pentest_backup_provider_id", ""),
+                                 pentest_egress_mode=body.get("pentest_egress_mode", ""),
+                                 pentest_fallback_egress_mode=body.get("pentest_fallback_egress_mode", ""),
+                                 observer_enabled=bool(body.get("observer_enabled", False)),
+                                 observer_provider_id=body.get("observer_provider_id", ""),
+                                 pentest_max_context_tokens=_ctx_tokens_from(body))
         if not r.get("ok"):
             return err(CODE_BAD_REQUEST, r.get("error", "下发失败"))
         return ok({"task_id": r["task_id"], "name": r["name"], "unit_count": r["unit_count"]})

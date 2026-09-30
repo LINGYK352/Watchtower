@@ -21,6 +21,7 @@ ROLE_FILE_LEAK = "file_leak"        # native 文件/路径泄漏探测（filelea
 ROLE_VHOST = "vhost"                 # native Host 头碰撞发现旁站（vhost）
 ROLE_SCREENSHOT = "screenshot"       # phantomjs 站点截图（screenshot；依赖二进制，缺则 pick 降级）
 ROLE_SERVICE_POC = "service_poc"     # npoc(xing CLI) 服务级 PoC/未授权验证（依赖 xing，缺则 pick 降级）
+ROLE_ICMP_PING = "icmp_ping"         # native ICMP/TCP 主机存活探测（恒可用，无 NET_RAW 降级 TCP）
 
 
 class ToolRegistry:
@@ -67,6 +68,7 @@ def build_registry(config: Any = None) -> ToolRegistry:
     from .native.fileleak import FileLeakScanner
     from .native.vhost import VhostFinder
     from .native.screenshot import Screenshot
+    from .native.icmp import IcmpPing
 
     def _cfg(name: str, default: Any = "") -> Any:
         return getattr(config, name, default) if config is not None else default
@@ -88,4 +90,5 @@ def build_registry(config: Any = None) -> ToolRegistry:
         timeout=_cfg("screenshot_timeout", 30)))
     reg.register(ROLE_SERVICE_POC, Npoc(_cfg("npoc_path"),                       # xing CLI 服务级 PoC，缺则 pick 降级
         timeout=_cfg("npoc_timeout", 600), concurrency=_cfg("npoc_concurrency", 8)))
+    reg.register(ROLE_ICMP_PING, IcmpPing(timeout=_cfg("icmp_timeout", 2.0)))    # native 存活探测，恒可用（降级 TCP）
     return reg

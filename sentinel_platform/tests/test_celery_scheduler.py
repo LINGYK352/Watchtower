@@ -4,6 +4,7 @@ celery 未装本地（仅 vendor wheel）→ 不真起 broker；测:①scheduler
 ②celery_app 无 celery 时抛 ImportError 而非静默 ③scheduler 到期计划任务翻 WAITING 语义。
 均用内存 repo + mock，不依赖真 celery/mongo/broker。
 """
+import time
 import unittest
 from unittest import mock
 
@@ -20,6 +21,9 @@ class _Coll:
             for k, v in q.items():
                 if isinstance(v, dict) and "$in" in v:
                     if d.get(k) not in v["$in"]:
+                        return False
+                elif isinstance(v, dict) and "$ne" in v:
+                    if d.get(k) == v["$ne"]:   # 缺字段=None != True → 满足 $ne:True（对齐真 pymongo）
                         return False
                 elif d.get(k) != v:
                     return False
@@ -109,7 +113,7 @@ class TestSessionRecovery(unittest.TestCase):
         sc.docs = [
             {"_id": "q1", "status": "queued"},
             {"_id": "p1", "status": "paused_transient", "retry_count": 1},
-            {"_id": "pmax", "status": "paused_transient", "retry_count": 5},   # 超上限→降级
+            {"_id": "pmax", "status": "paused_transient", "retry_count": 12},   # ≥MAX_TRANSIENT_RETRY(12)→降级
         ]
         calls = []
         with mock.patch("sentinel_platform.modules.kernel.orchestration.submit_session",
@@ -145,6 +149,42 @@ class TestSessionRecovery(unittest.TestCase):
             out = scheduler._tick_sessions()
         self.assertEqual(out["stalled"], 1)
         self.assertEqual(sc.docs[0]["status"], "queued")   # 判死→重排队
+
+    def test_tick_sessions_dispatching_stall_reclaim(self):
+        """dispatching 停滞（心跳远古=派发消息丢/worker起转前崩）→ 回 queued 重派 + dispatch_reclaim_count++。
+        治「周期 watchdog 此前只管 running，dispatching 卡死只能靠重启 scheduler」。"""
+        repo = _Repo(); set_repo(repo)
+        sc = repo.collection("intel_pentest_session")
+        sc.docs = [{"_id": "d1", "status": "dispatching", "update_date": "2020-01-01 00:00:00"}]
+        with mock.patch("sentinel_platform.modules.kernel.orchestration.submit_session",
+                        side_effect=lambda sid, **kw: {"submitted": True}):
+            out = scheduler._tick_sessions()
+        self.assertEqual(out["stalled"], 1)
+        self.assertEqual(sc.docs[0]["status"], "queued")           # 卡死 dispatching → 重排队
+        self.assertEqual(sc.docs[0]["dispatch_reclaim_count"], 1)  # 计数++（超限才降级）
+
+    def test_tick_sessions_dispatching_reclaim_degrade(self):
+        """dispatching 反复停滞回收超 MAX_DISPATCH_RECLAIM(3) 仍起不来 → 降级 paused_manual（延迟自愈），
+        不无限 queued↔dispatching 抖动占槽（如 provider 失效/run_agent 起转即崩）。"""
+        repo = _Repo(); set_repo(repo)
+        sc = repo.collection("intel_pentest_session")
+        sc.docs = [{"_id": "d2", "status": "dispatching", "update_date": "2020-01-01 00:00:00",
+                    "dispatch_reclaim_count": 3}]
+        with mock.patch("sentinel_platform.modules.kernel.orchestration.submit_session"):
+            out = scheduler._tick_sessions()
+        self.assertEqual(out["degraded"], 1)
+        self.assertEqual(sc.docs[0]["status"], "paused_manual")
+
+    def test_tick_sessions_fresh_dispatching_not_reclaimed(self):
+        """新鲜 dispatching（心跳=当下，正常刚派发在途）绝不被回收——防 queued↔dispatching 抖动。"""
+        repo = _Repo(); set_repo(repo)
+        sc = repo.collection("intel_pentest_session")
+        sc.docs = [{"_id": "d3", "status": "dispatching",
+                    "update_date": time.strftime("%Y-%m-%d %H:%M:%S")}]
+        with mock.patch("sentinel_platform.modules.kernel.orchestration.submit_session"):
+            out = scheduler._tick_sessions()
+        self.assertEqual(out["stalled"], 0)
+        self.assertEqual(sc.docs[0]["status"], "dispatching")      # 保持在途，不误回收
 
     def test_tick_sessions_degrades_no_crash(self):
         set_repo(_Repo())

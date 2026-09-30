@@ -1,6 +1,13 @@
 ---
 type: 逻辑缺陷
-aliases: 业务逻辑漏洞, business logic, 逻辑漏洞, 竞态条件, race condition, 价格篡改, 越权支付, 薅羊毛, 优惠券滥用, 短信轰炸, 任意用户操作
+aliases: 业务逻辑漏洞, business logic, 逻辑漏洞, 价格篡改, 越权支付, 薅羊毛, 优惠券滥用, 任意用户操作
+stage: validation
+entry_points: [订单, 支付, 优惠券, 库存, 状态机]
+cwe_ids: [CWE-840, CWE-841]
+owasp_id: WSTG-BUSL
+severity_base: high
+chains_with: [race_condition, idor, rate_limit_bypass]
+tech_stack: [web]
 ---
 
 # 业务逻辑
@@ -13,9 +20,12 @@ aliases: 业务逻辑漏洞, business logic, 逻辑漏洞, 竞态条件, race co
 - **状态机跳步**:http_request 直接请求后面步骤接口、改 step 参数、回退已完成步骤重复领益。
 - **串联**:摸到的规律/工号段 `write_exploit_clue`;逻辑链 `record_chain_step`。
 
-## 什么算 confirmed(服务证据强制)
-真用异常路径拿到了不该拿的(0 元下单成功、券领多张、余额多了、跳过支付拿到货)——贴出成功的响应/状态。逻辑洞难自动取证,证据要能说清"违反了哪条业务约束、实际拿到什么"。
-> 注:验证竞态/薅羊毛的额度控制、是否触及真实资损/扰民,按你所在模式的规则(见本模式提示词),此处不复述。
 
-## 定级要点
-资损/绕过支付=高/critical;可规模化薅羊毛=高;短信轰炸/枚举=中。
+## 验证与反证
+先写出业务不变量与允许状态转换，以自有测试订单走通正常路径；响应显示成功后还要核对持久化订单、权益或账本。异步待处理与最终成功分开，避免把延迟同步当作逻辑漏洞。
+
+## 修复与复测
+在服务端验证状态转换与金额来源，以事务和幂等键保护一次性操作；复测正常流、重复回调、取消后重放及失败补偿，清理测试订单和权益。
+
+## 定级与阶段交接
+以 `query_finding_template` 的当前定级口径及已验证影响为准；`severity_base` 与 `chains_with` 不是漏洞成立、提权成功或自动升级的证据。证据不足记线索，未覆盖写明原因；完成后转 `post_assessment` 核对残留、修复及复测。

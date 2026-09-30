@@ -77,6 +77,8 @@ class Screenshot:
         self.url_prefix = (url_prefix or "/image").rstrip("/")
         self.timeout = timeout
         self.concurrency = max(1, int(concurrency))       # 下限保护；非上限（不砍 sites）
+        #: 资源门（pipeline 经 Tools 注入 / None）：作 chromium 兜底时也让位 AI（问题11）。
+        self.resource_gate = None
 
     # —— 二进制定位：显式路径 > external/phantomjs > PATH ————————
     def resolve_binary(self) -> str:
@@ -149,17 +151,40 @@ class Screenshot:
         if not targets:
             return {}
 
+        import threading
+        from . import _shot_quality
+        seen_md5 = set()
+        seen_lock = threading.Lock()
+
+        def _do_shot(site, fpath, argv):
+            try:
+                subprocess.run(argv, capture_output=True, timeout=self.timeout + 15)
+            except Exception:
+                return False
+            return True
+
         def _shot(site: str) -> Optional[Tuple[str, str]]:
             fname = safe_name(site) + ".jpg"
             fpath = os.path.join(out_dir, fname)
             argv = self.build_argv(binary, site, fpath)
-            try:
-                subprocess.run(argv, capture_output=True, timeout=self.timeout + 15)
-            except Exception:
+            gate = getattr(self, "resource_gate", None)
+            if gate is not None:
+                with gate("recon_screenshot") as h:
+                    if getattr(h, "degraded", False):
+                        return None
+                    ok = _do_shot(site, fpath, argv)
+            else:
+                ok = _do_shot(site, fpath, argv)
+            if not ok:
                 return None
-            if os.path.isfile(fpath) and os.path.getsize(fpath) > 0:
-                return (site, self.rel_url(task_id, fname))
-            return None
+            # 质量门（问题11）：过滤纯色/黑屏(phantomjs 对 SPA 恒黑屏) + md5 去重(同一空白图只存一份)
+            with seen_lock:
+                q = _shot_quality.assess_shot(fpath, seen_md5=seen_md5)
+                if not q.get("ok"):
+                    return None
+                if q.get("md5"):
+                    seen_md5.add(q["md5"])
+            return (site, self.rel_url(task_id, fname))
 
         result: Dict[str, str] = {}
         workers = min(self.concurrency, len(targets))

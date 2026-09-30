@@ -1,12 +1,12 @@
 #!/bin/bash
 # Watchtower installer / repair / uninstall
-# Usage: curl -kO http://124.222.145.172:5080/dist/install.sh && sudo bash install.sh
+# Usage: curl -kO https://watchtowers.info/dist/install.sh && sudo bash install.sh
 # NOTE: all user-facing output is English on purpose — a clean Linux box may lack a
 #       CJK locale/fonts, and Chinese text would render as mojibake. Keep it English.
 set -e
 
-SRC="${SENTINEL_SRC:-http://124.222.145.172:5080/dist}"
-BASE_URL="${SENTINEL_BASE:-http://124.222.145.172:5080}"
+SRC="${SENTINEL_SRC:-https://watchtowers.info/dist}"
+BASE_URL="${SENTINEL_BASE:-https://watchtowers.info}"
 CURL="curl -fSLk"
 INSTALL_DIR="${SENTINEL_HOME:-/opt/sentinel}"
 COMPOSE_DIR="${INSTALL_DIR}/sentinel/docker"
@@ -15,7 +15,7 @@ COMPOSE_DIR="${INSTALL_DIR}/sentinel/docker"
 # resolve_latest() fills the vars below; on failure it falls back to the /dist naming convention.
 VERSION=""          # resolved dynamically
 BUNDLE=""           # resolved dynamically (filename)
-BUNDLE_KIND=""      # image (full docker image, docker load) | bundle (source bundle, build)
+BUNDLE_KIND=""      # image (full docker image, docker load) — the only supported kind; source build has been removed
 LOGFILE="/tmp/sentinel-install.log"
 MIRRORS='["https://docker.m.daocloud.io","https://docker.1panel.live","https://docker.nju.edu.cn"]'
 
@@ -30,17 +30,10 @@ die(){ echo -e "\033[31m[ERROR]\033[0m $*" >&2; exit 1; }
 
 [ "$(id -u)" = "0" ] || { die "root privileges required (run: sudo bash install.sh)"; }
 
-# Detect whether this host can build the image itself (build context complete: Dockerfile + source + requirements).
-# Pure function (file-existence checks only, no external deps), defined before the menu so the
-# startup banner hint and do_build can both reuse it.
-can_build_locally() {
-    local ctx="$1"
-    [ -n "$ctx" ] && [ -f "$ctx/docker/Dockerfile" ] && [ -d "$ctx/sentinel_platform" ] && [ -f "$ctx/requirements.txt" ]
-}
-# Architecture gate: this platform is x86-64 only. The external recon tools (subfinder/httpx/naabu/
-# nuclei/phantomjs/mihomo...) and the vendored Python wheels are all prebuilt x86-64 artifacts, so a
-# local `compose build` cannot magically produce other-arch binaries. Non-x86-64 (ARM/MIPS/LoongArch/
-# RISC-V) is unsupported for BOTH source and image install. Returns 0 if supported.
+# Architecture gate: this platform is x86-64 only. The prebuilt image and the external recon tools
+# (subfinder/httpx/naabu/nuclei/phantomjs/mihomo...) bundled inside it are all amd64 artifacts, so
+# docker load on other arch fails or runs degraded. Non-x86-64 (ARM/MIPS/LoongArch/RISC-V) is
+# unsupported. Returns 0 if supported.
 check_arch() {
     local a; a="$(uname -m 2>/dev/null || echo unknown)"
     case "$a" in
@@ -49,50 +42,47 @@ check_arch() {
     esac
 }
 ARCH="$(uname -m 2>/dev/null || echo unknown)"
-# Source tree root of this script (when run via curl|bash, $0 is not a real path; probe failure -> empty,
-# which does not affect installing the cloud bundle).
-SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")"
-SRC_ROOT="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd || echo "")"
-if can_build_locally "$SRC_ROOT"; then BUILD_CAP=1; else BUILD_CAP=0; fi
 
 # ══════════════════════════════════════════
 # Menu
 # ══════════════════════════════════════════
+# Best-effort fetch of the latest version from the distribution system for display in the banner,
+# so the user knows which version they are about to install. Non-fatal: on failure show "unknown".
+# (resolve_latest() later does the authoritative fetch used for the actual download.)
+DISPLAY_VERSION="$(curl -fSLk -s "${BASE_URL}/dist/latest" 2>/dev/null \
+    | grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 \
+    | sed -E 's/.*"version"[^"]*"([^"]+)".*/\1/')"
+[ -n "$DISPLAY_VERSION" ] || DISPLAY_VERSION="unknown (offline?)"
+
 echo ""
 echo -e "\033[36m╔══════════════════════════════════════╗\033[0m"
 echo -e "\033[36m║         Watchtower Installer         ║\033[0m"
 echo -e "\033[36m╚══════════════════════════════════════╝\033[0m"
+echo -e "  \033[36mLatest version: \033[32m${DISPLAY_VERSION}\033[0m \033[36m(from ${BASE_URL})\033[0m"
 echo ""
-echo -e "  4) \033[32mSource install (Recommended)\033[0m — build the image locally from source: smaller download, auditable plaintext code, offline/intranet friendly"
-if [ "$BUILD_CAP" = "1" ]; then
-    echo -e "     \033[32msource ready: yes\033[0m (full source detected at $SRC_ROOT)"
-else
-    echo -e "     \033[33msource ready: no\033[0m (no local source; will fetch the source bundle from the distribution system, or run this script inside a full source dir)"
-fi
-echo "  1) Fresh install    — download prebuilt image (docker load) + overwrite all (reuse local image if latest)"
+echo -e "  1) \033[32mFresh install (Recommended)\033[0m — download the prebuilt image (docker load) + overwrite all (reuse local image if it is already the latest)"
 echo "  2) Repair install   — keep database, reinstall code + migrate config (reuse latest local image)"
 echo "  3) Uninstall        — stop services + delete all data"
 echo ""
 echo -e "  \033[36mArch: ${ARCH}\033[0m ($(check_arch && echo -e "\033[32msupported\033[0m" || echo -e "\033[31mUNSUPPORTED — x86-64 only\033[0m"))"
 echo ""
 
-if [ -n "$1" ] && echo "$1" | grep -qE "^[1234]$"; then
+if [ -n "$1" ] && echo "$1" | grep -qE "^[123]$"; then
     CHOICE="$1"
-elif [ "${SENTINEL_BUILD:-}" = "1" ]; then
-    CHOICE="4"     # env-var fallback (automation / unattended -> source install)
 else
-    # Read from /dev/tty (works when run as curl ... | bash where stdin is not a terminal). Empty input -> default 4 (recommended source install).
-    read -rp "Select [1/2/3/4] (default 4 = source install): " CHOICE </dev/tty 2>/dev/null \
-        || die "cannot read selection (piped run: pass an arg, e.g. bash install.sh 4|1|2|3, or set SENTINEL_BUILD=1)"
-    [ -z "$CHOICE" ] && CHOICE="4"
+    # Read from /dev/tty (works when run as curl ... | bash where stdin is not a terminal).
+    # No default: an empty/unreadable selection must NOT silently pick an install mode — a piped run
+    # that cannot prompt has to pass the mode as an arg (bash install.sh 1|2|3).
+    read -rp "Select [1/2/3] (no default — you must choose): " CHOICE </dev/tty 2>/dev/null \
+        || die "cannot read selection (piped run cannot prompt: pass the mode as an arg, e.g. bash install.sh 1)"
+    [ -n "$CHOICE" ] || die "no selection made; rerun and choose 1 (fresh), 2 (repair) or 3 (uninstall)"
 fi
 
 case "$CHOICE" in
     1) MODE="fresh" ;;
     2) MODE="repair" ;;
     3) MODE="uninstall" ;;
-    4) MODE="build" ;;
-    *) die "invalid selection, enter 1, 2, 3 or 4" ;;
+    *) die "invalid selection, enter 1, 2 or 3" ;;
 esac
 
 echo ""
@@ -122,6 +112,13 @@ resolve_latest() {
         BUNDLE="sentinel-image-latest.tar.gz"; BUNDLE_KIND="image"; VERSION="latest"
     fi
     [ -n "$BUNDLE_KIND" ] || BUNDLE_KIND="$(echo "$BUNDLE" | grep -q 'sentinel-image' && echo image || echo bundle)"
+    # This installer only supports the prebuilt-image kind. Source-bundle install has been removed:
+    # a local `compose build` needs the full source tree + Dockerfile, which a curl|bash new host does
+    # not have. If the distribution system ever advertises a non-image kind, stop clearly instead of
+    # silently falling into a build path that cannot succeed here.
+    if [ "$BUNDLE_KIND" != "image" ]; then
+        die "the distribution system returned bundle kind='${BUNDLE_KIND}' (${BUNDLE}), but this installer only supports the prebuilt image. Ask the operator to publish a sentinel-image-*.tar.gz to /dist."
+    fi
     ok "latest bundle: ${BUNDLE}  version: ${VERSION}  kind: ${BUNDLE_KIND}"
 }
 
@@ -249,9 +246,6 @@ download_and_extract() {
             if [ ! -f "$BUNDLE" ]; then
                 log "downloading bundle ${BUNDLE}..."
                 if ! $CURL "$SRC/$BUNDLE" -o "$BUNDLE"; then
-                    if [ "$BUILD_CAP" = "1" ]; then
-                        die "download failed: $SRC/$BUNDLE (distribution source unreachable?). Full source detected on this host — use option '4) Build locally' to build the image yourself."
-                    fi
                     die "download failed: $SRC/$BUNDLE (check that the distribution source $SRC is reachable)"
                 fi
                 ok "downloaded: $(ls -lh $BUNDLE | awk '{print $5}')"
@@ -287,28 +281,17 @@ download_and_extract() {
         [ -f sentinel/docker/docker-compose.yml ] || die "deploy package missing docker-compose.yml, aborting"
         ok "deploy files ready (compose/nginx/config sample)"
     else
-        # source-bundle mode: extract, then build the image locally via compose build
-        if [ ! -f "$BUNDLE" ]; then
-            log "downloading bundle ${BUNDLE}..."
-            $CURL "$SRC/$BUNDLE" -o "$BUNDLE" || die "download failed: $SRC/$BUNDLE"
-            ok "downloaded: $(ls -lh $BUNDLE | awk '{print $5}')"
-        fi
-        log "extracting source bundle..."
-        rm -rf sentinel
-        tar xzf "$BUNDLE" || die "extract failed"
-        ok "extracted"
+        # Only the prebuilt-image kind is supported; resolve_latest already rejects anything else, so this
+        # is unreachable in practice. Kept as a defensive guard so a future non-image kind can never fall
+        # through to an unsupported build path silently.
+        die "unsupported bundle kind '${BUNDLE_KIND}' (${BUNDLE}); this installer only handles the prebuilt image"
     fi
 }
 
 build_and_start() {
     cd "${COMPOSE_DIR}"
-    if [ "$BUNDLE_KIND" = "image" ]; then
-        log "full image already contains the runtime, skipping build, starting directly..."
-    else
-        log "building application image..."
-        $COMPOSE build --quiet 2>/dev/null || $COMPOSE build || die "image build failed"
-        ok "image build complete"
-    fi
+    # prebuilt image already contains the runtime (Chromium/proxy core/all recon tools) — no build step.
+    log "full image already contains the runtime, skipping build, starting directly..."
     log "starting the full stack..."
     $COMPOSE up -d || die "service start failed"
     ok "services started"
@@ -454,7 +437,7 @@ EOF
 do_fresh() {
     # Image install is x86-64 only (the prebuilt image is built for amd64; docker load on other arch fails or runs degraded).
     if ! check_arch; then
-        die "unsupported CPU architecture: ${ARCH}. The prebuilt image is x86-64 (amd64) only. ARM/MIPS/LoongArch/RISC-V are not supported yet (source install cannot help either — external tools are prebuilt x86-64)."
+        die "unsupported CPU architecture: ${ARCH}. The prebuilt image is x86-64 (amd64) only; ARM/MIPS/LoongArch/RISC-V are not supported yet."
     fi
     log "[fresh install] cleaning old residue..."
     stop_services
@@ -531,81 +514,12 @@ do_repair() {
         setup_config
     fi
 
-    # Start: image mode skips build; force-recreate ensures containers are rebuilt with the newly loaded image
-    # (force-recreate even on same tag, otherwise compose sees no change -> runs the old image -> repair has no effect)
-    if [ "$BUNDLE_KIND" != "image" ]; then
-        log "building application image..."
-        $COMPOSE build --quiet 2>/dev/null || $COMPOSE build || die "image build failed"
-    fi
+    # Start: the prebuilt image needs no build; force-recreate ensures containers are recreated with the
+    # newly loaded image (force-recreate even on the same tag, otherwise compose sees no change -> keeps
+    # running the old image -> repair has no effect).
     log "recreating and starting services (force-recreate)..."
     $COMPOSE up -d --force-recreate || die "service start failed"
     ok "services recreated and started (database preserved)"
-    if health_check; then print_success; else print_failure; exit 1; fi
-}
-
-# ══════════════════════════════════════════
-# Mode 4: build locally (build the image from local source, no cloud bundle)
-# ══════════════════════════════════════════
-do_build() {
-    log "[source install] building the image locally from source (recommended)..."
-    # —— arch gate (hard block) —— external tools + vendored wheels are prebuilt x86-64; a local build
-    # cannot produce other-arch binaries. Non-x86-64 is unsupported for source AND image install.
-    if ! check_arch; then
-        die "unsupported CPU architecture: ${ARCH}.
-This platform is x86-64 (amd64) only — the bundled recon tools (subfinder/httpx/naabu/nuclei/phantomjs/mihomo)
-and Python wheels are prebuilt for x86-64, and a local build cannot substitute other-arch binaries.
-Image install is x86-64 only too. ARM/MIPS/LoongArch/RISC-V are not supported yet."
-    fi
-    # Locate the build context: prefer the script's source tree, then the extracted source bundle dir,
-    # then auto-fetch the source bundle from the distribution system (source may not be local on curl|bash runs).
-    local CTX=""
-    if can_build_locally "$SRC_ROOT"; then
-        CTX="$SRC_ROOT"
-    elif can_build_locally "${INSTALL_DIR}/sentinel"; then
-        CTX="${INSTALL_DIR}/sentinel"
-    else
-        log "no local source found — trying to fetch the source bundle from the distribution system..."
-        resolve_latest
-        if [ "$BUNDLE_KIND" = "bundle" ]; then
-            download_and_extract          # source-bundle branch: download + extract to ${INSTALL_DIR}/sentinel
-            if can_build_locally "${INSTALL_DIR}/sentinel"; then
-                CTX="${INSTALL_DIR}/sentinel"
-            fi
-        fi
-        [ -n "$CTX" ] || die "no source available for source install.
-The distribution system has no source bundle yet (kind=${BUNDLE_KIND:-unknown}), and no local source was found.
-Options: (a) run this script from inside a full source directory, or (b) use '1) Fresh install' to pull the prebuilt image instead."
-    fi
-    ok "build context: $CTX (buildable)"
-    COMPOSE_DIR="$CTX/docker"
-    mkdir -p "$INSTALL_DIR"       # ensure .base_version is writable (on first local build /opt/sentinel may not exist yet)
-
-    # —— source-install exec-permission fix (verified via VM E2E) —— compose mounts the host source dir
-    # (../:/opt/sentinel/current) OVER the image, so the container runs the HOST external binaries, not the
-    # image's chmod'd ones. Source from git/tar keeps external/* as plain 0644 → mihomo/subfinder/nuclei/
-    # phantomjs all fail with "Permission denied" (mihomo restart-loops, recon tools silently degrade).
-    # Image install is immune (docker cp preserves the +x set by the Dockerfile). So for source install we
-    # must chmod +x the HOST external tree before starting the stack.
-    chmod -R +x "$CTX/external" 2>/dev/null || true
-    ok "external tool binaries marked executable (source-install permission fix)"
-
-    ensure_docker
-    stop_services
-
-    local BV; BV="$(cat "$CTX/version.txt" 2>/dev/null | head -1 | tr -d '[:space:]')"; [ -n "$BV" ] || BV="dev"
-    cd "$COMPOSE_DIR"
-    log "building image sentinel:base (BASE_VERSION=${BV}, bundles Chromium/tools, first build is slow)..."
-    # compose build.context already points at the source root, dockerfile at docker/Dockerfile; --build-arg injects the LABEL version
-    $COMPOSE build --build-arg BASE_VERSION="$BV" || die "image build failed"
-    echo "$BV" > "${INSTALL_DIR}/.base_version"   # sidecar marker matches image LABEL; later fresh/repair can version-compare and reuse
-    docker image prune -f >/dev/null 2>&1 || true   # clean dangling <none> layers from rebuild (align with image mode; avoid pile-up on repeated source installs)
-    ok "image build complete (version ${BV})"
-
-    setup_config
-    log "starting the full stack..."
-    $COMPOSE up -d || die "service start failed"
-    ok "services started"
-    VERSION="$BV"        # for print_success display
     if health_check; then print_success; else print_failure; exit 1; fi
 }
 
@@ -646,6 +560,5 @@ do_uninstall() {
 case "$MODE" in
     fresh) do_fresh ;;
     repair) do_repair ;;
-    build) do_build ;;
     uninstall) do_uninstall ;;
 esac

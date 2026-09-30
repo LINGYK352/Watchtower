@@ -23,14 +23,47 @@ ROLE_COLL = "role"
 
 
 def _salt() -> str:
-    """口令哈希盐：优先 config，回退固定值（部署应配 SALT）。"""
-    return str(get_config().section("SALT", default="") or
-               get_config().section("ARL", "SALT", default="") or "sentinel$alt")
+    """口令哈希盐：优先 SENTINEL.SALT（配置样例要求配的位置，AUD-14），兼容旧顶层 SALT / ARL.SALT，
+    最后回退固定值。此前只读顶层 SALT/ARL.SALT，用户按样例配 SENTINEL.SALT 不生效→静默用固定盐。"""
+    cfg = get_config()
+    return str(cfg.section("SENTINEL", "SALT", default="") or
+               cfg.section("SALT", default="") or
+               cfg.section("ARL", "SALT", default="") or "sentinel$alt")
 
 
 def hash_password(password: str) -> str:
-    """口令哈希：md5(password + salt)，不可逆存储。"""
+    """口令哈希：md5(password + salt)，不可逆存储。写入用当前有效盐（_salt 优先级见上）。"""
     return hashlib.md5((str(password) + _salt()).encode("utf-8")).hexdigest()
+
+
+def _legacy_salts() -> list:
+    """历史盐候选（用于平滑迁移，AUD-14）：改 _salt 优先级前，存量密码可能用这些盐哈希过。
+    登录时新盐验不过再按这些验，命中即用新盐重哈希回写，避免改盐锁死存量账户。去重且排除当前有效盐。"""
+    cfg = get_config()
+    cur = _salt()
+    cands = [
+        cfg.section("SALT", default=""),          # 旧顶层 SALT
+        cfg.section("ARL", "SALT", default=""),   # 更旧 ARL.SALT
+        "sentinel$alt",                            # 源码固定回退（多数未配盐的存量库用的就是它）
+    ]
+    seen, out = {cur}, []
+    for s in cands:
+        s = str(s or "")
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def _password_matches(doc: Dict[str, Any], password: str) -> bool:
+    """验密：先当前盐，再历史盐（迁移期）。任一命中即真。"""
+    stored = doc.get("password") or ""
+    if stored == hash_password(password):
+        return True
+    for salt in _legacy_salts():
+        if stored == hashlib.md5((str(password) + salt).encode("utf-8")).hexdigest():
+            return True
+    return False
 
 
 def gen_token(username: str) -> str:
@@ -72,11 +105,19 @@ class UserManageService:
         if not username or not password:
             return {"error": "用户名或密码为空"}
         doc = _users().find_one({"username": username})
-        if not doc or doc.get("password") != hash_password(password):
+        if not doc or not _password_matches(doc, password):
             return {"error": "用户名或密码错误"}
         if doc.get("disabled"):
             return {"error": "账号已禁用"}
         token = gen_token(username)
+        # 平滑迁移（AUD-14）：存量密码若用历史盐哈希（当前盐验不过但历史盐命中），
+        # 登录成功后用当前有效盐重哈希回写，逐步收敛到新盐；不锁死任何存量账户。
+        cur_hash = hash_password(password)
+        if doc.get("password") != cur_hash:
+            try:
+                _users().update_one({"username": username}, {"$set": {"password": cur_hash}})
+            except Exception as e:
+                logger.warning("password re-hash migrate failed for %s: %s", username, e)
         try:
             _users().update_one({"username": username},
                                 {"$set": {"token": token, "login_date": _now()}})
@@ -86,14 +127,31 @@ class UserManageService:
                 "permissions": rbac.resolve_perms(doc, _role_lookup)}
 
     def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """按 token 查用户（router 网关每请求调）。无效/禁用返回 None。"""
+        """按 token 查用户（router 网关每请求调）。无效/禁用/过期返回 None。"""
         if not token:
             return None
         doc = _users().find_one({"token": token})
         if not doc or doc.get("disabled"):
             return None
+        # 服务端 TTL（AUD-09）：token 超过有效期即失效，需重新登录。login_date 缺失（老会话）
+        # 视为不过期以兼容存量，下次登录会写入 login_date 后纳入 TTL。
+        if _token_expired(doc.get("login_date", "")):
+            return None
         return {"username": doc.get("username", ""), "role": doc.get("role", ""),
                 "permissions": rbac.resolve_perms(doc, _role_lookup), "via": "session"}
+
+    def revoke_token(self, token: str) -> Dict[str, Any]:
+        """登出（AUD-09）：按请求携带的 token 精确定位并清除服务端 token，旧持有者立即失效。
+        登出是 public 端点（网关未设 g.current_user），故只能凭 token 本身定位，不依赖用户名。
+        幂等：token 为空或查无对应用户也返回 ok（重复登出无副作用）。"""
+        if not token:
+            return {"ok": True, "revoked": False}
+        try:
+            r = _users().update_one({"token": token}, {"$set": {"token": ""}})
+            return {"ok": True, "revoked": bool(getattr(r, "modified_count", 0))}
+        except Exception as e:
+            logger.warning("revoke_token failed: %s", e)
+            return {"ok": True, "revoked": False}
 
     def change_password(self, username: str, old_pw: str, new_pw: str) -> Dict[str, Any]:
         doc = _users().find_one({"username": username})
@@ -199,6 +257,30 @@ class UserManageService:
 
 def _now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _token_ttl_seconds() -> int:
+    """token 有效期秒数（AUD-09）：config SENTINEL.TOKEN_TTL_HOURS（小时）优先，默认 168h(7天)。
+    配 0/负 = 关闭 TTL（不过期，向后兼容原行为）。"""
+    try:
+        h = get_config().section("SENTINEL", "TOKEN_TTL_HOURS", default=None)
+        h = 168 if h is None else int(h)
+    except (TypeError, ValueError):
+        h = 168
+    return h * 3600 if h > 0 else 0
+
+
+def _token_expired(login_date: str) -> bool:
+    """login_date（'%Y-%m-%d %H:%M:%S'）距今是否超过 TTL。缺失/无法解析/TTL 关闭 → 视为未过期
+    （兼容存量老会话；下次登录写入 login_date 后纳入 TTL）。"""
+    ttl = _token_ttl_seconds()
+    if ttl <= 0 or not login_date:
+        return False
+    try:
+        t = time.mktime(time.strptime(str(login_date), "%Y-%m-%d %H:%M:%S"))
+    except (ValueError, TypeError):
+        return False
+    return (time.time() - t) > ttl
 
 
 def _admin_count() -> int:

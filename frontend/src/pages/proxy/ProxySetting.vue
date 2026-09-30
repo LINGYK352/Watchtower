@@ -456,20 +456,50 @@ async function saveMode() {
     } catch (e) { message.error((e as Error).message) } finally { modeSaving.value = false }
     return
   }
-  // 启用代理：按全局/智能表单存
-  if (globalForm.enabled && globalForm.source.type === 'custom' && !globalForm.source.ref_id) { message.warning('全局代理选了自定义源，请选择一条自定义代理'); return }
-  if (smartForm.source.type === 'custom' && !smartForm.source.ref_id) { message.warning('智能代理选了自定义源，请选择一条自定义代理'); return }
+  // 启用代理：先做前置结构性校验（即时提示，不必等后端往返）——只查源是否为空，不探可达性。
+  const preErr = validateSourceLocal(globalForm.enabled ? globalForm.source : null, '全局代理')
+    || (isSourceConfigured(smartForm.source) ? validateSourceLocal(smartForm.source, '智能代理') : '')
+  if (preErr) { message.error(preErr); return }
   modeSaving.value = true
   try {
-    await proxyApi.saveConfig({
+    const res: any = await proxyApi.saveConfig({
       global_mode_enabled: globalForm.enabled,
       global_source: globalForm.source,
       smart_source: smartForm.source
     })
+    // 后端校验失败返回 {error}（HTTP 200，非异常），必须显式检查——否则空源会误报"已保存"
+    if (res && res.error) { message.error(res.error); return }
     message.success('平台代理模式已保存')
     // 需求3：勾选启用代理后立即探测一次出口，失效则明确提示（不等定时的10分钟）
     verifyAfterSave()
   } catch (e) { message.error((e as Error).message) } finally { modeSaving.value = false }
+}
+
+// 与后端 _source_configured 逐字一致：subscription 空 ref_id=默认占位=未配置(直连)
+function isSourceConfigured(src: ProxySource): boolean {
+  if (!src || !src.type) return false
+  if (src.type === 'subscription' && !src.ref_id) return false
+  if (src.type === 'custom' && !src.ref_id) return false
+  return true
+}
+// 前端源「结构性为空」前置校验（与后端 _validate_source_bound 对齐，只查空不探可达）。返回错误串（空=通过）。
+function validateSourceLocal(src: ProxySource | null, label: string): string {
+  if (!src || !src.type) return ''
+  if (src.type === 'custom') {
+    if (!src.ref_id) return `${label}选了「自定义代理」但未选择具体条目，请先选一条自定义代理再保存。`
+    if (!customs.value.some(c => c._id === src.ref_id && c.enabled)) return `${label}绑定的自定义代理不存在或已禁用，请重新选择一条可用的自定义代理。`
+    return ''
+  }
+  if (src.type === 'pool') {
+    const enabled = Number(poolStats.value?.enabled ?? 0), alive = Number(poolStats.value?.alive ?? 0)
+    if (!(enabled > 0 && alive > 0)) return `${label}选了「公共代理」但代理池当前无可用代理（启用 ${enabled} / 可用 ${alive}）。请先到「公共代理」抓取并验活，或改选其它代理源。`
+    return ''
+  }
+  if (src.type === 'subscription') {
+    if (!(status.value?.config as any)?.active_profile_id) return `${label}选了「内核代理」但尚未导入并激活任何机场订阅，请先在「内核代理」导入订阅并激活。`
+    return ''
+  }
+  return ''
 }
 
 // 保存代理模式后主动探测出口可达性并提示（勾选时测失效）

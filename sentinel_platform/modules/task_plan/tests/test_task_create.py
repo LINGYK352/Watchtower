@@ -110,14 +110,30 @@ class TaskCreateTest(unittest.TestCase):
         self.assertFalse(self._impl().create_by_policy("n", "p1", "")["ok"])
 
     # —— create_by_policy 主流程：域名 + IP 拆任务 + WAITING ——
-    def test_create_by_policy(self):
+    def test_create_by_policy_multi_target_single_task(self):
+        """v1.21.157-48：多目标(2域名+1IP)合并成**一篇**任务（此前拆 3 篇）。"""
         r = self._impl().create_by_policy("扫描A", "p1", "a.com, b.com, 8.8.8.8", priority=1)
         self.assertTrue(r["ok"])
-        self.assertEqual(r["created"], 3)                  # 2 域名 + 1 IP合并篇
-        for t in self._tasks():
-            self.assertEqual(t["status"], "waiting")
-            self.assertEqual(t["priority"], 1)
-            self.assertEqual(t["options"]["policy_name"], "测试策略")
+        self.assertEqual(r["created"], 1)                  # 多目标合一篇
+        tasks = self._tasks()
+        self.assertEqual(len(tasks), 1)
+        t = tasks[0]
+        self.assertEqual(t["status"], "waiting")
+        self.assertEqual(t["priority"], 1)
+        self.assertEqual(t["options"]["policy_name"], "测试策略")
+        # 全量目标按 ip/domain 分类存 options.multi_targets
+        mt = t["options"]["multi_targets"]
+        self.assertEqual(sorted(mt["domain"]), ["a.com", "b.com"])
+        self.assertEqual(mt["ip"], ["8.8.8.8"])
+        self.assertEqual(t["type"], "domain")              # 有域名 → 主类型 domain
+
+    def test_create_by_policy_single_target_unchanged(self):
+        """单目标行为不变：一篇，target=该目标，无 multi_targets。"""
+        r = self._impl().create_by_policy("扫描B", "p1", "only.com", priority=2)
+        self.assertEqual(r["created"], 1)
+        t = self._tasks()[0]
+        self.assertEqual(t["target"], "only.com")
+        self.assertNotIn("multi_targets", t["options"])
 
     # —— IP 任务关域名相关选项 ——
     def test_ip_task_disables_domain_opts(self):
@@ -165,6 +181,27 @@ class TaskCreateTest(unittest.TestCase):
         self.assertEqual(opts["pentest_whitelist"], ["admin.a.com", "test.a.com"])
         self.assertIn("mission_intel_raw", opts)
 
+    def test_primary_and_backup_provider_flow_to_all_task_kinds(self):
+        """首要/备用模型必须贯穿普通、源查询、单位三入口；单位入口也覆盖备用出口参数。"""
+        svc = self._impl()
+        svc.create_by_policy("普通", "p1", "a.com",
+                             pentest_provider_id="primary", pentest_backup_provider_id="backup")
+        opts = self._tasks()[-1]["options"]
+        self.assertEqual(opts["pentest_provider_id"], "primary")
+        self.assertEqual(opts["pentest_backup_provider_id"], "backup")
+
+        svc.create_from_targets("源", ["b.com"], "p1",
+                                pentest_provider_id="primary", pentest_backup_provider_id="backup")
+        self.assertEqual(self._tasks()[-1]["options"]["pentest_backup_provider_id"], "backup")
+
+        r = svc.create_unit_task("单位", ["某公司"], "p1",
+                                 pentest_provider_id="primary", pentest_backup_provider_id="backup",
+                                 pentest_fallback_egress_mode="direct")
+        self.assertTrue(r["ok"])
+        unit_opts = self._tasks()[-1]["options"]
+        self.assertEqual(unit_opts["pentest_backup_provider_id"], "backup")
+        self.assertEqual(unit_opts["pentest_fallback_egress"]["mode"], "direct")
+
     # —— source 归档贯穿（全空不写）——
     def test_source(self):
         self._impl().create_by_policy("扫描", "p1", "a.com", source={"unit": "某公司", "platform": "butian"})
@@ -185,12 +222,52 @@ class TaskCreateTest(unittest.TestCase):
     def test_create_from_targets_missing(self):
         self.assertFalse(self._impl().create_from_targets("n", [], "p1")["ok"])
 
-    # —— 禁硬限制：大量目标全建不砍 ——
+    def test_source_queries_archived(self):
+        """源查询语句随任务归档（供详情页展示）：source.sources/queries 落库。"""
+        r = self._impl().create_from_targets(
+            "FOFA导入", ["x.com"], "p1",
+            source={"platform": "multi_source", "sources": ["fofa", "hunter"],
+                    "queries": {"fofa": 'domain="x.com"', "hunter": 'ip="1.1.1.1"', "empty": ""}})
+        self.assertTrue(r["ok"])
+        src = self._tasks()[0]["source"]
+        self.assertEqual(src["sources"], ["fofa", "hunter"])
+        self.assertEqual(src["queries"]["fofa"], 'domain="x.com"')
+        self.assertEqual(src["queries"]["hunter"], 'ip="1.1.1.1"')
+        self.assertNotIn("empty", src["queries"])          # 空语句过滤
+
+    # —— 禁硬限制：大量目标全收不砍（v1.21.157-48：合一篇，200 目标全在 multi_targets 不丢）——
     def test_no_hard_limit_on_targets(self):
         many = ",".join("d{}.com".format(i) for i in range(200))
         r = self._impl().create_by_policy("批量", "p1", many)
-        self.assertEqual(r["created"], 200)               # 200 域名全建，无上限
-        self.assertEqual(len(self._tasks()), 200)
+        self.assertEqual(r["created"], 1)                 # 多目标合一篇
+        tasks = self._tasks()
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(len(tasks[0]["options"]["multi_targets"]["domain"]), 200)  # 200 目标全收无上限
+
+    # —— #3 上下文上限从策略移到新建任务：_apply_ctx_tokens 门控 + create_by_policy 透传 ——
+    def test_apply_ctx_tokens_gated_by_auto_pentest(self):
+        from sentinel_platform.modules.task_plan.task_create import TaskCreateServiceImpl as _Impl
+        # 策略未绑定 AI 渗透（auto_pentest=False）→ 不写入（上下文上限只对 AI 渗透有意义）
+        opts = {"auto_pentest": False}
+        _Impl._apply_ctx_tokens(opts, -1)
+        self.assertNotIn("max_context_tokens", opts)
+        # 绑定 AI 渗透（auto_pentest=True）→ 写入（-1=拉满原生上限 / 0=跟随全局 / 正数=固定）
+        opts2 = {"auto_pentest": True}
+        _Impl._apply_ctx_tokens(opts2, -1)
+        self.assertEqual(opts2["max_context_tokens"], -1)
+        opts3 = {"auto_pentest": True}
+        _Impl._apply_ctx_tokens(opts3, 256000)
+        self.assertEqual(opts3["max_context_tokens"], 256000)
+        # None（前端未传）→ 不覆盖策略值（向后兼容）
+        opts4 = {"auto_pentest": True, "max_context_tokens": 0}
+        _Impl._apply_ctx_tokens(opts4, None)
+        self.assertEqual(opts4["max_context_tokens"], 0)
+
+    def test_create_by_policy_passes_ctx_tokens(self):
+        # _FakePolicy 返回 auto_pentest=False → 传了上下文上限也不落（门控生效）
+        r = self._impl().create_by_policy("t", "p1", "a.com", pentest_max_context_tokens=-1)
+        self.assertTrue(r["ok"])
+        self.assertNotIn("max_context_tokens", self._tasks()[0]["options"])
 
 
 if __name__ == "__main__":

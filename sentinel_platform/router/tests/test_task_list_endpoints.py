@@ -83,6 +83,11 @@ class _MemRepo(Repository):
 
 class TaskListE2E(unittest.TestCase):
     def setUp(self):
+        from unittest.mock import patch
+        for name in ("auth_enabled", "activation_enforced"):
+            p = patch("sentinel_platform.router.gateway." + name, return_value=False)
+            p.start()
+            self.addCleanup(p.stop)
         reset_repo(); reset_registry(); set_repo(_MemRepo())
         from sentinel_platform.router import create_app
         self.app = create_app()

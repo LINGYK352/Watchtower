@@ -108,7 +108,203 @@ class DashboardServiceImpl:
             info["os_uptime_seconds"] = int(time.time() - ps.boot_time())
         except Exception:
             pass
+        # 资源分数 + 运行可靠性（像网络质量一样实时评估：当前资源是否适合系统运行）
+        info["resource"] = self._resource_score(info)
         return info
+
+    def _resource_score(self, info: Dict[str, Any]) -> Dict[str, Any]:
+        """资源健康评分 + 运行可靠性研判 —— **需求导向**（评"当前空闲资源够不够跑平台实际工作负载"，
+        不是抽象"用了百分之几"）。分数越高=越能随时接活；空闲=健康不扣分，快见底才扣。
+
+        三维各回答一个"够不够"的问题，档位与**真实并发调度逻辑同源**（不再仪表盘一套、调度另一套）：
+        - **内存**（最关键，真实并发闸）：不看用量%，看 **get_resource_budget().task_slots =「当前可用内存
+          还能起几个并发任务」**（调度器真实准入口径，按 可用内存/每任务预算×水位系数 算）。0 个=起不了
+          新任务=告急，这才是"收缩并发保命"该出现的地方。
+        - **CPU**（吞吐非硬闸，I/O 密集平台 CPU 少是瓶颈）：看 **loadavg1/核数**（真实排队压力），
+          不看瞬时 cpu%（抖动且不代表能否接活）。缺 loadavg（非 Linux）回退瞬时 cpu%。
+        - **磁盘**（产出写入底线）：以**绝对剩余 GB 为主**、用量% 为辅，取更差者。平台一直写扫描结果/
+          截图/报告/mongo/镜像/日志，一次大扫描产出可达 1~2GB——"剩 5.9GB"是真风险，同样 77% 在 500GB
+          盘上却没事，故绝对余量比百分比更务实（阈值可配 DISK_FREE_*_GB）。
+        headline 取三维**短板**（木桶效应，弱项决定可靠性）；verdict 按短板是谁+性质给可操作建议。
+        """
+        cpu_pct = float(info.get("cpu_percent", 0) or 0)
+        disk_pct = float(info.get("disk_percent", 0) or 0)
+        disk_free_gb = float((info.get("disk_usage", {}) or {}).get("free", 0) or 0) / (1024.0 ** 3)
+        cores = int(info.get("cpu_count", 0) or 0) or 1
+
+        def _cfg_num(key, default, cast=float):
+            try:
+                from sentinel_platform.core import get_config
+                v = get_config().section("RESOURCE", key, default=None)
+                return cast(v) if v is not None else default
+            except Exception:
+                return default
+
+        # 档位分锚点：充裕92 / 良好70 / 偏紧45 / 告急18（档内线性平滑，读数连续不跳变）
+        def _grade(value, excellent_at, good_at, tight_at, crit_at, higher_is_better=True):
+            """把一个"容量指标"映射成 0-100 分。higher_is_better=True 时 value 越大越健康
+            （如 task_slots、剩余GB）；False 时越小越健康（如 load/核数、用量%）。四个锚点按方向排序。"""
+            pts = [(excellent_at, 92), (good_at, 70), (tight_at, 45), (crit_at, 18)]
+            if higher_is_better:
+                if value >= excellent_at:
+                    return min(100, int(round(92 + (value - excellent_at) / max(excellent_at, 1) * 8)))
+                for i in range(len(pts) - 1):
+                    hi_v, hi_s = pts[i]; lo_v, lo_s = pts[i + 1]
+                    if value >= lo_v:
+                        frac = (value - lo_v) / max(hi_v - lo_v, 1e-6)
+                        return int(round(lo_s + (hi_s - lo_s) * max(0.0, min(1.0, frac))))
+                return max(3, int(round(18 * value / max(crit_at, 1e-6))))
+            else:
+                if value <= excellent_at:
+                    return min(100, int(round(92 + (excellent_at - value) / max(excellent_at, 1) * 8)))
+                for i in range(len(pts) - 1):
+                    hi_v, hi_s = pts[i]; lo_v, lo_s = pts[i + 1]
+                    if value <= lo_v:
+                        frac = (lo_v - value) / max(lo_v - hi_v, 1e-6)
+                        return int(round(lo_s + (hi_s - lo_s) * max(0.0, min(1.0, frac))))
+                return max(3, int(round(18 * crit_at / max(value, 1e-6))))
+
+        # —— 内存维：真实并发容量（能起几个任务）——
+        task_slots = None
+        try:
+            from sentinel_platform.contracts import get_registry
+            svc = get_registry().get("log_service")
+            if svc and hasattr(svc, "get_resource_budget"):
+                task_slots = int((svc.get_resource_budget() or {}).get("task_slots"))
+        except Exception:
+            task_slots = None
+        if task_slots is None:
+            # 降级：按可用内存/每任务预算粗算（psutil 缺失再退回内存%档）
+            try:
+                import psutil
+                avail_gb = (psutil.virtual_memory().available + getattr(psutil.swap_memory(), "free", 0)) / (1024.0 ** 3)
+                per = _cfg_num("TASK_MEM_GB", 1.5)
+                task_slots = int(avail_gb / max(0.25, per))
+            except Exception:
+                task_slots = None
+        if task_slots is not None:
+            # slots≥3 充裕 / 2 良好 / 1 偏紧 / 0 告急（对齐 _DEFAULT_BUDGETS：relaxed5 normal3 tight1 critical0）
+            mem_s = _grade(task_slots, 3, 2, 1, 0, higher_is_better=True)
+        else:
+            mem_pct = float(info.get("memory_percent", 0) or 0)
+            mem_s = _grade(mem_pct, _cfg_num("MEMORY_LOW", 60), _cfg_num("MEMORY_HIGH", 80),
+                           (_cfg_num("MEMORY_HIGH", 80) + _cfg_num("MEMORY_CRITICAL", 90)) / 2,
+                           _cfg_num("MEMORY_CRITICAL", 90), higher_is_better=False)
+
+        # —— CPU 维：loadavg/核数（真实排队压力）——
+        load1 = None
+        try:
+            import os as _os
+            if hasattr(_os, "getloadavg"):
+                load1 = _os.getloadavg()[0]
+        except Exception:
+            load1 = None
+        if load1 is not None:
+            load_ratio = load1 / max(1, cores)
+            cpu_s = _grade(load_ratio, 0.7, 1.0, 2.0, 3.0, higher_is_better=False)
+        else:
+            cpu_s = _grade(cpu_pct, 60, 85, 90, 95, higher_is_better=False)
+
+        # —— 磁盘维：绝对剩余 GB 为主 + 用量% 为辅，取更差 ——
+        free_excellent = _cfg_num("DISK_FREE_EXCELLENT_GB", 20.0)
+        free_good = _cfg_num("DISK_FREE_GOOD_GB", 8.0)
+        free_tight = _cfg_num("DISK_FREE_TIGHT_GB", 3.0)
+        free_crit = _cfg_num("DISK_FREE_CRIT_GB", 1.5)
+        disk_gb_s = _grade(disk_free_gb, free_excellent, free_good, free_tight, free_crit, higher_is_better=True)
+        disk_pct_s = _grade(disk_pct, 60, 85, 90, 95, higher_is_better=False)
+        disk_s = min(disk_gb_s, disk_pct_s)   # 取更差：绝对空间和百分比谁更告急听谁的
+
+        dims = {"cpu": cpu_s, "memory": mem_s, "disk": disk_s}
+
+        # ===== 三维加权融合 + 物理见底硬闸（v1.21.157-50 重构）=====
+        # 治两个真 bug（VM 实证 idle 机磁盘 5.7GB/78% 却恒 99「充裕」）：
+        #  ① 旧「水位档定 [lo,hi] 区间 + cap_short 线性落位」两层模型自我打架——relaxed 档地板 85
+        #     把量程压成 [85,100]，CPU/内存怎么动分数都钉在 99~100（"不实时动态"的根因）；
+        #  ② 磁盘被踢出总分（治恒76 的过度矫正）→ 算出磁盘维=58、disk_note 报"偏紧"，总分却无视 → headline 自相矛盾。
+        # 新模型：总分 = 三维加权(连续 0-100，任一维变化实时体现) 与 最弱维分 融合(弱项拖低总分、
+        # 不被均值稀释成"充裕")；再叠加物理"见底硬闸"守告急红线——磁盘绝对见底会写失败、内存 0 slots
+        # 停投，这类硬风险加权表达不了，必须封顶（守禁删信号维铁律，不重演恒22/恒76）。
+        W_CPU, W_MEM, W_DISK = 0.35, 0.35, 0.30
+        weighted = W_CPU * cpu_s + W_MEM * mem_s + W_DISK * disk_s
+        raw = 0.6 * weighted + 0.4 * float(min(cpu_s, mem_s, disk_s))   # 加权主体 + 最弱维拖低
+
+        # 取真实水位档（仅用于 critical 停投硬闸 + 展示 wl_level，不再定分数区间）
+        wl = ""
+        try:
+            from sentinel_platform.contracts import get_registry
+            svc = get_registry().get("log_service")
+            if svc and hasattr(svc, "get_resource_level"):
+                wl = str(svc.get_resource_level() or "")
+        except Exception:
+            wl = ""
+        wl = wl if wl in ("relaxed", "normal", "tight", "critical") else "normal"
+
+        # 物理见底硬闸（只封顶不抬升；用绝对量而非维分，与回归 GB 阈值对齐）：
+        cap = 100
+        if disk_free_gb < free_crit or disk_pct >= 95:        # 磁盘绝对见底 → 告急封顶
+            cap = 39
+        elif disk_free_gb < free_tight or disk_pct >= 90:     # 磁盘偏紧 → 偏紧封顶
+            cap = 64
+        if task_slots == 0 or wl == "critical":               # 内存 0 slots 停投 / 综合 critical → 告急
+            cap = min(cap, 39)
+        score = max(3, min(100, int(round(min(raw, cap)))))
+
+        # 档映射（前端 rv- 样式类保留 excellent/good/tight/critical）
+        if score >= 85:
+            rel_level, rel_text = "excellent", "资源充裕"
+        elif score >= 65:
+            rel_level, rel_text = "good", "运行良好"
+        elif score >= 40:
+            rel_level, rel_text = "tight", "资源偏紧"
+        else:
+            rel_level, rel_text = "critical", "资源告急"
+
+        # 短板 = 三维最弱者（verdict 据此给可操作建议）
+        weakest = "cpu" if (cpu_s <= mem_s and cpu_s <= disk_s) else ("memory" if mem_s <= disk_s else "disk")
+        # critical 成因优先判"停投/写失败"物理红线（回归：wl critical/0 slots 必含"收缩并发保命"）
+        mem_stall = (task_slots == 0 or wl == "critical")
+        disk_bottom = (disk_free_gb < free_crit or disk_pct >= 95)
+
+        # verdict：物理红线（停投/写失败）优先表达，其次按短板给可操作建议。
+        # "收缩并发保命" 严格绑 mem_stall（0 slots / 综合 critical=真停投），不滥用。
+        _slot_txt = "（当前可起 {} 个并发任务）".format(task_slots) if task_slots is not None else ""
+        if mem_stall:
+            verdict = "内存告急，已无法启动新任务（可起 {} 个），系统已收缩并发保命，建议扩容或减负".format(
+                task_slots if task_slots is not None else 0)
+        elif disk_bottom:
+            verdict = "磁盘仅剩 {:.1f}GB（{:.0f}%），请立即清理，否则扫描产出/报告/数据库可能写入失败".format(disk_free_gb, disk_pct)
+        elif rel_level == "excellent":
+            verdict = "资源充足，系统可高并发稳定运行" + _slot_txt
+        elif rel_level == "good":
+            verdict = "资源良好，适合系统正常运行" + _slot_txt
+        elif weakest == "disk":
+            verdict = "磁盘剩余 {:.1f}GB（{:.0f}%）偏紧，建议清理旧镜像/日志/扫描产物".format(disk_free_gb, disk_pct)
+        elif weakest == "memory":
+            verdict = "可用内存偏紧，当前仅够起 {} 个并发任务，系统已降低并发保稳定".format(
+                task_slots if task_slots is not None else "少量")
+        else:  # cpu
+            _lr = "（负载 {:.1f}×核数）".format(load1 / max(1, cores)) if load1 is not None else ""
+            verdict = "CPU 负载偏高{}，任务响应可能变慢".format(_lr)
+
+        # 磁盘单列提示（无论是否短板，偏紧都提醒，便于运维）——按绝对余量
+        if disk_free_gb < free_tight or disk_pct >= 95:
+            disk_note = "磁盘仅剩 {:.1f}GB（{:.0f}%），请尽快清理释放空间".format(disk_free_gb, disk_pct)
+        elif disk_free_gb < free_good or disk_pct >= 85:
+            disk_note = "磁盘剩余 {:.1f}GB（{:.0f}%）偏紧，建议清理旧镜像/日志/临时产物".format(disk_free_gb, disk_pct)
+        else:
+            disk_note = ""
+
+        return {
+            "score": score,
+            "level": rel_level,
+            "level_text": rel_text,
+            "verdict": verdict,
+            "dims": dims,
+            "task_slots": task_slots,       # 当前可起并发任务数（内存维依据）
+            "disk_free_gb": round(disk_free_gb, 1),
+            "disk_note": disk_note,
+            "wl_level": wl,                 # 真实水位档（评分档位的骨架，与并发调度同源）
+        }
 
     def _exit_ip_info(self) -> Dict[str, Any]:
         """出口 IP：代理启用且健康→代理出口；否则（未启用/代理异常）→ 实际直连出口 IP。
@@ -207,6 +403,19 @@ class DashboardServiceImpl:
         except Exception as exc:
             logger.debug("dashboard: resource_history query failed: %s", exc)
         return {"days": days, "points": points, "count": len(points)}
+
+    def resource_alert(self) -> Dict[str, Any]:
+        """当前资源水位明细（供前端弹窗轮询）。判定逻辑在 system/log_monitor（单一事实源），
+        经 registry 取 log_service 调用——不 import 叶子内部，守解耦。服务缺失/psutil 不可用降级
+        {level:'normal', dims:[]}（前端据此不弹窗）。"""
+        try:
+            from sentinel_platform.contracts import get_registry
+            svc = get_registry().get("log_service")
+            if svc and hasattr(svc, "get_resource_alert"):
+                return svc.get_resource_alert() or {}
+        except Exception as exc:
+            logger.debug("dashboard: resource_alert degraded: %s", exc)
+        return {"level": "normal", "dims": []}
 
 
 # —— 进程级单例 + registry 接入（字符串键，无 ROLE）——

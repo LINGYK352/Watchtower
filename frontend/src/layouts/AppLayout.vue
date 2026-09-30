@@ -31,16 +31,20 @@
           </div>
         </div>
         <a-space :size="16">
+          <BrokerDegradeTag />
           <TimezoneTag />
-          <a-tag v-if="licenseDays !== null && licenseDays > 0" color="green" style="cursor:pointer" @click="router.push('/about/activation')">
+          <!-- 激活时钟统一：activated/expired/revoked 为权威，remaining_days 用 ceil（剩<1天显示1天） -->
+          <a-tag v-if="licenseActivated && licenseDays !== null && licenseDays > 1" color="green" style="cursor:pointer" @click="router.push('/about/activation')">
             已激活 · 剩余 {{ licenseDays }} 天
           </a-tag>
-          <a-tag v-else-if="licenseDays === 0" color="red" style="cursor:pointer" @click="router.push('/about/activation')">
+          <a-tag v-else-if="licenseActivated && licenseDays === 1" color="orange" style="cursor:pointer" @click="router.push('/about/activation')">
+            即将到期 · 剩余 1 天
+          </a-tag>
+          <a-tag v-else-if="licenseExpired" color="red" style="cursor:pointer" @click="router.push('/about/activation')">
             授权已过期
           </a-tag>
-          <!-- BUG-005：移除旧「未激活(-1)」分支——它此前仅由 onUnauthorized(更新源鉴权失败)误置，
-               导致 SPA 跳转偶发闪「未激活」。激活状态以 /api/meta/activation 为唯一权威，null 时不显徽标(不闪)。 -->
-          <a-tag color="blue">{{ APP_VERSION }}</a-tag>
+          <!-- 未激活/无key时不显徽标，由 402 事件驱动的激活向导全屏阻断 -->
+          <a-tag color="blue">{{ serverVersion }}</a-tag>
           <a-button type="text" @click="router.push('/proxy')"><template #icon><GlobalOutlined /></template>代理中心</a-button>
           <button class="theme-toggle" :class="{ dark: isDark }" @click="toggleTheme"
             :title="isDark ? '切换到日间模式' : '切换到夜间模式'" aria-label="切换主题">
@@ -93,8 +97,17 @@
     <!-- 网络质量告警弹窗（体检分数<40 时弹，列排查项；每轮新自检仍<40 再弹）-->
     <NetQualityAlertModal />
 
+    <!-- 系统资源告警弹窗（内存/CPU/磁盘达 critical 时弹，列超标项+排查建议；回落后再恶化才再弹）-->
+    <ResourceAlertModal />
+
+    <!-- 激活到期提醒弹窗（剩余 ≤5 天时提醒续期，24h 最多弹一次，访问才触发）-->
+    <LicenseExpiryModal />
+
     <!-- 首次配置向导（激活 + AI 配置 + API 密钥，按步骤引导） -->
     <SetupWizard :force-show="forceActivation" />
+
+    <!-- DeepSeek 鲸鱼娘桌宠（全站游走，可拖可点，双击隐藏，右下角🐳召回） -->
+    <DeskPet />
   </a-layout>
 </template>
 
@@ -103,6 +116,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
+  AlertOutlined,
   ApiOutlined,
   AppstoreAddOutlined,
   AppstoreOutlined,
@@ -114,11 +128,13 @@ import {
   DeploymentUnitOutlined,
   ThunderboltOutlined,
   WechatOutlined,
+  MobileOutlined,
   NodeIndexOutlined,
   ApartmentOutlined,
   DownOutlined,
   ExperimentOutlined,
   FileSearchOutlined,
+  FileTextOutlined,
   GithubOutlined,
   GlobalOutlined,
   InfoCircleOutlined,
@@ -148,37 +164,58 @@ import {
 import { clearToken, getUser, getPerms } from '../api/request'
 import { userApi } from '../api/user'
 import { menuGroups } from '../router'
-import { APP_NAME, APP_NAME_EN, APP_VERSION } from '../config/brand'
+import { APP_NAME, APP_NAME_EN } from '../config/brand'
+import { useServerVersion } from '../composables/useServerVersion'
 import { checkActivation } from '../api/meta'
 import BrandLogo from '../components/BrandLogo.vue'
 import UpdateNotice from '../components/UpdateNotice.vue'
 import UpgradeNoticeModal from '../components/UpgradeNoticeModal.vue'
 import NetQualityAlertModal from '../components/NetQualityAlertModal.vue'
+import ResourceAlertModal from '../components/ResourceAlertModal.vue'
+import LicenseExpiryModal from '../components/LicenseExpiryModal.vue'
 import SetupWizard from '../components/SetupWizard.vue'
 import DisclaimerModal from '../components/DisclaimerModal.vue'
+import DeskPet from '../components/DeskPet.vue'
 import AnnouncementBar from '../components/AnnouncementBar.vue'
 import TimezoneTag from '../components/TimezoneTag.vue'
+import BrokerDegradeTag from '../components/BrokerDegradeTag.vue'
 import { useTheme } from '../composables/useTheme'
 
 const { isDark, toggleTheme } = useTheme()
+
+// 顶栏「当前版本」显示后端真实版本（version.txt），非编译进包的静态 APP_VERSION——
+// 跳板逐级更新时前端产物 brand 标签可能滞后/错配，运行时拉后端版本才准。
+const { serverVersion } = useServerVersion()
 
 const router = useRouter()
 const route = useRoute()
 const collapsed = ref(false)
 const openKeys = ref(menuGroups.map(group => group.key))
 const username = computed(() => getUser() || '管理员')
+const licenseActivated = ref(false)
+const licenseExpired = ref(false)
 const licenseDays = ref<number | null>(null)
 const forceActivation = ref(false)
 
 onMounted(async () => {
   try {
     const res = await checkActivation()
+    licenseActivated.value = res.activated || false
+    licenseExpired.value = res.expired || res.revoked || false
     if (res.activated) {
-      licenseDays.value = res.remaining_days ?? Math.max(0, Math.ceil((new Date(res.expires_at || '').getTime() - Date.now()) / 86400000))
-    } else if (res.expired) {
-      licenseDays.value = 0
+      // remaining_days 后端已用 ceil，activated 时至少为 1
+      licenseDays.value = res.remaining_days ?? Math.max(1, Math.ceil((new Date(res.expires_at || '').getTime() - Date.now()) / 86400000))
+    } else {
+      licenseDays.value = null
     }
   } catch { /* ignore */ }
+  // 后端网关对核心业务端点做激活硬门控，未激活/过期时返回 402。收到该事件说明用户点了「值钱功能」
+  // 但系统未激活——弹激活向导引导激活（与首登向导同一入口），并把徽标置为过期态。
+  window.addEventListener('sentinel:activation-required', () => {
+    forceActivation.value = true
+    licenseActivated.value = false
+    licenseExpired.value = true
+  })
 })
 
 function onUnauthorized() {
@@ -189,6 +226,7 @@ function onUnauthorized() {
 }
 
 const icons: Record<string, unknown> = {
+  AlertOutlined,
   ApiOutlined,
   AppstoreAddOutlined,
   AppstoreOutlined,
@@ -200,10 +238,12 @@ const icons: Record<string, unknown> = {
   DeploymentUnitOutlined,
   ThunderboltOutlined,
   WechatOutlined,
+  MobileOutlined,
   NodeIndexOutlined,
   ApartmentOutlined,
   ExperimentOutlined,
   FileSearchOutlined,
+  FileTextOutlined,
   GithubOutlined,
   GlobalOutlined,
   InfoCircleOutlined,

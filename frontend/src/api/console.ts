@@ -24,7 +24,24 @@ export interface ResourceHistoryResult {
   count: number
 }
 
+export interface ResourceAlertDim {
+  key: string      // memory | cpu | disk
+  label: string    // 内存 | CPU | 磁盘
+  value: number    // 当前使用率 %
+  level: string    // tight | critical
+}
+
+export interface ResourceAlertResult {
+  level: string                 // 综合水位 relaxed|normal|tight|critical
+  mem: number | null
+  cpu: number | null
+  disk: number | null
+  dims: ResourceAlertDim[]      // 超标维度（tight/critical）
+  ts: number                    // 判定时间戳（前端去重用）
+}
+
 export const consoleApi = {
   info: () => request<ConsoleInfo>(`/api/console/info`),
   resourceHistory: (days: number) => request<ResourceHistoryResult>(`/api/console/resource_history?days=${days}`),
+  resourceAlert: () => request<ResourceAlertResult>(`/api/console/resource_alert`),
 }

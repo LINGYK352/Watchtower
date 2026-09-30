@@ -57,7 +57,7 @@ def server_version() -> str:
     return str(v).strip() or _DEFAULT_SERVER_VERSION
 
 
-_DEFAULT_SOURCE_URL = "http://124.222.145.172:5080"   # 官方分发源（直连 update-source 端口，config 未配时 fallback）
+_DEFAULT_SOURCE_URL = "https://watchtowers.info"   # 官方分发源（直连 update-source 端口，config 未配时 fallback）
 
 
 def _update_source() -> Tuple[str, str, bool]:
@@ -94,13 +94,28 @@ def remote_version(source: str = "", key: str = "", timeout: int = _REMOTE_TIMEO
     last_err = None
     for attempt in range(max(1, retry)):
         try:
-            req = Request(src + "/version", headers={"X-Update-Key": key} if key else {})
+            _h = {"X-Client-Version": server_version()}   # 上报自身版本 → 分发源台阶闸据此区分新老客户端
+            if key:
+                _h["X-Update-Key"] = key
+            req = Request(src + "/version", headers=_h)
             with urlopen(req, timeout=timeout) as r:
                 data = json.loads(r.read().decode("utf-8", "replace"))
+            # 成功 → 通知云端重新认可（清除可能存在的吊销标记）
+            try:
+                from sentinel_platform.modules.system import activation
+                activation.note_remote_result("")
+            except Exception:
+                pass
             return str((data or {}).get("version", "") or "").strip(), ""
         except Exception as e:
             err_str = str(e)
             if "403" in err_str or "unauthorized" in err_str.lower():
+                # 云端一票否决：凭证失效 → 终结激活时钟
+                try:
+                    from sentinel_platform.modules.system import activation
+                    activation.note_remote_result("unauthorized")
+                except Exception:
+                    pass
                 return "", "unauthorized"   # 凭证问题确定性错误，重试无意义
             last_err = e
             if attempt < retry - 1:

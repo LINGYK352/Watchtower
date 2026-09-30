@@ -1,6 +1,6 @@
 <template>
   <PageContainer title="系统扩展" kicker="System Extensions"
-    description="扩展平台能力。AI 扩展是 AI 渗透可主动调用的工具；功能扩展是面向平台/人工使用的功能模块。">
+    description="扩展平台能力。「工具扩展」下分：AI 工具扩展=AI 渗透可主动调用的工具（据此生成 AI 工具表）；内核工具扩展=内核扫描时使用的工具（不进 AI 工具表）。">
     <a-alert type="warning" show-icon class="risk"
       message="本地 Python/二进制扩展等价于授予主机代码执行能力"
       description="仅上传可信扩展。平台以子进程、目标 scope、资源限制与审计降低风险，但无法证明黑盒程序不会自行越界。" />
@@ -20,57 +20,80 @@
           </a-space>
         </template>
 
-        <!-- AI 扩展 -->
-        <a-tab-pane key="ai" tab="AI 扩展">
-          <div class="hint">AI 渗透会话可主动调用的工具。内置能力随平台发布不可移除；已装 AI 工具扩展可启停，仅启用后 AI 才能看到并调用。上传的 .tar.gz 扩展包按其 manifest 的 ext_type 自动归入本类或功能扩展。</div>
-
-          <a-divider orientation="left" class="sec">内置能力（{{ builtin.length }}）</a-divider>
-          <div class="toolbar">
-            <span class="muted">共 {{ builtin.length }} 个内置工具，按功能分 {{ builtinGroups.length }} 类（随平台发布，不可移除）</span>
-          </div>
-          <!-- 按 7 类功能维度分组展示（与「AI 工具」页一致） -->
-          <div v-for="g in builtinGroups" :key="g.name" class="cat-block">
-            <a-divider orientation="left" class="cat-title">
-              {{ g.name }}<a-tag color="blue" style="margin-left:6px">{{ g.tools.length }}</a-tag>
-            </a-divider>
-            <div class="grid">
-              <div v-for="t in g.tools" :key="t.name" class="ext-card readonly">
-                <div class="c-head">
-                  <code class="c-name">{{ t.name }}</code>
-                  <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? '可调用' : '未接入' }}</a-tag>
-                </div>
-                <div class="c-cat">
-                  <a-tag :color="t.origin === 'third_party' ? 'orange' : 'cyan'" size="small">
-                    {{ t.origin === 'third_party' ? '第三方' : '自研' }}
-                  </a-tag>
-                  <span class="c-tag builtin">内置</span>
-                </div>
-                <div class="c-sum">{{ t.summary || t.description }}</div>
-                <div v-if="t.params && t.params.length" class="c-params">
-                  <span class="c-params-label">参数</span>
-                  <span v-for="p in t.params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
+        <!-- 工具扩展（原「AI 扩展」子页改名）：内含 AI 工具扩展 / 内核工具扩展 两个子 Tab -->
+        <a-tab-pane key="tools" tab="工具扩展">
+          <a-tabs v-model:activeKey="subTab" @change="onSubTab" size="small">
+            <!-- AI 工具扩展：AI 可调用的工具，据此生成 AI 工具表（内置工具 + 已装 AI 扩展，统一按功能分类展示，不再分隔） -->
+            <a-tab-pane key="ai" tab="AI 工具扩展">
+              <div class="hint">AI 渗透会话可主动调用的工具，平台据此生成 AI 工具表。内置工具随平台发布不可移除；已装 AI 扩展可启停，仅启用后 AI 才能看到并调用。上传的 .tar.gz 按其 manifest 的 ext_type 自动归入 AI 工具扩展或内核工具扩展。</div>
+              <div class="toolbar">
+                <span class="muted">共 {{ builtin.length + aiExts.length }} 个 AI 工具（内置 {{ builtin.length }} · 已装扩展 {{ aiExts.length }}），按功能分 {{ aiGroups.length }} 类</span>
+              </div>
+              <!-- 内置工具 + 已装 AI 扩展 合并按功能分类，去掉「内置能力/已装扩展」两段分隔 -->
+              <div v-for="g in aiGroups" :key="g.name" class="cat-block">
+                <a-divider orientation="left" class="cat-title">
+                  {{ g.name }}<a-tag color="blue" style="margin-left:6px">{{ g.builtin.length + g.exts.length }}</a-tag>
+                </a-divider>
+                <div class="grid">
+                  <!-- 内置工具卡（只读） -->
+                  <div v-for="t in g.builtin" :key="t.name" class="ext-card readonly">
+                    <div class="c-head">
+                      <code class="c-name">{{ t.name }}</code>
+                      <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? '可调用' : '未接入' }}</a-tag>
+                    </div>
+                    <div class="c-cat">
+                      <a-tag :color="t.origin === 'third_party' ? 'orange' : 'cyan'" size="small">
+                        {{ t.origin === 'third_party' ? '第三方' : '自研' }}
+                      </a-tag>
+                      <span class="c-tag builtin">内置</span>
+                    </div>
+                    <div class="c-sum">{{ t.summary || t.description }}</div>
+                    <div v-if="t.params && t.params.length" class="c-params">
+                      <span class="c-params-label">参数</span>
+                      <span v-for="p in t.params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
+                    </div>
+                  </div>
+                  <!-- 已装 AI 扩展卡（可启停/删除，同分类内并列） -->
+                  <ExtCard v-for="e in g.exts" :key="e.extension_id" :ext="e"
+                    @toggle="toggle" @detail="showDetail" @remove="remove" @check="check" />
                 </div>
               </div>
-            </div>
-          </div>
+            </a-tab-pane>
 
-          <a-divider orientation="left" class="sec">已装 AI 工具扩展（{{ aiExts.length }}）</a-divider>
-          <a-empty v-if="!aiExts.length" description="暂无已安装的 AI 工具扩展，点右上角「上传扩展」或「扩展商店」添加" />
-          <div v-else class="grid">
-            <ExtCard v-for="e in aiExts" :key="e.extension_id" :ext="e"
-              @toggle="toggle" @detail="showDetail" @remove="remove" @check="check" />
-          </div>
-        </a-tab-pane>
-
-        <!-- 功能扩展 -->
-        <a-tab-pane key="feature" tab="功能扩展">
-          <div class="hint">面向平台与人工使用的功能模块（如新数据源、报告格式、面板等）。功能扩展不进入 AI 工具表，AI 不会自动调用。</div>
-          <a-divider orientation="left" class="sec">已装功能扩展（{{ featureExts.length }}）</a-divider>
-          <a-empty v-if="!featureExts.length" description="暂无已安装的功能扩展，点右上角「上传扩展」或「扩展商店」添加" />
-          <div v-else class="grid">
-            <ExtCard v-for="e in featureExts" :key="e.extension_id" :ext="e"
-              @toggle="toggle" @detail="showDetail" @remove="remove" @check="check" />
-          </div>
+            <!-- 内核工具扩展（原「功能扩展」，ext_type=feature/both）：内核扫描时使用的工具，不进 AI 工具表 -->
+            <a-tab-pane key="feature" tab="内核工具扩展">
+              <div class="hint">内核扫描时使用的工具（内置扫描器/弱口令爆破/JS 挖掘 + 已装内核扩展）。内核内置工具全局禁用于 AI（易触发 WAF/封 IP）、由侦察/扫描 pipeline 调用、不可移除；公共扩展两边都注册。</div>
+              <div class="toolbar">
+                <span class="muted">共 {{ kernelBuiltin.length + featureExts.length }} 个内核工具（内置 {{ kernelBuiltin.length }} · 已装扩展 {{ featureExts.length }}）</span>
+              </div>
+              <!-- 内核内置工具（只读） + 已装内核扩展 合并为一个连续列表，去掉两段分隔 -->
+              <a-empty v-if="!kernelBuiltin.length && !featureExts.length" description="暂无内核工具，点右上角「上传扩展」或「扩展商店」添加" />
+              <div v-else class="grid">
+                <!-- 内核内置工具卡（只读，AI 禁用，不可移除） -->
+                <div v-for="t in kernelBuiltin" :key="t.name" class="ext-card readonly">
+                  <div class="c-head">
+                    <code class="c-name">{{ t.name }}</code>
+                    <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? '内核已接入' : '未接入' }}</a-tag>
+                  </div>
+                  <div class="c-cat">
+                    <a-tag :color="t.origin === 'third_party' ? 'orange' : 'cyan'" size="small">
+                      {{ t.origin === 'third_party' ? '第三方' : '自研' }}
+                    </a-tag>
+                    <span class="c-tag builtin">内置</span>
+                    <a-tag color="red" size="small">AI 禁用</a-tag>
+                  </div>
+                  <div class="c-sum">{{ t.summary || t.description }}</div>
+                  <div v-if="t.params && t.params.length" class="c-params">
+                    <span class="c-params-label">参数</span>
+                    <span v-for="p in t.params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
+                  </div>
+                </div>
+                <!-- 已装内核扩展卡（含公共扩展，可启停/删除） -->
+                <ExtCard v-for="e in featureExts" :key="e.extension_id" :ext="e"
+                  @toggle="toggle" @detail="showDetail" @remove="remove" @check="check" />
+              </div>
+            </a-tab-pane>
+          </a-tabs>
         </a-tab-pane>
 
         <!-- 运行日志 -->
@@ -86,13 +109,19 @@
 
     <!-- 扩展商店抽屉 -->
     <a-drawer v-model:open="storeOpen" title="扩展商店" width="640" @open="loadStore">
-      <a-alert v-if="storeError" type="info" :message="storeError" show-icon style="margin-bottom:12px" />
+      <a-alert v-if="storeError && storeAuthState !== 'ok'" type="warning" show-icon style="margin-bottom:12px">
+        <template #message>
+          {{ storeError }}
+          <a-button type="link" size="small" @click="$router.push('/about/activation')" style="padding:0 4px">前往激活</a-button>
+        </template>
+      </a-alert>
+      <a-alert v-else-if="storeError" type="info" :message="storeError" show-icon style="margin-bottom:12px" />
       <div class="toolbar"><span class="muted">使用统一 JWT 激活凭证访问扩展商店</span><a-button size="small" @click="loadStore">刷新</a-button></div>
       <a-empty v-if="!store.length && !storeError" description="商店暂无可用扩展" />
       <div class="grid">
         <div v-for="e in store" :key="e.extension_id" class="ext-card">
           <div class="c-head"><code class="c-name">{{ e.name || e.extension_id }}</code>
-            <a-tag :color="e.ext_type === 'feature' ? 'purple' : 'geekblue'" size="small">{{ e.ext_type === 'feature' ? '功能扩展' : 'AI 扩展' }}</a-tag>
+            <a-tag :color="e.ext_type === 'both' ? 'purple' : e.ext_type === 'feature' ? 'cyan' : 'geekblue'" size="small">{{ e.ext_type === 'both' ? '公共扩展' : e.ext_type === 'feature' ? '内核工具扩展' : 'AI 工具扩展' }}</a-tag>
           </div>
           <div class="c-cat"><a-tag color="blue" size="small">{{ e.category }}</a-tag><span class="muted">v{{ e.version }}</span></div>
           <div class="c-sum">{{ e.summary }}</div>
@@ -106,7 +135,7 @@
       <template v-if="detail">
         <a-descriptions :column="1" size="small" bordered>
           <a-descriptions-item label="扩展 ID"><code>{{ detail.extension_id }}</code></a-descriptions-item>
-          <a-descriptions-item label="类型">{{ detail.ext_type === 'feature' ? '功能扩展（平台功能）' : 'AI 扩展（AI 可调用工具）' }}</a-descriptions-item>
+          <a-descriptions-item label="类型">{{ detail.ext_type === 'both' ? '公共扩展（AI + 内核两边都注册）' : detail.ext_type === 'feature' ? '内核工具扩展（内核扫描工具）' : 'AI 工具扩展（AI 可调用工具）' }}</a-descriptions-item>
           <a-descriptions-item label="版本">{{ detail.version }}</a-descriptions-item>
           <a-descriptions-item label="分类">{{ detail.category }}</a-descriptions-item>
           <a-descriptions-item label="来源">{{ detail.source === 'store' ? '扩展商店' : '本地上传' }}（{{ detail.trust }}）</a-descriptions-item>
@@ -133,28 +162,35 @@ import PageContainer from '../../layouts/PageContainer.vue'
 import ExtCard from './ExtCard.vue'
 import { aiExtensionApi, type ExtensionItem, type BuiltinTool, type ExtParam } from '../../api/aiExtension'
 
-const tab = ref('ai')
+const tab = ref('tools')       // 顶层：tools 工具扩展 / logs 运行日志
+const subTab = ref('ai')       // 工具扩展内子 Tab：ai AI工具扩展 / feature 内核工具扩展
 const builtin = ref<BuiltinTool[]>([])
 const aiExts = ref<ExtensionItem[]>([])
 const featureExts = ref<ExtensionItem[]>([])
+const kernelBuiltin = ref<BuiltinTool[]>([])   // 内核内置工具（只读，AI 禁用）
 const store = ref<ExtensionItem[]>([])
 const logs = ref<Record<string, unknown>[]>([])
 const storeError = ref('')
+const storeAuthState = ref<'ok' | 'unauthorized' | 'no_key'>('ok')
 const storeOpen = ref(false)
 const detailOpen = ref(false)
 const detail = ref<ExtensionItem | null>(null)
 const logFilter = ref('')
 
-// 内置能力按 7 类功能维度分组展示（与「AI 工具」页 CAT_ORDER 一致；未登记的新分类排最后不丢）
+// AI 扩展统一按功能分类展示（内置工具 + 已装 AI 扩展合并，去掉「内置能力/已装扩展」两段分隔）。
+// 与「AI 工具」页 CAT_ORDER 一致；未登记的新分类排最后不丢。每类含 builtin(内置只读) + exts(已装可管)。
 const CAT_ORDER = ['资产收集', '漏洞验证', '情报查询', '情报回写', '带外通道', '浏览器', '内网后渗透']
-const builtinGroups = computed(() => {
-  const map = new Map<string, BuiltinTool[]>()
-  for (const t of builtin.value) {
-    if (!map.has(t.category)) map.set(t.category, [])
-    map.get(t.category)!.push(t)
+const aiGroups = computed(() => {
+  const map = new Map<string, { builtin: BuiltinTool[]; exts: ExtensionItem[] }>()
+  const ensure = (cat: string) => {
+    const k = cat || '其他'
+    if (!map.has(k)) map.set(k, { builtin: [], exts: [] })
+    return map.get(k)!
   }
+  for (const t of builtin.value) ensure(t.category).builtin.push(t)
+  for (const e of aiExts.value) ensure(e.category).exts.push(e)
   return Array.from(map.entries())
-    .map(([name, tools]) => ({ name, tools }))
+    .map(([name, g]) => ({ name, builtin: g.builtin, exts: g.exts }))
     .sort((a, b) => {
       const ia = CAT_ORDER.indexOf(a.name), ib = CAT_ORDER.indexOf(b.name)
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
@@ -178,16 +214,20 @@ const logColumns = [
 
 async function loadBuiltin() { try { builtin.value = (await aiExtensionApi.builtin()).tools || [] } catch (e) { message.error(String(e)) } }
 async function loadAi() { try { aiExts.value = (await aiExtensionApi.list({ ext_type: 'ai' })).items || [] } catch (e) { message.error(String(e)) } }
+async function loadKernelBuiltin() { try { kernelBuiltin.value = (await aiExtensionApi.builtinKernel()).tools || [] } catch (e) { message.error(String(e)) } }
 async function loadFeature() { try { featureExts.value = (await aiExtensionApi.list({ ext_type: 'feature' })).items || [] } catch (e) { message.error(String(e)) } }
 async function loadLogs() { try { logs.value = (await aiExtensionApi.logs({ extension_id: logFilter.value, size: 50 })).items || [] } catch (e) { message.error(String(e)) } }
-async function loadStore() { storeError.value = ''; try { const r = await aiExtensionApi.store(); store.value = r.items || []; storeError.value = r.error || '' } catch (e) { storeError.value = e instanceof Error ? e.message : String(e) } }
+async function loadStore() { storeError.value = ''; storeAuthState.value = 'ok'; try { const r = await aiExtensionApi.store(); store.value = r.items || []; storeError.value = r.error || ''; storeAuthState.value = r.auth_state || 'ok' } catch (e) { storeError.value = e instanceof Error ? e.message : String(e); storeAuthState.value = 'ok' } }
 function openStore() { storeOpen.value = true; loadStore() }
 
-function onTab(k: string) { if (k === 'ai') { loadBuiltin(); loadAi() } else if (k === 'feature') loadFeature(); else loadLogs() }
-function refreshCurrent() { onTab(tab.value) }
+// 顶层 Tab：tools 进入时按当前子 Tab 载数据；logs 载日志
+function onTab(k: string) { if (k === 'tools') onSubTab(subTab.value); else loadLogs() }
+// 子 Tab：ai 载内置+已装AI扩展；feature 载内核工具扩展
+function onSubTab(k: string) { if (k === 'feature') { loadKernelBuiltin(); loadFeature() } else { loadBuiltin(); loadAi() } }
+function refreshCurrent() { tab.value === 'logs' ? loadLogs() : onSubTab(subTab.value) }
 
 function upload(file: File) {
-  Modal.confirm({ title: '确认授予扩展执行权限？', content: `将安装 ${file.name}。仅上传你完全信任的代码。扩展 manifest 的 ext_type 决定归入 AI 扩展或功能扩展。`, okType: 'danger',
+  Modal.confirm({ title: '确认授予扩展执行权限？', content: `将安装 ${file.name}。仅上传你完全信任的代码。扩展 manifest 的 ext_type 决定归入 AI 工具扩展 / 内核工具扩展 / 公共扩展(both,两边都注册)。`, okType: 'danger',
     async onOk() { try { await aiExtensionApi.upload(file); message.success('扩展已安装，兼容后可手工启用'); loadAi(); loadFeature() } catch (e) { message.error(String(e)) } } })
   return false
 }

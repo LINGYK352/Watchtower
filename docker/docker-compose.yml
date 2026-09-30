@@ -38,6 +38,11 @@ services:
       RABBITMQ_DEFAULT_USER: sentinel
       RABBITMQ_DEFAULT_PASS: sentinelpassword
       RABBITMQ_DEFAULT_VHOST: /sentinelhost
+      # consumer_timeout 调到 12h（默认 30min）：AI 渗透会话设计上可跑几百轮 >30min，晚 ack(见 worker
+      # 侧 task_acks_late 已改早 ack)兜底 + 此处再调大双保险。默认 30min 下长会话 ack 超时 → RabbitMQ 断
+      # channel(PreconditionFailed 406) → consumer 主循环 Unrecoverable 崩(问题14 稳定引爆)。用原生
+      # ERL_ARGS 注入(不新增 rabbitmq.conf 挂载文件——热更新 _TRACK_FILES 不含它、存量用户拿不到会挂载失败)。
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit consumer_timeout 43200000"
     volumes: *tz-volumes
 
   # mihomo 代理内核：**独立容器**（2026-08 改造，根治端口冲突 + web 重启连带停 worker/scheduler + 容器

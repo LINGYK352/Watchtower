@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
+  <title id="title">Watchtower assessment workflow</title>
+  <desc id="desc">A conceptual flow from assets to AI reasoning, validation and evidence. No live customer data.</desc>
+  <rect width="1200" height="390" rx="24" fill="#101622"/>
+  <path d="M0 105H1200M0 290H1200" stroke="#202d40"/>
+  <g font-family="Segoe UI,Arial,sans-serif">
+    <text x="52" y="52" fill="#19d3ee" font-size="13" font-weight="600" letter-spacing="3">WATCHTOWER</text>
+    <text x="52" y="85" fill="#eef3f9" font-size="23" font-weight="600">A clear path from attack surface to evidence.</text>
+    <text x="1148" y="54" text-anchor="end" fill="#8294ab" font-size="11" letter-spacing="2">SELF-HOSTED / HUMAN + AI</text>
+    <g fill="#172233" stroke="#2a3b52">
+      <rect x="52" y="137" width="245" height="120" rx="12"/>
+      <rect x="336" y="137" width="245" height="120" rx="12"/>
+      <rect x="620" y="137" width="245" height="120" rx="12"/>
+      <rect x="904" y="137" width="245" height="120" rx="12"/>
+    </g>
+    <g fill="none" stroke="#19d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M306 197h20m-6-6 6 6-6 6M590 197h20m-6-6 6 6-6 6M874 197h20m-6-6 6 6-6 6"/>
+    </g>
+    <g fill="#19d3ee" font-size="12" font-weight="600" letter-spacing="2">
+      <text x="74" y="165">01 / DISCOVER</text><text x="358" y="165">02 / REASON</text>
+      <text x="642" y="165">03 / VALIDATE</text><text x="926" y="165">04 / DOCUMENT</text>
+    </g>
+    <g fill="#eef3f9" font-size="23" font-weight="600">
+      <text x="74" y="205">Assets</text><text x="358" y="205">AI sessions</text>
+      <text x="642" y="205">Observations</text><text x="926" y="205">Evidence</text>
+    </g>
+    <g fill="#9aacc1" font-size="13">
+      <text x="74" y="233">Hosts / services / context</text><text x="358" y="233">Tools / reasoning / intervention</text>
+      <text x="642" y="233">Requests / responses / review</text><text x="926" y="233">Findings / reports / retesting</text>
+    </g>
+    <g fill="#9aacc1" font-size="12">
+      <text x="52" y="330">Private deployment</text><text x="281" y="330">Traceable workflows</text>
+      <text x="530" y="330">Human collaboration</text><text x="809" y="330">Reusable intelligence</text>
+    </g>
+    <text x="52" y="365" fill="#60768f" font-size="10" letter-spacing="1">CONCEPTUAL WORKFLOW — NOT LIVE METRICS OR A PRODUCT SCREENSHOT</text>
+  </g>
+</svg>

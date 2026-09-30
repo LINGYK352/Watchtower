@@ -138,6 +138,20 @@ def _norm_scope_drift_level(v: Any) -> int:
     return v if v in _SCOPE_DRIFT_LEVELS else 2
 
 
+def _norm_ctx_tokens(v: Any) -> int:
+    """单会话上下文上限归一：0=跟随全局默认，-1=原生上限哨兵，正数=显式 token（<1000 误填归 0）。
+    不设上界（守禁硬限制铁律）——运行时引擎按语义解析（见 ai_pentest/_engine 上下文限位器）。"""
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return 0
+    if n < 0:
+        return -1
+    if 0 < n < 1000:
+        return 0
+    return n
+
+
 # —— 端口语法校验（格式合法 + 端口号 0-65535）——
 def build_port_custom(port_custom: str):
     """解析自定义端口串为列表；非法项返回该项字符串（调用方据此报错）。"""
@@ -199,6 +213,23 @@ def _validate_plugin_config(config: List[Dict[str, Any]]):
     return out
 
 
+def _norm_collect_sources(value: Any) -> List[str]:
+    """归一广域 API 收集源选择：只接受非空字符串数组，保持顺序并去重。
+
+    策略层不硬编码来源白名单；可用来源由 API 密钥页定义，运行时再按凭据与适配器过滤。
+    """
+    if not isinstance(value, list):
+        return []
+    out: List[str] = []
+    seen = set()
+    for item in value:
+        source_id = str(item or "").strip().lower()
+        if source_id and source_id not in seen:
+            seen.add(source_id)
+            out.append(source_id)
+    return out
+
+
 def _merged(default: Dict[str, Any], override: Any) -> Dict[str, Any]:
     """默认值 + 用户覆盖（用户值透传不砍，守禁止硬限制参数）。"""
     d = dict(default)
@@ -210,14 +241,22 @@ def _merged(default: Dict[str, Any], override: Any) -> Dict[str, Any]:
 class PolicyServiceImpl:
     """策略配置能力（无 ROLE，字符串键 policy_service 注册）。"""
 
-    def list_policies(self, name: Optional[str] = None, page: int = 1, size: int = 10) -> Dict[str, Any]:
-        """策略列表（可按名称模糊 + 分页）。size 缺省 10 仅默认，传入多大都透传不砍（无硬限制）。"""
+    def list_policies(self, name: Optional[str] = None, page: int = 1, size: int = 10,
+                      _id: Optional[str] = None) -> Dict[str, Any]:
+        """策略列表（可按名称模糊 / 按 _id 精确 + 分页）。size 缺省 10 仅默认，传入多大都透传不砍（无硬限制）。
+        **_id 精确过滤**（治编辑页加载错策略：PolicyEdit 用 list({_id}) 取目标策略，此前忽略 _id 返最新那条）。"""
         try:
             page = max(1, int(page or 1))
             size = max(1, int(size or 10))
         except (TypeError, ValueError):
             page, size = 1, 10
         q: Dict[str, Any] = {}
+        _pid = str(_id or "").strip()
+        if _pid:
+            oid = _oid(_pid)
+            if oid is None:
+                return {"items": [], "total": 0, "page": page, "size": size}
+            q["_id"] = oid
         if name:
             q["name"] = {"$regex": re.escape(str(name).strip()), "$options": "i"}
         try:
@@ -275,16 +314,32 @@ class PolicyServiceImpl:
                                             policy.get("scan_proxy", "direct"), "scan"),
                 "pentest_egress": _norm_egress(policy.get("pentest_egress"),
                                                policy.get("pentest_proxy", "smart"), "pentest"),
+                # AI 封禁备用出口：主出口被目标封禁时，AI 可自主切到此备用出口继续（也按模式选，默认智能）。
+                # 是给 AI 的一个「选项」——用不用由 AI 判断，非引擎强制自动切。
+                "pentest_fallback_egress": _norm_egress(policy.get("pentest_fallback_egress"),
+                                                        "smart", "pentest"),
                 "scope_config": _merged(SCOPE_CONFIG_DEFAULT, policy.get("scope_config")),
                 "dedup_level": _norm_dedup_level(policy.get("dedup_level", 2)),
                 "scope_drift_level": _norm_scope_drift_level(policy.get("scope_drift_level", 2)),
                 "intel_enabled": bool(policy.get("intel_enabled", True)),
+                "honeypot_detection": bool(policy.get("honeypot_detection", True)),
+                # 单会话上下文上限（AI 渗透）：0=跟随 AI 配置全局默认，-1=原生上限（引擎按模型解析），
+                # 正数=显式 token。不设死上界（守禁硬限制铁律），运行时引擎按语义解析。
+                "max_context_tokens": _norm_ctx_tokens(policy.get("max_context_tokens", 0)),
             },
             "desc": str(desc or ""),
             "update_date": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
+        # 缺失与 [] 语义不同：缺失=存量策略，运行时使用全部已配置源；[]=用户明确全不选。
+        if "collect_sources" in policy:
+            item["policy"]["collect_sources"] = _norm_collect_sources(policy.get("collect_sources"))
         try:
-            res = get_repo().collection(Collections.POLICY).insert_one(item)
+            coll = get_repo().collection(Collections.POLICY)
+            # 纵深防御：拒绝新建同名策略（治「编辑现有策略却走 add → 产生同名重复」bug）。
+            # 编辑请走 edit_policy(按 _id 更新)；新建撞名给明确引导，不静默产生重复。
+            if coll.find_one({"name": name}):
+                return {"ok": False, "error": "策略名「{}」已存在，请换个名称，或直接编辑现有策略".format(name)}
+            res = coll.insert_one(item)
             return {"ok": True, "policy_id": str(getattr(res, "inserted_id", ""))}
         except Exception as exc:
             logger.debug("policy: add failed: %s", exc)
@@ -311,6 +366,8 @@ class PolicyServiceImpl:
                         item[k] = policy_data[k]
             pol = item.get("policy", {})
             if isinstance(pol, dict):
+                if "collect_sources" in pol:
+                    pol["collect_sources"] = _norm_collect_sources(pol.get("collect_sources"))
                 for cfg_key in ("poc_config", "brute_config"):
                     if cfg_key in pol:
                         validated = _validate_plugin_config(pol.get(cfg_key) or [])
@@ -388,4 +445,3 @@ _service = PolicyServiceImpl()
 
 def get_service() -> PolicyServiceImpl:
     return _service
-

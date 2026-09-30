@@ -87,12 +87,10 @@ def _finger_version(site_item: Dict[str, Any]) -> str:
 
 
 def _fld_of(hostname: str) -> str:
-    """粗取主域（末两段；净室轻量，不引 tld 库）。IP/单段原样返回。"""
-    h = (hostname or "").strip().lower().split(":")[0]
-    if not h or h.replace(".", "").isdigit():
-        return h
-    parts = h.split(".")
-    return ".".join(parts[-2:]) if len(parts) >= 2 else h
+    """粗取主域。委托 core.domains.extract_fld（三处 fld 共用同一权威二级后缀表，缺陷4）。
+    多级公共后缀（gov.cn/edu.cn/com.cn 等）取三段（abc.gov.cn→abc.gov.cn，不打歪），否则末两段。"""
+    from sentinel_platform.core import extract_fld as _core_fld
+    return _core_fld(hostname)
 
 
 def _system_tags_svc():
@@ -228,14 +226,16 @@ def models_now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _fallback_unit(task_name: str, target: str) -> str:
-    """无单位名且收集不到时的默认单位名：`任务名_目标名`，其中 `.` 用 `_` 代替。
-    任务名/目标名缺失时降级用另一个；都空则返回空（调用方兜底）。单位视图据此展示。"""
-    tn = (task_name or "").strip().replace(".", "_")
-    tg = (target or "").strip().replace(".", "_")
-    if tn and tg:
-        return "{}_{}".format(tn, tg)
-    return tn or tg
+def _fallback_unit(task_name: str, fld: str = "") -> str:
+    """无用户单位名且 ICP 反查不到时的默认单位名（v1.21.157-48 去碎片化）。
+
+    **优先任务名**（一个任务的资产落同一单位桶）；任务名缺失才退主域 fld（同主域聚一起）。
+    此前用 `任务名_目标名(host)` → 每个 host 一个桶，单位视图碎成一堆单资产"单位"（负优化）。
+    现在不再拼具体 host：单位归属回答"这批资产属于谁"，粒度应是任务/主域，不是每个子域各自成单位。"""
+    tn = (task_name or "").strip()
+    if tn:
+        return tn
+    return (fld or "").strip()
 
 
 def upsert_asset(site_item: Dict[str, Any], unit: str = "", task_id: str = "",
@@ -253,9 +253,10 @@ def upsert_asset(site_item: Dict[str, Any], unit: str = "", task_id: str = "",
     fld = site_item.get("fld", "") or _fld_of(hostname)
     if not unit and unit_map and fld:
         unit = unit_map.get(fld, "") or ""
-    # 无单位名且收集不到（ICP/unit_map 都空）→ 回退"任务名_目标名"（. 换 _），保证单位视图不落"无单位"
+    # 无单位名且收集不到（ICP/unit_map 都空）→ 回退**任务名**（缺则主域 fld），保证同任务/同主域资产
+    # 落同一单位桶，不再按 host 碎片化（v1.21.157-48 治单位视图负优化）。
     if not unit:
-        unit = _fallback_unit(task_name, hostname or asset_key)
+        unit = _fallback_unit(task_name, fld)
 
     now = models_now()
     try:
@@ -309,7 +310,7 @@ def upsert_asset(site_item: Dict[str, Any], unit: str = "", task_id: str = "",
 
 # ========== INTEL 契约 ==========
 
-def collect_from_task(task_id: str) -> Dict[str, Any]:
+def collect_from_task(task_id: str, site_rows=None) -> Dict[str, Any]:
     """从任务 site 结果归集资产（幂等：按 asset_key 归并）。契约返回摘要 dict。"""
     if not task_id:
         return {"error": "task_id 必填"}
@@ -321,7 +322,8 @@ def collect_from_task(task_id: str) -> Dict[str, Any]:
         unit = (src.get("unit") if isinstance(src, dict) else "") or ""
         unit_map = (task or {}).get("unit_map", {}) or {}
         total, new_cnt, sys_ids, asset_keys = 0, 0, set(), []
-        for site_item in repo.collection(Collections.SITE).find({"task_id": task_id}):
+        rows = repo.collection(Collections.SITE).find({"task_id": task_id}) if site_rows is None else site_rows
+        for site_item in rows:
             total += 1
             ret = upsert_asset(site_item, unit=unit, task_id=task_id, task_name=task_name, unit_map=unit_map)
             if ret["is_new"]:
@@ -354,19 +356,21 @@ def _parse_mission_intel(options: Dict[str, Any]) -> List[Dict[str, Any]]:
         return []
 
 
-def auto_collect_after_scan(task_id: str) -> Dict[str, Any]:
+def auto_collect_after_scan(task_id: str, site_rows=None) -> Dict[str, Any]:
     """扫完钩子：归集 + 按 task.options.auto_pentest 经 PENTEST_DISPATCH 派发。
     PENTEST_DISPATCH（ai_pentest）未注册时**只归集不派发降级**（不孤岛靠归集本身可用）。
     归集 0 资产但 auto_pentest=True 且有明确目标时，直接用目标创建资产并派发（支持"只渗透不扫描"）。"""
-    collected = collect_from_task(task_id)
+    collected = collect_from_task(task_id) if site_rows is None else collect_from_task(task_id, site_rows=site_rows)
     dispatched = None
     skipped = None
     try:
         task = get_repo().collection(Collections.TASK).find_one({"_id": _oid(task_id)})
         options = ((task or {}).get("options", {}) or {})
+        if not task or task.get("status") in ("stop", "stopped", "preempted", "cancelled"):
+            return {"collected": collected, "dispatched": None, "skipped": "任务不存在或已停止，不派发"}
         _keys = collected.get("asset_keys") or []
         task_type = (task or {}).get("type", "") or ""
-        if bool(options.get("auto_pentest", False)) and not _keys:
+        if site_rows is None and bool(options.get("auto_pentest", False)) and not _keys:
             # 归集 0 资产但有明确目标 → 直接用目标创建资产再派发（"只渗透不扫描"场景，仅 domain/ip 适用）。
             # unit/fofa 类型的 target 不是可访问 host（unit=中文单位名、fofa=display 文案），
             # 绝不能拼 http:// 当 site 归集——否则造出 http://单位名 垃圾资产、派发假目标。
@@ -385,17 +389,27 @@ def auto_collect_after_scan(task_id: str) -> Dict[str, Any]:
                 _peg = options.get("pentest_egress") or {}
                 _pmode = (_peg.get("mode") if isinstance(_peg, dict) else "") or options.get("pentest_proxy") or "smart"
                 _prid = (_peg.get("rule_id") if isinstance(_peg, dict) else "") or ""
+                # AI 封禁备用出口（主出口被封时 AI 可自主切）：默认 smart
+                _fbeg = options.get("pentest_fallback_egress") or {}
+                _fbmode = (_fbeg.get("mode") if isinstance(_fbeg, dict) else "") or "smart"
+                _fbrid = (_fbeg.get("rule_id") if isinstance(_fbeg, dict) else "") or ""
                 dispatched = dispatcher.batch_create_from_assets(
                     asset_keys=_keys,
                     auto_start=True, skip_pentested=True,
                     mode=options.get("pentest_mode") or "src",
                     egress_proxy=_pmode, proxy_source=_prid or options.get("proxy_source") or "subscription",
+                    fallback_egress=_fbmode, fallback_proxy_source=_fbrid,
                     whitelist=options.get("pentest_whitelist") or [],
                     mission_intel=_parse_mission_intel(options),
                     dedup_level=int(options.get("dedup_level", 2) or 2),
                     scope_drift_level=int(options.get("scope_drift_level", 2) or 2),
                     intel_enabled=bool(options.get("intel_enabled", True)),
                     provider_id=options.get("pentest_provider_id") or "",   # 锁定 AI 模型透传到会话
+                    backup_provider_id=options.get("pentest_backup_provider_id") or "",
+                    observer_enabled=bool(options.get("observer_enabled", False)),   # 监督者开关（默认关）
+                    observer_provider_id=options.get("observer_provider_id") or "",  # 监督者独立模型（空=默认）
+                    honeypot_detection=bool(options.get("honeypot_detection", True)),  # 蜜罐检测开关（默认开）
+                    max_context_tokens=int(options.get("max_context_tokens", 0) or 0),  # 单会话上下文上限（策略下发，0=全局默认/-1=原生上限）
                     source_task_id=str(task_id))
             else:
                 skipped = "PENTEST_DISPATCH 未就绪（ai_pentest 未建），只归集不派发"
@@ -405,6 +419,7 @@ def auto_collect_after_scan(task_id: str) -> Dict[str, Any]:
     out: Dict[str, Any] = {"collected": collected, "dispatched": dispatched}
     if skipped:
         out["skipped"] = skipped
+        out["dispatch_pending"] = skipped.startswith(("PENTEST_DISPATCH 未就绪", "派发降级:"))
     return out
 
 
@@ -481,6 +496,9 @@ def stat() -> Dict[str, Any]:
 _INTEL_COLLS = {
     "intel_asset": Collections.INTEL_ASSET, "intel_system": Collections.INTEL_SYSTEM,
     "intel_code": Collections.INTEL_CODE, "intel_report": Collections.INTEL_REPORT,
+    # pentest_report=人看成品报告（报告编辑处专用，与 intel_report 情报报告物理隔离）；
+    # 白名单同时覆盖 list_collection 分页与 delete_records 删除。
+    "pentest_report": Collections.PENTEST_REPORT,
 }
 
 
@@ -494,6 +512,12 @@ def list_collection(collection: str, page: int = 1, size: int = 10, **filters: A
     for f in ("unit", "system_id", "pentest_status", "asset_key"):
         if filters.get(f):
             q[f] = filters[f]
+    # #4 报告编辑分栏：task 精确匹配；session 用 $ne task（兼容存量会话报告无 report_type 字段）
+    rt = filters.get("report_type")
+    if rt == "task":
+        q["report_type"] = "task"
+    elif rt == "session":
+        q["report_type"] = {"$ne": "task"}
     if filters.get("keyword"):
         kw = {"$regex": re.escape(filters["keyword"]), "$options": "i"}
         q["$or"] = [{"key": kw}, {"system_name": kw}, {"hostname": kw}, {"name": kw}]
@@ -521,13 +545,14 @@ def list_collection(collection: str, page: int = 1, size: int = 10, **filters: A
         return {"items": [], "total": 0, "page": page, "size": size}
 
 
-def get_report(report_id: str) -> Optional[Dict[str, Any]]:
-    """渗透报告详情（intel_report 单条）。找不到返 None（#4：前端点报告查看，原无此端点→404）。"""
+def get_report(report_id: str, collection: str = Collections.INTEL_REPORT) -> Optional[Dict[str, Any]]:
+    """报告详情单条。找不到返 None（#4：前端点报告查看，原无此端点→404）。
+    collection 默认 intel_report（情报中心报告 tab 用）；报告编辑处传 pentest_report（人看成品，物理隔离）。"""
     rid = (report_id or "").strip()
     if not rid:
         return None
     try:
-        d = get_repo().collection(Collections.INTEL_REPORT).find_one({"_id": _oid(rid)})
+        d = get_repo().collection(collection).find_one({"_id": _oid(rid)})
         if not d:
             return None
         d["_id"] = str(d.get("_id", ""))
@@ -570,15 +595,212 @@ def match_asset(site: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+# 渗透会话活跃态（与 ai_pentest.session._ACTIVE 同口径：未结束、在跑或可恢复）。
+_SESSION_ACTIVE = ("waiting", "queued", "dispatching", "running",
+                   "paused_transient", "paused_resource", "paused_manual")
+
+
+def _humanize_ago(date_str: str) -> str:
+    """把 '%Y-%m-%d %H:%M:%S' 时间转成"距今多久"的中文（天/小时/分钟）。解析失败返原串。"""
+    import time as _t
+    s = (date_str or "").strip()
+    if not s:
+        return ""
+    try:
+        past = _t.mktime(_t.strptime(s, "%Y-%m-%d %H:%M:%S"))
+    except (ValueError, TypeError):
+        return s
+    sec = max(0, _t.time() - past)
+    if sec < 3600:
+        return "{} 分钟前".format(int(sec // 60))
+    if sec < 86400:
+        return "{} 小时前".format(int(sec // 3600))
+    return "{} 天前".format(int(sec // 86400))
+
+
+def _days_ago(date_str: str):
+    """把 '%Y-%m-%d %H:%M:%S' 转成距今天数（float）；解析失败/空返 None（供近期已渗透 N 天阈值判定）。"""
+    import time as _t
+    s = (date_str or "").strip()
+    if not s:
+        return None
+    try:
+        past = _t.mktime(_t.strptime(s, "%Y-%m-%d %H:%M:%S"))
+    except (ValueError, TypeError):
+        return None
+    return max(0.0, (_t.time() - past) / 86400.0)
+
+
+def _overlap_within_days() -> int:
+    """近期已渗透判定阈值（天）：控制台发起渗透时距上次 < N 天才弹窗提示。默认 5，可配（非魔数）。
+    仿 user_manage._token_ttl_seconds 读配置段。"""
+    try:
+        from sentinel_platform.core import get_config
+        v = get_config().section("SENTINEL", "OVERLAP_WITHIN_DAYS", default=5)
+        return int(v) if v else 5
+    except Exception:
+        return 5
+
+
+def check_pentest_overlap(targets: Optional[List[str]] = None, unit: str = "",
+                          within_days: int = 0) -> Dict[str, Any]:
+    """发起/重启任务前检测同资产是否已有渗透会话或历史报告（供前端确认弹窗）。
+    targets=用户填的目标列表（域名/IP/host/URL），unit=单位名（可选）。
+    within_days>0：**只把距今 < N 天的历史报告计入**（控制台侧"近期已渗透"5 天阈值弹窗用）；
+      =0（默认，任务侧）：不做天数门控，全展示（零回归）。活跃会话不受阈值限制（资源浪费与时间无关）。
+    返回 {overlap:bool, scope:'precise'|'best_effort', active_sessions:[...], last_reports:[...], summary}。
+    只读、best-effort：任一步异常降级空结果（绝不阻断建任务）。"""
+    out: Dict[str, Any] = {"overlap": False, "scope": "precise",
+                           "active_sessions": [], "last_reports": [], "summary": ""}
+    try:
+        wd = int(within_days or 0)
+        tlist = [t.strip() for t in (targets or []) if t and t.strip()]
+        scoll = get_repo().collection(Collections.PENTEST_SESSION)
+        acoll = get_repo().collection(Collections.INTEL_ASSET)
+        seen_sid, seen_report = set(), set()
+        precise = True
+        # 逐目标匹配：优先当具体资产精确查；匹配不到则按域名/host 模糊查（best_effort）
+        for t in tlist:
+            _collect_overlap_for_target(t, scoll, acoll, out, seen_sid, seen_report, wd)
+            if out.get("_fuzzy"):
+                precise = False
+        if unit:
+            _collect_overlap_for_unit(unit, scoll, acoll, out, seen_sid, seen_report, wd)
+            precise = False
+        out.pop("_fuzzy", None)
+        out["scope"] = "precise" if precise else "best_effort"
+        out["overlap"] = bool(out["active_sessions"] or out["last_reports"])
+        out["summary"] = _overlap_summary(out)
+    except Exception as exc:
+        logger.debug("check_pentest_overlap degraded: %s", exc)
+    return out
+
+
+def _add_active_session(sess: Dict[str, Any], out: Dict[str, Any], seen: set) -> None:
+    sid = str(sess.get("_id", ""))
+    if not sid or sid in seen:
+        return
+    seen.add(sid)
+    out["active_sessions"].append({
+        "session_id": sid, "site": sess.get("site", ""),
+        "status": sess.get("status", ""), "unit": sess.get("unit", ""),
+        "started_at": sess.get("save_date", ""),
+        "ago": _humanize_ago(sess.get("update_date") or sess.get("save_date", "")),
+    })
+
+
+def _add_report(asset: Dict[str, Any], out: Dict[str, Any], seen: set, within_days: int = 0) -> None:
+    """列出该资产的历史报告。**每次渗透独立报告**：遍历 report_ids（多份），兼容存量单值 report_id。
+    within_days>0 时只计入距今 < N 天的报告（近期已渗透阈值）。"""
+    # 多份报告指针（新）+ 兼容存量单值 report_id（旧）
+    rids = [str(r).strip() for r in (asset.get("report_ids") or []) if str(r).strip()]
+    if not rids:
+        single = (asset.get("report_id") or "").strip()
+        rids = [single] if single else []
+    for rid in rids:
+        if rid in seen:
+            continue
+        rep = get_pentest_report(rid, mode="index")
+        if rep.get("error"):
+            continue
+        rep_date = rep.get("save_date", "") or asset.get("last_pentest_date", "") or asset.get("last_collect_date", "")
+        if within_days > 0:
+            d = _days_ago(rep.get("save_date", "") or asset.get("last_pentest_date", ""))
+            if d is None or d >= within_days:
+                continue   # 超阈值/无日期 → 不算"近期已渗透"，不计入
+        seen.add(rid)
+        out["last_reports"].append({
+            "report_id": rid, "asset_key": asset.get("key", ""),
+            "site": asset.get("key", ""), "unit": asset.get("unit", ""),
+            "vuln_count": len(rep.get("vuln_index") or []),
+            "max_severity": rep.get("max_severity", ""),
+            "save_date": rep.get("save_date", ""),
+            "ago": _humanize_ago(rep_date),
+        })
+
+
+def _collect_overlap_for_target(target: str, scoll, acoll, out: Dict[str, Any],
+                                seen_sid: set, seen_report: set, within_days: int = 0) -> None:
+    """单目标查重：先当具体资产精确匹配；匹配不到按 host 子串模糊查（标记 _fuzzy）。"""
+    asset = match_asset(target)
+    if asset:   # 精确命中一条资产
+        akey = asset.get("key", "")
+        for s in scoll.find({"asset_key": akey, "status": {"$in": list(_SESSION_ACTIVE)}}):
+            _add_active_session(s, out, seen_sid)
+        if asset.get("pentest_status") == "done":
+            _add_report(asset, out, seen_report, within_days)
+        return
+    # 模糊：按 host 关键词查会话 site + 资产 key（大域名/宽目标场景，尽力检测）
+    out["_fuzzy"] = True
+    host = _re.sub(r"^https?://", "", target).split("/")[0].strip().lower()
+    if not host:
+        return
+    rx = {"$regex": _re.escape(host), "$options": "i"}
+    for s in scoll.find({"site": rx, "status": {"$in": list(_SESSION_ACTIVE)}}).limit(50):
+        _add_active_session(s, out, seen_sid)
+    for a in acoll.find({"key": rx, "pentest_status": "done"}).limit(50):
+        _add_report(a, out, seen_report, within_days)
+
+
+def _collect_overlap_for_unit(unit: str, scoll, acoll, out: Dict[str, Any],
+                              seen_sid: set, seen_report: set, within_days: int = 0) -> None:
+    """按单位名查该单位下的活跃会话 + 已渗透资产（尽力检测）。"""
+    u = (unit or "").strip()
+    if not u:
+        return
+    for s in scoll.find({"unit": u, "status": {"$in": list(_SESSION_ACTIVE)}}).limit(50):
+        _add_active_session(s, out, seen_sid)
+    for a in acoll.find({"unit": u, "pentest_status": "done"}).limit(50):
+        _add_report(a, out, seen_report, within_days)
+
+
+def _overlap_summary(out: Dict[str, Any]) -> str:
+    """生成给前端弹窗的一句话提示（活跃会话优先——它才是真资源浪费）。"""
+    na, nr = len(out["active_sessions"]), len(out["last_reports"])
+    parts = []
+    if na:
+        parts.append("当前有 {} 个渗透会话正在处理相同资产，重复发起会导致资源浪费".format(na))
+    if nr:
+        parts.append("该资产曾渗透过（共 {} 份历史报告），可复用上次报告进行复验与深入".format(nr))
+    return "；".join(parts)
+
+
+def _known_findings(repo, asset_key: str, host: str = "") -> List[Dict[str, Any]]:
+    """按 asset_key（或 host 命中 target/site）取该资产已确认漏洞，供会话台左侧「已确认漏洞」展示。
+    含 lead 待验证（与漏洞中心口径一致）；保留 _id + source="ai" 供点击拉详情。查失败返空。"""
+    fq: Dict[str, Any] = {"asset_key": asset_key, "duplicate_of": None}
+    if host:
+        target_rx = {"$regex": _re.escape(host)}
+        fq = {"$or": [{"asset_key": asset_key}, {"target": target_rx}, {"site": target_rx}], "duplicate_of": None}
+    out: List[Dict[str, Any]] = []
+    try:
+        for d in repo.collection(Collections.INTEL_FINDING).find(
+                fq, {"vuln_type": 1, "target": 1, "severity": 1, "evidence_level": 1,
+                     "status": 1, "verified": 1, "title": 1}).limit(20):
+            d["_id"] = str(d.get("_id", ""))
+            d["source"] = "ai"
+            out.append(d)
+    except Exception:
+        out = []
+    return out
+
+
 def build_pentest_context(asset_key: str) -> Dict[str, Any]:
     """AI 渗透前高价值情报档案；完整明细由专用工具按指针读取，避免开局上下文爆炸。"""
     try:
         repo = get_repo()
         asset = repo.collection(Collections.INTEL_ASSET).find_one({"key": asset_key})
     except Exception:
+        repo = None
         asset = None
     if not asset:
-        return {"identity": {"asset_key": asset_key}, "attack_surface": {}, "history": {}, "pointers": {}}
+        # 无 INTEL_ASSET 文档（如小程序目标 miniapp://... 从不走 asset pipeline 建档）也要带出
+        # known_findings——漏洞按 asset_key 落在 INTEL_FINDING，与 asset 文档无关。原实现在此提前 return
+        # 且不含 known_findings 键 → 前端 `c.known_findings` 为 undefined → 攻击面板「已确认漏洞」恒空，
+        # 哪怕库里已有该资产 10 条漏洞（实测 deepseek 打小程序会话：INTEL_FINDING 有 10 条却面板空）。
+        kf = _known_findings(repo, asset_key) if repo is not None else []
+        return {"identity": {"asset_key": asset_key}, "attack_surface": {},
+                "known_findings": kf, "history": {}, "pointers": {"asset_key": asset_key}}
     recon = asset.get("recon", {}) or {}
     task_id = asset.get("source_task_id", "")
     host = asset.get("hostname", "")
@@ -606,22 +828,10 @@ def build_pentest_context(asset_key: str) -> Dict[str, Any]:
     leaks = _samples(Collections.FILELEAK, leaks_q, {"site": 1, "url": 1, "status_code": 1})
     # 攻击面已知漏洞：与漏洞中心口径一致（含 lead 待验证，非只 verified），否则"漏洞中心有洞会话台不显示"。
     # 匹配放宽：asset_key 精确 OR target/site 命中本资产 host（历史 finding 可能未落 asset_key 或键不一致）。
-    fq: Dict[str, Any] = {"asset_key": asset_key}
-    if host:
-        fq = {"$or": [{"asset_key": asset_key}, {"target": target_rx}, {"site": target_rx}]}
     # known_findings 保留 _id + 标记 source="ai"：供会话台左侧"已确认漏洞"点击 → 调
-    # vuln_center.unified_detail("ai", _id) 拉完整详情（证据/CVSS/PoC/key_response）。
-    # 不复用 _samples（它 pop 掉 _id），这里单独查并把 _id 转成字符串带出。
-    findings = []
-    try:
-        for d in repo.collection(Collections.INTEL_FINDING).find(
-                fq, {"vuln_type": 1, "target": 1, "severity": 1, "evidence_level": 1,
-                     "status": 1, "verified": 1, "title": 1}).limit(20):
-            d["_id"] = str(d.get("_id", ""))
-            d["source"] = "ai"
-            findings.append(d)
-    except Exception:
-        findings = []
+    # vuln_center.unified_detail("ai", _id) 拉完整详情（证据/CVSS/PoC/key_response）。复用 _known_findings
+    # （与无 asset 文档分支同一取法，消除重复；查失败降级空）。
+    findings = _known_findings(repo, asset_key, host)
     return {
         "identity": {"asset_key": asset_key, "hostname": host, "fld": asset.get("fld", ""),
                      "unit": asset.get("unit", ""), "system_name": asset.get("system_name", ""),
@@ -629,8 +839,12 @@ def build_pentest_context(asset_key: str) -> Dict[str, Any]:
         "attack_surface": {"ports": recon.get("ports", []), "summary": recon.get("summary", {}),
                            "url_samples": urls, "wih_samples": wih, "fileleak_samples": leaks},
         "known_findings": findings,
+        # report_id=最新指针（briefing 复用最近一份）；report_ids=历次渗透全部报告（每次独立报告，供
+        # AI 感知该资产已被渗透过 N 次、可按需读更早的）；last_pentest_date 供"距上次"判断。
         "history": {"pentest_status": asset.get("pentest_status", "none"),
-                    "report_id": asset.get("report_id", "")},
+                    "report_id": asset.get("report_id", ""),
+                    "report_ids": asset.get("report_ids", []),
+                    "last_pentest_date": asset.get("last_pentest_date", "")},
         "pointers": {"task_id": task_id, "unit": asset.get("unit", ""),
                      "system_id": asset.get("system_id", ""), "asset_key": asset_key},
     }
@@ -664,7 +878,8 @@ def save_pentest_report(report: Dict[str, Any]) -> Dict[str, Any]:
     if not session_id:
         return {"error": "session_id 必填"}
     try:
-        finds = list(get_repo().collection(Collections.INTEL_FINDING).find({"session_id": session_id}))
+        finds = list(get_repo().collection(Collections.INTEL_FINDING).find({"session_id": session_id, "duplicate_of": None}))
+        finds = [f for f in finds if (f.get("handle_status") or "") != "false_positive"]  # 排除误报(item6)
         vuln_index = [str(f.get("_id")) for f in finds]
         max_sev, max_rank = "", -1
         for f in finds:
@@ -679,6 +894,7 @@ def save_pentest_report(report: Dict[str, Any]) -> Dict[str, Any]:
             "unit": report.get("unit", ""), "asset_key": report.get("asset_key", ""),
             "title": report.get("title", "") or "AI 渗透报告 {}".format(site),
             "system_name": report.get("system_name", ""),
+            "report_type": "session",  # #4：显式标记会话级，供报告编辑页按 report_type 分栏
             "max_severity": max_sev, "vuln_index": vuln_index,
             "content": report.get("content", ""), "update_date": now,
         }
@@ -695,6 +911,348 @@ def save_pentest_report(report: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": True, "report_id": str(rid), "vuln_count": len(vuln_index), "updated": False}
     except Exception as exc:
         logger.debug("save_pentest_report degraded: %s", exc)
+        return {"error": str(exc)}
+
+
+# ========== 报告编辑（#4：任务级/会话级报告生成 + 编辑 + docx 导出）==========
+# 复用 intel_report 集合，report_type 区分：session=会话级（AI 渗透收尾自动产出，见上）；
+# task=任务级（本节新增，聚合该任务全部会话报告 + 漏洞统计，LLM 整合成总结）。
+
+def _report_llm_provider() -> Optional[Dict[str, Any]]:
+    """取一个可用 LLM provider 用于任务级报告整合（经 registry 取 ai_config_service，跨模块经暴露层）。
+    未就绪/无 provider 返 None（调用方降级为模板拼接，不阻断）。"""
+    try:
+        svc = get_registry().get("ai_config_service")
+        if svc and hasattr(svc, "get_active_provider"):
+            p = svc.get_active_provider()
+            if p and p.get("api_key"):
+                return p
+    except Exception as exc:
+        logger.debug("_report_llm_provider degraded: %s", exc)
+    return None
+
+
+def _task_findings_summary(task_id: str) -> Dict[str, Any]:
+    """聚合任务下漏洞统计（按 source_task_id 关联的会话报告 vuln_index → intel_finding）。
+    返回 {total, by_severity:{critical..info}, findings:[{name,severity,target}]}。"""
+    repo = get_repo()
+    by_sev: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    flat: List[Dict[str, Any]] = []
+    try:
+        reports = list(repo.collection(Collections.INTEL_REPORT).find(
+            {"source_task_id": str(task_id), "report_type": {"$ne": "task"}}))
+        fid_set = set()
+        for r in reports:
+            for fid in (r.get("vuln_index") or []):
+                fid_set.add(str(fid))
+        for fid in fid_set:
+            try:
+                f = repo.collection(Collections.INTEL_FINDING).find_one({"_id": _oid(fid)})
+            except Exception:
+                f = None
+            # 排除人工标记的误报（v1.21.157-48 item6）；降级已自动生效（读 severity=降后值）
+            if not f or (f.get("handle_status") or "") == "false_positive":
+                continue
+            sv = (f.get("severity") or "").lower()
+            if sv in by_sev:
+                by_sev[sv] += 1
+            flat.append({"name": f.get("vuln_type") or f.get("name") or "未命名",
+                         "severity": sv, "target": f.get("target") or f.get("asset_key") or ""})
+    except Exception as exc:
+        logger.debug("_task_findings_summary degraded: %s", exc)
+    return {"total": len(flat), "by_severity": by_sev, "findings": flat}
+
+
+def _task_name(task_id: str) -> str:
+    """反查任务名（查不到降级为 id 短码）。"""
+    try:
+        t = get_repo().collection(Collections.TASK).find_one({"_id": _oid(task_id)}) if task_id else None
+        if t and t.get("name"):
+            return str(t["name"])
+    except Exception:
+        pass
+    return "任务 {}".format(str(task_id)[:8]) if task_id else "未命名任务"
+
+
+def _fallback_task_report_md(task_id: str, sess_reports: List[Dict[str, Any]], summ: Dict[str, Any]) -> str:
+    """任务级报告模板拼接（LLM 不可用时降级：漏洞统计表 + 各会话报告堆叠，保证有可用产出）。"""
+    tname = _task_name(task_id)
+    bs = summ["by_severity"]
+    lines = ["# {} — 渗透测试任务总结报告".format(tname), "",
+             "## 一、概述", "",
+             "本报告汇总任务「{}」下 {} 个资产/会话的渗透测试结果，共发现漏洞 {} 个。".format(
+                 tname, len(sess_reports), summ["total"]), "",
+             "## 二、漏洞风险分布", "",
+             "| 严重 | 高危 | 中危 | 低危 | 信息 |", "|---|---|---|---|---|",
+             "| {critical} | {high} | {medium} | {low} | {info} |".format(**bs), "",
+             "## 三、各资产渗透详情", ""]
+    for i, r in enumerate(sess_reports, 1):
+        title = r.get("title") or r.get("asset_key") or "资产 {}".format(i)
+        lines.append("### {}. {}".format(i, title))
+        if r.get("asset_key"):
+            lines.append("**目标资产**：{}".format(r["asset_key"]))
+        if r.get("max_severity"):
+            lines.append("**最高危害**：{}".format(str(r["max_severity"]).upper()))
+        lines.append("")
+        lines.append(r.get("content") or "（该会话无报告正文）")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def build_task_report(task_id: str, use_llm: bool = True) -> Dict[str, Any]:
+    """任务级报告：聚合该任务全部会话级报告 + 漏洞统计 → LLM 整合成连贯总结（LLM 不可用降级模板拼接）。
+    幂等：同 source_task_id 的 task 级报告已存在则更新 content。存回 intel_report（report_type=task）。"""
+    tid = str(task_id or "").strip()
+    if not tid:
+        return {"error": "task_id 必填"}
+    try:
+        repo = get_repo()
+        sess_reports = list(repo.collection(Collections.INTEL_REPORT).find(
+            {"source_task_id": tid, "report_type": {"$ne": "task"}}).sort("_id", -1))
+        summ = _task_findings_summary(tid)
+        tname = _task_name(tid)
+        content = ""
+        # LLM 整合（可用时）：把各会话报告 + 漏洞统计喂给 LLM 写一篇连贯总结
+        if use_llm:
+            prov = _report_llm_provider()
+            if prov:
+                try:
+                    from sentinel_platform.modules.ai_pentest import _llm
+                    parts = ["以下是任务「{}」下各资产的渗透测试报告，请整合成一篇连贯、专业的任务级渗透测试"
+                             "总结报告（Markdown 格式，含：执行摘要、整体风险评估、漏洞风险分布、"
+                             "各资产要点、总体加固建议）。漏洞统计：{}。".format(tname, summ["by_severity"])]
+                    for i, r in enumerate(sess_reports, 1):
+                        parts.append("\n--- 资产{} {} ---\n{}".format(
+                            i, r.get("asset_key") or "", (r.get("content") or "")[:6000]))
+                    msgs = [{"role": "user", "content": "\n".join(parts)}]
+                    rr = _llm.chat(prov, msgs, timeout=300.0, scene="task_report")
+                    if rr.get("ok") and rr.get("content"):
+                        content = rr["content"]
+                except Exception as exc:
+                    logger.debug("build_task_report llm degraded: %s", exc)
+        if not content:
+            content = _fallback_task_report_md(tid, sess_reports, summ)
+        # 落库进 pentest_report（人看成品，与 intel_report 情报报告物理隔离）。
+        # 幂等键 report_key="task:{tid}"（派生标量 + 唯一 sparse 索引），upsert 消并发双插竞态。
+        # 不写 source_session 字段（避免多条 task 报告的空串在 sparse 唯一索引下判重）。
+        now = models_now()
+        report_key = "task:{}".format(tid)
+        doc = {"report_type": "task", "source_task_id": tid, "report_key": report_key,
+               "title": "{} — 任务渗透总结报告".format(tname), "unit": "", "asset_key": "",
+               "system_name": "", "max_severity": _max_sev_of(summ["by_severity"]),
+               "content": content, "vuln_index": [], "update_date": now,
+               "session_count": len(sess_reports), "vuln_total": summ["total"]}
+        rcoll = repo.collection(Collections.PENTEST_REPORT)
+        existed = rcoll.find_one({"report_key": report_key})
+        r = rcoll.update_one({"report_key": report_key},
+                             {"$set": doc, "$setOnInsert": {"save_date": now}}, upsert=True)
+        rid = existed["_id"] if existed else getattr(r, "upserted_id", None)
+        return {"ok": True, "report_id": str(rid) if rid else "", "updated": bool(existed),
+                "session_count": len(sess_reports), "vuln_total": summ["total"]}
+    except Exception as exc:
+        logger.debug("build_task_report degraded: %s", exc)
+        return {"error": str(exc)}
+
+
+def _max_sev_of(by_sev: Dict[str, int]) -> str:
+    """从严重度计数取最高非零档。"""
+    for sv in ("critical", "high", "medium", "low", "info"):
+        if by_sev.get(sv, 0) > 0:
+            return sv
+    return ""
+
+
+def update_report(report_id: str, content: str = None, title: str = None,
+                  report_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    """编辑报告正文/标题（人工修订）。标记 edited=True。任务级/会话级通用。
+    只作用于 pentest_report（人看成品）；情报中心 intel_report 无编辑入口，不受影响。"""
+    rid = (report_id or "").strip()
+    if not rid:
+        return {"error": "report_id 必填"}
+    existing = get_repo().collection(Collections.PENTEST_REPORT).find_one({"_id": _oid(rid)})
+    if existing and existing.get("gen_mode") == "template":
+        if content is not None and content != (existing.get("content") or ""):
+            return {"error": "模板报告请使用结构化编辑，Markdown 修改不能保留模板版式"}
+        from . import report_template as rt
+        return rt.update_template_report(rid, existing, report_data, title)
+    upd: Dict[str, Any] = {"edited": True, "update_date": models_now()}
+    if content is not None:
+        upd["content"] = content
+    if title is not None and title.strip():
+        upd["title"] = title.strip()
+    try:
+        r = get_repo().collection(Collections.PENTEST_REPORT).update_one({"_id": _oid(rid)}, {"$set": upd})
+        if getattr(r, "matched_count", 0) == 0:
+            return {"error": "报告不存在: {}".format(rid)}
+        return {"ok": True, "report_id": rid}
+    except Exception as exc:
+        logger.debug("update_report degraded: %s", exc)
+        return {"error": str(exc)}
+
+
+def export_report_docx(report_id: str, collection: str = Collections.INTEL_REPORT) -> Dict[str, Any]:
+    """把报告 content(Markdown) 渲染成 docx 字节流。返回 {ok, filename, data(bytes)} 或 {error}。
+    依赖 python-docx（requirements 已加，需 rebuild 镜像）。轻量 md 渲染：标题/表格/列表/正文/粗体。
+    collection 默认 intel_report（情报中心）；报告编辑处传 pentest_report。"""
+    d = get_report(report_id, collection=collection)
+    if not d:
+        return {"error": "报告不存在"}
+    if d.get("gen_mode") == "template":
+        import os
+        from sentinel_platform.core import template_dir
+        base = os.path.realpath(template_dir())
+        path = os.path.realpath(os.path.join(base, d.get("docx_path") or ""))
+        if os.path.commonpath([base, path]) != base or not os.path.isfile(path):
+            return {"error": "报告文件缺失或路径无效，请重新生成"}
+        with open(path, "rb") as stream:
+            data = stream.read()
+        title = _re.sub(r'[\\/:*?"<>|]', "_", str(d.get("title") or "report"))[:80]
+        return {"ok": True, "filename": title + ".docx", "data": data}
+    try:
+        import io
+        from docx import Document
+        from docx.shared import Pt
+    except Exception as exc:
+        logger.debug("export_report_docx no python-docx: %s", exc)
+        return {"error": "docx 导出组件未安装（需更新镜像）"}
+    try:
+        md = d.get("content") or ""
+        title = d.get("title") or "渗透测试报告"
+        doc = Document()
+        doc.add_heading(title, level=0)
+        _md_to_docx(doc, md)
+        buf = io.BytesIO()
+        doc.save(buf)
+        # 文件名去除非法字符
+        safe = _re.sub(r'[\\/:*?"<>|]', "_", str(title))[:80] or "report"
+        return {"ok": True, "filename": "{}.docx".format(safe), "data": buf.getvalue()}
+    except Exception as exc:
+        logger.debug("export_report_docx render degraded: %s", exc)
+        return {"error": "报告渲染失败: {}".format(exc)}
+
+
+def _md_to_docx(doc: Any, md: str) -> None:
+    """轻量 Markdown → docx 渲染：# 标题、| 表格 |、- 列表、**粗体**、普通段落。够渗透报告用，不求全。"""
+    lines = (md or "").split("\n")
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i].rstrip()
+        # 表格：连续 | 行（首行表头，次行分隔 ---，其余数据）
+        if line.startswith("|") and i + 1 < n and _re.match(r'^\|[\s:|-]+\|?\s*$', lines[i + 1].strip()):
+            rows = []
+            while i < n and lines[i].strip().startswith("|"):
+                cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                rows.append(cells)
+                i += 1
+            # rows[0]=表头 rows[1]=分隔 rows[2:]=数据
+            data = [rows[0]] + rows[2:] if len(rows) >= 2 else rows
+            if data:
+                ncol = max(len(r) for r in data)
+                tbl = doc.add_table(rows=len(data), cols=ncol)
+                tbl.style = "Light Grid Accent 1"
+                for ri, r in enumerate(data):
+                    for ci in range(ncol):
+                        tbl.rows[ri].cells[ci].text = r[ci] if ci < len(r) else ""
+            continue
+        if not line.strip():
+            i += 1
+            continue
+        # 标题
+        m = _re.match(r'^(#{1,6})\s+(.*)$', line)
+        if m:
+            lvl = min(len(m.group(1)), 4)
+            doc.add_heading(m.group(2).strip(), level=lvl)
+            i += 1
+            continue
+        # 列表项
+        lm = _re.match(r'^[\-\*]\s+(.*)$', line)
+        if lm:
+            p = doc.add_paragraph(style="List Bullet")
+            _add_md_runs(p, lm.group(1))
+            i += 1
+            continue
+        om = _re.match(r'^(\d+)\.\s+(.*)$', line)
+        if om:
+            p = doc.add_paragraph(style="List Number")
+            _add_md_runs(p, om.group(2))
+            i += 1
+            continue
+        # 普通段落（合并连续非空行）
+        p = doc.add_paragraph()
+        _add_md_runs(p, line)
+        i += 1
+
+
+def _add_md_runs(paragraph: Any, text: str) -> None:
+    """段落内联渲染 **粗体**（其余当普通文本）。"""
+    parts = _re.split(r'(\*\*[^*]+\*\*)', text)
+    for seg in parts:
+        if not seg:
+            continue
+        if seg.startswith("**") and seg.endswith("**") and len(seg) > 4:
+            run = paragraph.add_run(seg[2:-2])
+            run.bold = True
+        else:
+            paragraph.add_run(seg)
+
+
+def regenerate_session_report(session_id: str) -> Dict[str, Any]:
+    """人工重生成会话级【成品】报告：用会话 findings 拼 prompt 调 LLM 重写 content，写入 pentest_report
+    （人看成品，与 intel_report 情报报告物理隔离）。LLM 不可用则返错。
+    只读 intel_report 取元数据 + intel_finding 派生 vuln_index/max_severity；不回写 intel_asset.report_id
+    （_mark_asset_pentested 不触发），避免污染 AI 开局借鉴指针。"""
+    sid = str(session_id or "").strip()
+    if not sid:
+        return {"error": "session_id 必填"}
+    prov = _report_llm_provider()
+    if not prov:
+        return {"error": "无可用 AI 模型，无法重生成（会话结束时已自动生成过报告）"}
+    try:
+        repo = get_repo()
+        finds = list(repo.collection(Collections.INTEL_FINDING).find({"session_id": sid, "duplicate_of": None}))
+        finds = [f for f in finds if (f.get("handle_status") or "") != "false_positive"]  # 排除误报(item6)
+        if not finds:
+            return {"error": "该会话无漏洞记录，无需报告"}
+        parts = ["请根据以下渗透测试发现，写一篇专业的单资产渗透测试报告（Markdown 格式，含：概述、"
+                 "漏洞详情、危害分析、修复建议）。发现列表："]
+        for f in finds:
+            parts.append("- [{}] {} @ {}：{}".format(
+                (f.get("severity") or "").upper(), f.get("vuln_type") or f.get("name") or "",
+                f.get("target") or "", (f.get("evidence") or f.get("detail") or "")[:800]))
+        from sentinel_platform.modules.ai_pentest import _llm
+        rr = _llm.chat(prov, [{"role": "user", "content": "\n".join(parts)}],
+                       timeout=300.0, scene="session_report")
+        if not (rr.get("ok") and rr.get("content")):
+            return {"error": "AI 生成失败: {}".format(rr.get("error") or rr.get("err") or "空返回")}
+        # 只读 intel_report 取会话元数据（自动情报报告本就在 intel_report）；查不到降级空元数据。
+        meta = repo.collection(Collections.INTEL_REPORT).find_one({"source_session": sid}) or {}
+        # 从 intel_finding 派生 vuln_index/max_severity（复刻 save_pentest_report :827-833）。
+        vuln_index = [str(f.get("_id")) for f in finds]
+        max_sev, max_rank = "", -1
+        for f in finds:
+            sv = (f.get("severity") or "").lower()
+            if _SEV_RANK.get(sv, 0) > max_rank:
+                max_rank, max_sev = _SEV_RANK.get(sv, 0), sv
+        now = models_now()
+        report_key = "session:{}".format(sid)
+        site = meta.get("site", "") or meta.get("asset_key", "")
+        doc = {
+            "report_type": "session", "report_key": report_key, "source_session": sid,
+            "source_task_id": str(meta.get("source_task_id", "") or ""),
+            "unit": meta.get("unit", ""), "asset_key": meta.get("asset_key", ""),
+            "title": meta.get("title", "") or "AI 渗透报告 {}".format(site),
+            "system_name": meta.get("system_name", ""), "max_severity": max_sev,
+            "vuln_index": vuln_index, "content": rr["content"], "edited": False, "update_date": now,
+        }
+        rcoll = repo.collection(Collections.PENTEST_REPORT)
+        existed = rcoll.find_one({"report_key": report_key})
+        r = rcoll.update_one({"report_key": report_key},
+                             {"$set": doc, "$setOnInsert": {"save_date": now}}, upsert=True)
+        rid = existed["_id"] if existed else getattr(r, "upserted_id", None)
+        return {"ok": True, "report_id": str(rid) if rid else "", "updated": bool(existed)}
+    except Exception as exc:
+        logger.debug("regenerate_session_report degraded: %s", exc)
         return {"error": str(exc)}
 
 
@@ -738,11 +1296,34 @@ def _system_hosts(sysdoc: Dict[str, Any]) -> List[str]:
 
 _LAYER_BASE = {1: 10, 2: 20}
 _TITLE_BONUS = 5
+# 有效分时间衰减（半衰期指数）：陈旧打法（已打补丁/环境变了）不该长期霸榜误导 AI 烧预算。
+# recommend = base + eff × 0.5^(age_days / _DECAY_HALFLIFE_DAYS)
+# age = 距上次"被证实有用"(last_useful_date)的天数；出高危 mark_useful 时刷新 → age 归零 → 权重复原。
+# eff 本身只升不降（累积语义不变），衰减只作用于"推荐排序权重"，不改库里的 effective_score。
+_DECAY_HALFLIFE_DAYS = 30.0
+
+
+def _decay_factor(last_useful_date: str, now_epoch: float = 0.0) -> float:
+    """有效分时间衰减因子 0.5^(age_days / H)，范围 (0,1]。
+    last_useful_date 解析失败/为空 → 视为刚证实（factor=1，不误伤新条目/无历史条目）。"""
+    import time as _t
+    s = (last_useful_date or "").strip()
+    if not s:
+        return 1.0
+    try:
+        past = _t.mktime(_t.strptime(s, "%Y-%m-%d %H:%M:%S"))
+    except (ValueError, TypeError):
+        return 1.0
+    now = now_epoch or _t.time()
+    age_days = max(0.0, (now - past) / 86400.0)
+    return 0.5 ** (age_days / _DECAY_HALFLIFE_DAYS)
 
 
 def _norm_components(components: List[str]) -> List[str]:
-    """组件名归一（小写去空白去重排序）。"""
-    return sorted({(c or "").strip().lower() for c in (components or []) if c and str(c).strip()})
+    """组件名归一到规范名（共享归一器，去重排序）。缺陷1 修复：打法库写入侧/匹配侧共用
+    core.canonical_component，与漏洞库同一权威词汇——治 "spring boot" vs "springboot" 漏匹配。"""
+    from sentinel_platform.core import canonical_component
+    return sorted({canonical_component(c) for c in (components or []) if c and str(c).strip()})
 
 
 def _playbook_layer_key(components: List[str]) -> Any:
@@ -785,6 +1366,8 @@ def match_playbook(fingerprints: List[str], title: str = "") -> Dict[str, Any]:
     except Exception as exc:
         logger.debug("match_playbook query degraded: %s", exc)
         return out
+    import time as _t
+    now_epoch = _t.time()
     scored = []
     for d in rows:
         pb_comps = set(d.get("fingerprints") or [])
@@ -793,7 +1376,10 @@ def match_playbook(fingerprints: List[str], title: str = "") -> Dict[str, Any]:
         layer = int(d.get("fingerprint_layer", 1) or 1)
         base = _LAYER_BASE.get(layer, 10)
         eff = int(d.get("effective_score", 0) or 0)
-        rec = base + eff
+        # 时间衰减：eff 按"距上次被证实有用"的天数半衰期指数衰减（陈旧打法自然沉底，新证实的浮上来）。
+        # last_useful_date 缺失（老数据/从没 mark_useful）回退 update_date；再缺则 factor=1 不误伤。
+        decay = _decay_factor(d.get("last_useful_date") or d.get("update_date", ""), now_epoch)
+        rec = base + eff * decay
         pb_title = (d.get("title") or "").strip().lower()
         if title_l and pb_title and pb_title in title_l:
             rec += _TITLE_BONUS
@@ -804,7 +1390,7 @@ def match_playbook(fingerprints: List[str], title: str = "") -> Dict[str, Any]:
         "vuln_type": d.get("vuln_type", ""),
         "method": d.get("method", ""),
         "fingerprints": d.get("fingerprints") or [],
-        "recommend_score": rec,
+        "recommend_score": round(rec, 1),   # 含时间衰减后的推荐分（float，一位小数供展示）
         "useful_count": int(d.get("useful_count", 0) or 0),
     } for rec, d in scored]
     out["count"] = len(out["playbooks"])
@@ -840,27 +1426,28 @@ def write_playbook(components: List[str], vuln_type: str, method: str = "",
     comps = _norm_components(components)
     m = (method or "").strip()
     now = models_now()
+    # 派生标量幂等键（P2 并发原子化）：数组 fingerprints 无法直接建唯一索引，派生 pb_key 标量
+    # + 唯一索引 + update_one(upsert) 原子 upsert，杜绝多 worker 并发 find_one→insert 双插。
+    pb_key = "{}|{}|{}|{}".format(layer, ",".join(comps), vuln_type, m)
     try:
         coll = get_repo().collection(Collections.INTEL_PLAYBOOK)
-        key = {"fingerprint_layer": layer, "fingerprints": comps,
-               "vuln_type": vuln_type, "method": m}
-        existed = coll.find_one(key)
-        if existed:
-            upd = {"$inc": {"seen_count": 1}, "$set": {"update_date": now}}
-            if unit:
-                upd["$addToSet"] = {"source_units": unit}
-            coll.update_one({"_id": existed["_id"]}, upd)
-            return {"ok": True, "dup": True, "playbook_id": str(existed["_id"])}
-        doc = {
+        # $setOnInsert 只在新建时写（初始分/日期）；$inc/$set 每次都执行（累计 seen_count）。
+        set_on_insert = {
             "fingerprint_layer": layer, "fingerprints": comps,
             "vuln_type": vuln_type, "method": m, "title": (title or "").strip(),
-            "seen_count": 1, "useful_count": 0,
+            "useful_count": 0,
             "effective_score": _median_effective_score(layer),  # 冷启动=同层中位数
-            "source_units": [unit] if unit else [],
-            "save_date": now, "update_date": now,
+            "save_date": now, "last_useful_date": now,   # 衰减基准：新归档视为刚证实
         }
-        rid = coll.insert_one(doc).inserted_id
-        return {"ok": True, "dup": False, "playbook_id": str(rid)}
+        upd: Dict[str, Any] = {"$inc": {"seen_count": 1},
+                               "$set": {"update_date": now},
+                               "$setOnInsert": set_on_insert}
+        if unit:
+            upd["$addToSet"] = {"source_units": unit}
+        coll.update_one({"pb_key": pb_key}, upd, upsert=True)
+        doc = coll.find_one({"pb_key": pb_key}) or {}
+        dup = int(doc.get("seen_count", 1) or 1) > 1
+        return {"ok": True, "dup": dup, "playbook_id": str(doc.get("_id", ""))}
     except Exception as exc:
         logger.debug("write_playbook error: %s", exc)
         return {"ok": False, "error": str(exc)}
@@ -897,7 +1484,11 @@ def mark_playbook_useful(playbook_id: str = "", vuln_type: str = "", method: str
         if not doc:
             return {"ok": False, "error": "playbook not found"}
         new_score = int(doc.get("effective_score", 0) or 0) + delta
-        upd = {"$set": {"effective_score": new_score, "update_date": models_now()}}
+        now = models_now()
+        set_fields = {"effective_score": new_score, "update_date": now}
+        if out_high:
+            set_fields["last_useful_date"] = now   # 出高危=再次被证实有用 → 衰减 age 归零，权重复原
+        upd: Dict[str, Any] = {"$set": set_fields}
         if out_high:
             upd["$inc"] = {"useful_count": 1}
         coll.update_one({"_id": doc["_id"]}, upd)
@@ -909,44 +1500,83 @@ def mark_playbook_useful(playbook_id: str = "", vuln_type: str = "", method: str
 
 # ========== AI 指纹纠错回写（record_component，核心链路 P5）==========
 
+# 指纹纠错传播到共享 intel_system 的门槛（缺陷5 防单会话污染）：
+# high 置信单会话即可传播；否则需 ≥ 该票数的**不同会话**独立确认才传播到共享系统身份。
+_FINGER_PROMOTE_VOTES = 2
+
+
 def record_component(asset_key: str, component: str, evidence: str = "",
-                     confidence: str = "medium", remove: str = "") -> Dict[str, Any]:
-    """AI 渗透中确认/纠正真实技术栈 → 回写 intel_asset.finger_names + 联动 intel_system。
-    component=新确认的组件；remove=内核误报要移除的组件。提升指纹覆盖率，后续会话情报匹配受益。
-    返回 {ok, finger_names}。缺 asset_key/component 且无 remove → 拒绝。"""
+                     confidence: str = "medium", remove: str = "", session_id: str = "") -> Dict[str, Any]:
+    """AI 渗透中确认/纠正真实技术栈 → 回写 intel_asset.finger_names（本资产，影响面小），
+    **达门槛才传播到共享 intel_system**（缺陷5 防单会话污染整个系统身份带歪全体匹配）。
+
+    传播门槛（confidence + 多会话投票）：
+      • confidence=high → 单会话即传播（AI 明确高置信，如拿到 banner/报错回显实证）；
+      • 否则 → 需 ≥ _FINGER_PROMOTE_VOTES 个**不同会话**独立确认同一组件才传播（投票，抗单会话误判）；
+      • remove 同理：单会话低置信只在本资产移除，达门槛才从共享系统身份移除（防误删拖累其他资产）。
+    投票记 intel_asset._finger_votes[规范名] = {sessions:[...], removes:[...]}。返回 {ok, finger_names, promoted}。"""
     if not asset_key or (not component and not remove):
         return {"ok": False, "error": "asset_key 必填，component/remove 至少一个"}
+    from sentinel_platform.core import canonical_component
     comp = (component or "").strip()
-    rm = (remove or "").strip().lower()
+    rm = (remove or "").strip()
+    conf = (confidence or "medium").strip().lower()
+    high = conf in ("high", "confirmed", "确认", "高")
+    sid_vote = (session_id or "").strip() or "anon"
     try:
         coll = get_repo().collection(Collections.INTEL_ASSET)
         asset = coll.find_one({"key": asset_key})
         if not asset:
             return {"ok": False, "error": "asset not found"}
         names = list(asset.get("finger_names", []) or [])
-        # 移除误报（大小写不敏感）
+        votes = dict(asset.get("_finger_votes", {}) or {})
+
+        def _tally(canon: str, kind: str) -> int:
+            """登记本会话对某规范组件的一票（kind=add/remove），返回该 kind 的不同会话票数。"""
+            v = dict(votes.get(canon, {}) or {})
+            lst = list(v.get(kind, []) or [])
+            if sid_vote not in lst:
+                lst.append(sid_vote)
+            v[kind] = lst
+            votes[canon] = v
+            return len(lst)
+
+        promoted = {"add": [], "remove": []}
+        # —— 本资产 finger_names 更新（影响面仅本资产，AI 正打的目标，可即时反映）——
         if rm:
-            names = [n for n in names if (n or "").strip().lower() != rm]
-        # 加新组件（去重，大小写不敏感）
+            names = [n for n in names if (n or "").strip().lower() != rm.lower()]
+            add_votes = _tally(canonical_component(rm), "remove")
+            if high or add_votes >= _FINGER_PROMOTE_VOTES:
+                promoted["remove"].append(rm)
         if comp and comp.lower() not in {(n or "").strip().lower() for n in names}:
             names.append(comp)
+        if comp:
+            c_votes = _tally(canonical_component(comp), "add")
+            if high or c_votes >= _FINGER_PROMOTE_VOTES:
+                promoted["add"].append(comp)
         merged = sorted({n for n in names if n})
-        set_data = {"finger_names": merged, "update_date": models_now(),
-                    "system_name": _pick_sys_name(merged, asset.get("title", ""))}
-        coll.update_one({"_id": asset["_id"]}, {"$set": set_data})
-        # 联动 intel_system：把纠正后的指纹并入系统身份的 finger_names
+        coll.update_one({"_id": asset["_id"]}, {"$set": {
+            "finger_names": merged, "_finger_votes": votes, "update_date": models_now(),
+            "system_name": _pick_sys_name(merged, asset.get("title", ""))}})
+
+        # —— 共享 intel_system 传播：仅达门槛的增/删才动共享系统身份（缺陷5 核心）——
         sid = asset.get("system_id", "")
-        if sid:
+        if sid and (promoted["add"] or promoted["remove"]):
             try:
                 scoll = get_repo().collection(Collections.INTEL_SYSTEM)
                 sysdoc = scoll.find_one({"_id": _oid(sid)})
                 if sysdoc:
-                    sys_names = sorted({n for n in (list(sysdoc.get("finger_names", []) or []) + merged) if n})
+                    sys_set = {n for n in (list(sysdoc.get("finger_names", []) or [])) if n}
+                    sys_set |= set(promoted["add"])
+                    rm_low = {r.lower() for r in promoted["remove"]}
+                    sys_set = {n for n in sys_set if n.lower() not in rm_low}
                     scoll.update_one({"_id": sysdoc["_id"]},
-                                     {"$set": {"finger_names": sys_names, "update_date": models_now()}})
+                                     {"$set": {"finger_names": sorted(sys_set), "update_date": models_now()}})
             except Exception:
                 pass
-        return {"ok": True, "finger_names": merged, "confidence": confidence}
+        return {"ok": True, "finger_names": merged, "confidence": conf,
+                "promoted": promoted, "note": "" if (high or promoted["add"] or promoted["remove"])
+                else "已记本资产+投票；需≥{}个不同会话确认或 high 置信才传播到共享系统身份".format(_FINGER_PROMOTE_VOTES)}
     except Exception as exc:
         logger.debug("record_component error: %s", exc)
         return {"ok": False, "error": str(exc)}
@@ -1015,14 +1645,21 @@ def get_code_audit(system_id: str) -> Dict[str, Any]:
 # ========== 报告情报查询（供 ai_pentest 开局/研判用，对齐 §12.11）==========
 
 def _mark_asset_pentested(asset_key: str, report_id: str) -> None:
-    """会话出报告后回填资产 pentest_status=done + report_id（治流式多触发重复派发 + 三层联动读历史）。
-    异常吞（不反噬报告写入）。对齐旧平台 §13.6.3。"""
+    """会话出报告后回填资产 pentest_status=done（治流式多触发重复派发 + 三层联动读历史）。
+    异常吞（不反噬报告写入）。对齐旧平台 §13.6.3。
+
+    **每次渗透独立报告（用户设计）**：report_ids 用 $addToSet 累积每次渗透的报告 id（同 session 复跑
+    report_id 不变，$addToSet 幂等）——资产/单位视图据此列出多份历史报告。report_id 保留单值=最新指针
+    （兼容存量 + briefing 复用最近一份）。last_pentest_date=本次渗透时间（供近期已渗透 5 天阈值判定）。"""
     if not asset_key:
         return
     try:
-        get_repo().collection(Collections.INTEL_ASSET).update_one(
-            {"key": asset_key},
-            {"$set": {"pentest_status": "done", "report_id": report_id, "update_date": models_now()}})
+        now = models_now()
+        upd = {"$set": {"pentest_status": "done", "report_id": report_id,
+                        "last_pentest_date": now, "update_date": now}}
+        if report_id:
+            upd["$addToSet"] = {"report_ids": report_id}   # 累积多份报告指针（幂等）
+        get_repo().collection(Collections.INTEL_ASSET).update_one({"key": asset_key}, upd)
     except Exception as exc:
         logger.debug("mark_asset_pentested degraded: %s", exc)
 
@@ -1158,8 +1795,8 @@ class IntelServiceImpl:
         return mark_playbook_useful(playbook_id, vuln_type, method, out_high=out_high, **kw)
 
     def record_component(self, asset_key: str, component: str, evidence: str = "",
-                         confidence: str = "medium", remove: str = "") -> Dict[str, Any]:
-        return record_component(asset_key, component, evidence, confidence, remove)
+                         confidence: str = "medium", remove: str = "", session_id: str = "") -> Dict[str, Any]:
+        return record_component(asset_key, component, evidence, confidence, remove, session_id)
 
     def query_unit_reports(self, unit: str, domain: str = "", limit: int = 0) -> Dict[str, Any]:
         return query_unit_reports(unit, domain, limit)
@@ -1185,14 +1822,36 @@ class IntelServiceImpl:
     def auto_collect_after_scan(self, task_id: str) -> Dict[str, Any]:
         return auto_collect_after_scan(task_id)
 
+    def auto_collect_sites(self, task_id: str, site_rows) -> Dict[str, Any]:
+        """流式能力：只归集这次已落库的增量站点；空增量不回退全任务扫描。"""
+        return auto_collect_after_scan(task_id, site_rows=site_rows)
+
     def stat(self) -> Dict[str, Any]:
         return stat()
 
     def list_collection(self, collection: str, **kw: Any) -> Dict[str, Any]:
         return list_collection(collection, **kw)
 
-    def get_report(self, report_id: str) -> Optional[Dict[str, Any]]:
-        return get_report(report_id)
+    def get_report(self, report_id: str, collection: str = Collections.INTEL_REPORT) -> Optional[Dict[str, Any]]:
+        return get_report(report_id, collection=collection)
+
+    # —— 报告编辑（#4）——
+    def build_task_report(self, task_id: str, use_llm: bool = True) -> Dict[str, Any]:
+        return build_task_report(task_id, use_llm)
+
+    def update_report(self, report_id: str, content: str = None, title: str = None,
+                      report_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        return update_report(report_id, content, title, report_data)
+
+    def assist_report(self, report_id: str, **kwargs) -> Dict[str, Any]:
+        from .report_assist import propose
+        return propose(report_id, **kwargs)
+
+    def export_report_docx(self, report_id: str, collection: str = Collections.INTEL_REPORT) -> Dict[str, Any]:
+        return export_report_docx(report_id, collection=collection)
+
+    def regenerate_session_report(self, session_id: str) -> Dict[str, Any]:
+        return regenerate_session_report(session_id)
 
     def delete_records(self, collection: str, ids: List[str]) -> Dict[str, Any]:
         return delete_records(collection, ids)
@@ -1203,8 +1862,78 @@ class IntelServiceImpl:
     def build_pentest_context(self, asset_key: str) -> Dict[str, Any]:
         return build_pentest_context(asset_key)
 
+    def check_pentest_overlap(self, targets=None, unit: str = "", within_days: int = 0) -> Dict[str, Any]:
+        return check_pentest_overlap(targets, unit, within_days=within_days)
+
     def resolve_icp(self, domain: str) -> Dict[str, Any]:
         return resolve_icp(domain)
+
+    # —— 报告模板学习（modules/risk_intel/report_template，惰性 import 避免顶层拉 docx/matplotlib）——
+    def learn_template(self, name: str, origin_path: str, source_filename: str = "",
+                       created_by: str = "", provider_id: str = "",
+                       need_review: bool = True, sync: bool = False) -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.learn_template(name, origin_path, source_filename, created_by,
+                                 provider_id=provider_id, need_review=need_review, sync=sync)
+
+    def refine_template(self, template_id: str, provider_id: str = "",
+                        feedback: str = "") -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.refine_template(template_id, provider_id=provider_id, feedback=feedback)
+
+    def confirm_template(self, template_id: str) -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.confirm_template(template_id)
+
+    def template_diff(self, template_id: str) -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.template_diff(template_id)
+
+    def get_template_docx(self, template_id: str, which: str = "origin") -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.get_template_docx(template_id, which=which)
+
+    def run_pending_learn(self, stale_seconds: int = 600) -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.run_pending_learn(stale_seconds=stale_seconds)
+
+    def list_templates(self, page: int = 1, size: int = 20, scope: str = "") -> Dict[str, Any]:
+        # scope 透传（修 v1.21.157-58）：-48 给 report_template.list_templates 加了 scope 过滤 +
+        # 端点 asset_intel.py:427 传了 scope=，但**这个门面方法没加 scope 形参** → 端点调用
+        # svc.list_templates(scope=...) 命中此处旧签名 → TypeError 500。补透传即修（端点走的是 INTEL 门面，非直调 report_template）。
+        from . import report_template as rt
+        return rt.list_templates(page, size, scope=scope)
+
+    def get_template(self, template_id: str) -> Optional[Dict[str, Any]]:
+        from . import report_template as rt
+        return rt.get_template(template_id)
+
+    def delete_template(self, template_id: str) -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.delete_template(template_id)
+
+    def generate_from_template(self, template_id: str, source: str, source_id: str,
+                               options: Dict[str, Any] = None) -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.generate_from_template(template_id, source, source_id, options)
+
+    def save_manual_shot(self, template_id: str, finding_id: str, img_bytes: bytes,
+                         ext: str = "png") -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.save_manual_shot(template_id, finding_id, img_bytes, ext)
+
+    # —— 漏洞证据截图（按 finding_id 全局绑定，跨模板通用；生成时自动嵌入报告）——
+    def list_finding_shots(self, finding_id: str) -> List[Dict[str, str]]:
+        from . import report_template as rt
+        return rt.list_finding_shots(finding_id)
+
+    def save_finding_shot(self, finding_id: str, img_bytes: bytes, ext: str = "png") -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.save_finding_shot(finding_id, img_bytes, ext)
+
+    def delete_finding_shot(self, finding_id: str, name: str) -> Dict[str, Any]:
+        from . import report_template as rt
+        return rt.delete_finding_shot(finding_id, name)
 
 
 _service = IntelServiceImpl()
@@ -1212,6 +1941,5 @@ _service = IntelServiceImpl()
 
 def get_service() -> IntelServiceImpl:
     return _service
-
 
 

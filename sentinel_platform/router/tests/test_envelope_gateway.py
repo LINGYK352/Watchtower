@@ -79,6 +79,60 @@ class TestGatewayLogic(unittest.TestCase):
         self.assertEqual(reason, "rbac_not_ready")
 
 
+class TestActivationGate(unittest.TestCase):
+    """激活硬门控纯逻辑：门控前缀判定 + 强制开关 + activation_ok 依赖降级(fail-open)。"""
+
+    def test_gated_prefixes_cover_core_business(self):
+        # 核心"值钱能力"必须被门控
+        for p in ("/api/pentest/sessions", "/api/task/", "/api/task_fofa",
+                  "/api/intel/asset", "/api/miniapp/x", "/api/probe/y",
+                  "/api/poc/list", "/api/github_task/z", "/api/scheduler/trigger"):
+            self.assertTrue(gw.is_activation_gated(p), p)
+
+    def test_readonly_and_activation_paths_not_gated(self):
+        # 只读展示 / 激活自身 / 登录 / 状态查询：绝不门控（否则未激活死锁在激活页外）
+        for p in ("/api/meta/activation", "/api/meta/health", "/api/user/login",
+                  "/api/about/version", "/api/dashboard/overview", "/api/proxy/status",
+                  "/api/log/list", "/api/settings/get"):
+            self.assertFalse(gw.is_activation_gated(p), p)
+
+    def test_activation_enforced_default_true(self):
+        cfg = mock.Mock()
+        cfg.section.side_effect = lambda *a, **k: k.get("default", None)  # 未配任何值
+        with mock.patch.object(gw, "get_config", return_value=cfg):
+            self.assertTrue(gw.activation_enforced())     # 未配即强制
+
+    def test_activation_enforced_can_disable(self):
+        cfg = mock.Mock()
+        # SENTINEL.ACTIVATION_ENFORCE = False
+        cfg.section.side_effect = lambda *a, **k: (
+            False if a[:2] == ("SENTINEL", "ACTIVATION_ENFORCE") else k.get("default", None))
+        with mock.patch.object(gw, "get_config", return_value=cfg):
+            self.assertFalse(gw.activation_enforced())
+
+    def test_activation_ok_true_when_activated(self):
+        fake_act = mock.Mock()
+        fake_act.local_status.return_value = {"activated": True}
+        import sys
+        with mock.patch.dict(sys.modules, {"sentinel_platform.modules.system.activation": fake_act}):
+            self.assertTrue(gw.activation_ok())
+
+    def test_activation_ok_false_when_expired(self):
+        fake_act = mock.Mock()
+        fake_act.local_status.return_value = {"activated": False, "expired": True}
+        import sys
+        with mock.patch.dict(sys.modules, {"sentinel_platform.modules.system.activation": fake_act}):
+            self.assertFalse(gw.activation_ok())
+
+    def test_activation_ok_fail_open_on_error(self):
+        # activation 模块读盘/依赖异常 → 降级放行(fail-open)，不因门控自锁
+        fake_act = mock.Mock()
+        fake_act.local_status.side_effect = RuntimeError("boom")
+        import sys
+        with mock.patch.dict(sys.modules, {"sentinel_platform.modules.system.activation": fake_act}):
+            self.assertTrue(gw.activation_ok())
+
+
 class TestDualAuthBoundary(unittest.TestCase):
     """双鉴权体系边界核验（核心链路 §11.3.1）：用户会话 Token 与分发系统激活 JWT key
     两套凭证绝不串用。静态扫源码，防回归把两套混起来。"""

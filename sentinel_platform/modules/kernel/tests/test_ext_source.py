@@ -245,6 +245,40 @@ class TestIcpQuery(unittest.TestCase):
         self.assertEqual(ext._main_domain("sub.x.com.cn"), "x.com.cn")
 
 
+class TestConfiguredCollectionSources(unittest.TestCase):
+    def test_runtime_filters_and_formats_credentials(self):
+        values = {
+            ("fofa", "key"): "fk",
+            ("hunter", "key"): "hk",
+            ("quake", "token"): "qt",
+            ("zoomeye", "key"): "zk",
+            ("passivetotal", "email"): "user@example.com",
+            ("passivetotal", "key"): "pk",
+        }
+        getter = lambda sid, field="key": values.get((sid, field), "")
+        with mock.patch.object(ext, "_apikey", side_effect=getter):
+            runtime = ext.configured_collection_sources(
+                ["fofa", "hunter", "quake", "zoomeye", "passivetotal"])
+        self.assertTrue(runtime["fofa"])
+        self.assertEqual(runtime["subfinder"]["hunter"], "hk")
+        self.assertEqual(runtime["subfinder"]["quake"], "qt")
+        self.assertEqual(runtime["subfinder"]["zoomeyeapi"], "zoomeye.org:zk")
+        self.assertEqual(runtime["subfinder"]["passivetotal"], "user@example.com:pk")
+
+    def test_explicit_empty_selects_nothing(self):
+        with mock.patch.object(ext, "_apikey", return_value="configured") as getter:
+            runtime = ext.configured_collection_sources([])
+        self.assertEqual(runtime, {"fofa": False, "subfinder": {}})
+        getter.assert_not_called()
+
+    def test_fofa_subdomains_filters_to_requested_scope(self):
+        rows = [["https://Api.Example.com:443/path", "1.1.1.1", "443"],
+                ["outside.test", "2.2.2.2", "80"], ["example.com", "3.3.3.3", "80"]]
+        with mock.patch.object(ext, "fofa_query", return_value=rows):
+            result = ext.fofa_subdomains(["example.com"])
+        self.assertEqual(result, ["api.example.com", "example.com"])
+
+
 class TestMultiSourceDedup(unittest.TestCase):
     """多源合并去重：域名按 hostname、纯IP按 ip+port，宽进不误删（不解析域名成IP，避免CDN误合并）。"""
 
@@ -284,6 +318,61 @@ class TestMultiSourceDedup(unittest.TestCase):
         self.assertEqual(r["per_source"]["fofa"], 2)
         self.assertEqual(r["per_source"]["hunter"], 2)
         self.assertEqual(r["merged"], 3)
+
+
+class TestDomainOwnershipFilter(unittest.TestCase):
+    """源查询归属过滤：治 Hunter/FOFA domain= 模糊匹配返回仿冒/混淆域名（gov.cn.x.com 等）。"""
+
+    def test_extract_roots_single_multi_none(self):
+        # 用户原句：两个 domain=".gov.cn" 取并集 → {gov.cn}
+        self.assertEqual(ext._extract_domain_roots(
+            'domain=".gov.cn"&&title="后台"||domain=".gov.cn"&&title="login"'), {"gov.cn"})
+        # 无 domain 子句 → 空集（不过滤）
+        self.assertEqual(ext._extract_domain_roots('title="后台" && app="某系统"'), set())
+        # 裸值 + 多根
+        self.assertEqual(ext._extract_domain_roots('domain=example.com || domain="test.org"'),
+                         {"example.com", "test.org"})
+
+    def test_belongs_dns_label_boundary(self):
+        roots = {"gov.cn"}
+        # 真站放行
+        for h in ("gov.cn", "jazx.gov.cn", "zz.hnzwfw.gov.cn"):
+            self.assertTrue(ext._host_belongs_roots(h, roots), h)
+        # 仿冒/混淆/近似全拦（红线：绝不子串匹配）
+        for h in ("gov.cn.emy.flicksfrenzy.com", "ctdwhsdds-gov-cn.enjoylost.com",
+                  "sdds-gov-cn.binguosoft.cn", "notgov.cn", "agov.cn"):
+            self.assertFalse(ext._host_belongs_roots(h, roots), h)
+        # roots 空 → 不过滤（全放行）
+        self.assertTrue(ext._host_belongs_roots("anything.com", set()))
+
+    def test_filter_rows_keeps_ip_drops_fake(self):
+        rows = [{"host": "www.jazx.gov.cn", "ip": "1.1.1.1", "port": "443"},
+                {"host": "gov.cn.emy.flicksfrenzy.com", "ip": "", "port": ""},
+                {"host": "", "ip": "2.2.2.2", "port": "80"}]      # 纯 IP 行保留
+        out = ext._filter_rows_by_domain_roots(rows, {"gov.cn"}, src="t")
+        hosts = {r["host"] for r in out}
+        self.assertIn("www.jazx.gov.cn", hosts)
+        self.assertNotIn("gov.cn.emy.flicksfrenzy.com", hosts)   # 仿冒滤除
+        self.assertTrue(any(r["ip"] == "2.2.2.2" for r in out))  # 纯 IP 保留
+        # roots 空 → 原样返回
+        self.assertEqual(len(ext._filter_rows_by_domain_roots(rows, set())), 3)
+
+    def test_hunter_query_filters_fake_domains(self):
+        """hunter_query 端到端：mock 源返回混入仿冒域名的 arr，断言仿冒被滤、真站保留。"""
+        cfg = mock.Mock()
+        cfg.section.side_effect = lambda *a, **k: k.get("default", "")
+        arr = [{"domain": "www.jazx.gov.cn", "ip": "1.1.1.1", "port": 443},
+               {"domain": "gov.cn.emy.flicksfrenzy.com", "ip": "9.9.9.9", "port": 80},
+               {"domain": "ctdwhsdds-gov-cn.enjoylost.com", "ip": "8.8.8.8", "port": 80}]
+        resp = _Resp(200, {"code": 200, "data": {"total": 3, "arr": arr}})
+        with mock.patch.object(ext, "get_config", return_value=cfg), \
+             mock.patch.object(ext, "_apikey", return_value="k"), \
+             mock.patch.object(ext, "_intel_proxies", return_value=None), \
+             mock.patch.object(ext, "http_req", return_value=resp):
+            r = ext.hunter_query('domain=".gov.cn"&&title="login"')
+        self.assertTrue(r["ok"])
+        hosts = {row["host"] for row in r["rows"]}
+        self.assertEqual(hosts, {"www.jazx.gov.cn"})   # 仅真站留下，两个仿冒被滤
 
 
 if __name__ == "__main__":

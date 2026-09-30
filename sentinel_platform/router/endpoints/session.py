@@ -31,6 +31,9 @@ from ..envelope import ok, err, page as env_page, CODE_BAD_REQUEST, CODE_ERROR, 
 # 会话实时观察 SSE（只读）：终态集合 + 轮询间隔 + 总时长上限（防线程泄漏）。
 _TERMINAL_STATUS = ("done", "fatal", "stopped", "paused_manual")
 _STREAM_POLL_SEC = 2.0
+# 会话台专用更快轮询（气泡流式：LLM 生成中 partial 文本每约 0.6s 落库，1s 取走→气泡每约 1s 长一截）。
+# 只用于 _console_event_stream；自动会话 _session_event_stream 仍用 2s（无流式需求，省线程）。
+_CONSOLE_POLL_SEC = 1.0
 _STREAM_MAX_SEC = 30 * 60
 
 logger = get_logger()
@@ -80,6 +83,20 @@ def _svc():
     return get_registry().get(ROLE.PENTEST_DISPATCH)
 
 
+def _session_access_error(svc, session_id):
+    """One object authorization boundary for every HTTP operation by session id.
+
+    Ownership is immutable after creation; worker/internal services remain trusted.
+    Batch callers must authorize the whole batch before performing any mutation.
+    """
+    if _can_view_all():
+        return None
+    sess = svc.get_session(session_id, with_messages=False)
+    if not sess or not _current_username() or sess.get("owner") != _current_username():
+        return err(CODE_FORBIDDEN, "无权访问该会话")
+    return None
+
+
 def _int(v, d):
     try:
         return int(v)
@@ -100,7 +117,7 @@ class SessionList(Resource):
         owner = None if _can_view_all() else _current_username()
         r = svc.list_sessions(status=a.get("status") or "", page=_int(a.get("page"), 1),
                               size=_int(a.get("size"), 20), owner=owner,
-                              keyword=a.get("keyword") or "",
+                              keyword=a.get("keyword") or "", task_name=a.get("task_name") or "",
                               date_from=a.get("date_from") or "", date_to=a.get("date_to") or "")
         return env_page(r["items"], r["total"], r["page"], r["size"])
 
@@ -121,6 +138,17 @@ class SessionList(Resource):
                                auto_start=bool(b.get("auto_start", False)), owner=_current_username(),
                                asset_type=b.get("asset_type", "web"))
         return err(CODE_BAD_REQUEST, r["error"]) if r.get("error") else ok(r)
+
+
+@ns.route("/session/active_tasks")
+class SessionActiveTasks(Resource):
+    @ns.doc(security="token", description="需权限 pentest:read：当前有活跃会话的任务名（供会话列表任务名筛选下拉）")
+    def get(self):
+        """当前正在工作的任务名列表（去重排序）。"""
+        svc = _svc()
+        if not svc or not hasattr(svc, "active_task_names"):
+            return ok({"tasks": []})
+        return ok({"tasks": svc.active_task_names()})
 
 
 @ns.route("/session/stat")
@@ -160,6 +188,12 @@ class SessionBatchDelete(Resource):
         ids = b.get("ids") or []
         if isinstance(ids, str):
             ids = [ids]
+        if not isinstance(ids, list) or any(not isinstance(sid, str) for sid in ids):
+            return err(CODE_BAD_REQUEST, "ids 必须是会话 ID 数组")
+        for sid in ids:
+            denied = _session_access_error(svc, sid)
+            if denied is not None:
+                return denied
         return ok(svc.delete_sessions(ids))
 
 
@@ -171,6 +205,9 @@ class SessionDetail(Resource):
         svc = _svc()
         if not svc:
             return err(CODE_ERROR, "渗透会话服务未就绪")
+        denied = _session_access_error(svc, session_id)
+        if denied is not None:
+            return denied
         d = svc.get_session(session_id, with_messages=False)
         return ok(d) if d else err(CODE_NOT_FOUND, "会话不存在")
 
@@ -183,6 +220,9 @@ class SessionMessages(Resource):
         svc = _svc()
         if not svc:
             return err(CODE_ERROR, "渗透会话服务未就绪")
+        denied = _session_access_error(svc, session_id)
+        if denied is not None:
+            return denied
         return ok(svc.get_session_messages(session_id))
 
 
@@ -274,6 +314,75 @@ def _session_event_stream(session_id: str, svc):
             pass
 
 
+def _console_event_stream(session_id: str, svc):
+    """会话台**只读观察**生成器（v1.21.157-62）：轮询会话文档，增量推 console_messages 对话气泡
+    + tool_log 工具 + meta。与 _session_event_stream 的区别：读 console_messages（非 messages）、
+    **不按 status 结束**（console 会话恒 paused_manual ∈ _TERMINAL_STATUS 会误 end）、用 console_running
+    标志判活（false=回合结束推 idle meta 但保持连接，跨回合观察）。终止仅靠客户端断连或 _STREAM_MAX_SEC 超时。"""
+    from sentinel_platform.modules.ai_pentest import _console
+    start = time.time()
+    dlg_sent = 0                  # 已推可展示对话条数（游标）
+    tool_sent = 0                 # 已推工具数（游标）
+    last_meta = None
+    try:
+        while True:
+            sess = svc.get_session(session_id, with_messages=False)
+            if not sess:
+                yield _sse("error", {"message": "会话不存在或已删除"})
+                return
+            # 对话增量：只推 console_messages[seed_len:]（人工接管后的新对话），经展示过滤（防泄露内部注入）
+            cmsgs = sess.get("console_messages") or []
+            seed = sess.get("console_seed_len")
+            seed = seed if isinstance(seed, int) else 0
+            tail = cmsgs[seed:] if seed <= len(cmsgs) else []
+            disp = []
+            for m in tail:
+                role = m.get("role")
+                txt = _console._msg_text(m.get("content"))
+                if role == "user":
+                    if txt and _console._is_display_user_msg(txt):
+                        disp.append(("user", txt))
+                elif role == "assistant":
+                    if txt:
+                        disp.append(("assistant", txt))
+            if len(disp) > dlg_sent:
+                for role, txt in disp[dlg_sent:]:
+                    yield _sse("dialogue", {"role": role, "content": txt})
+                dlg_sent = len(disp)
+            # 工具增量
+            tool_log = sess.get("tool_log") or []
+            if len(tool_log) > tool_sent:
+                for tc in tool_log[tool_sent:]:
+                    yield _sse("tool", {"name": tc.get("name", ""),
+                                        "arguments": tc.get("arguments", {}),
+                                        "result": tc.get("result", "")})
+                tool_sent = len(tool_log)
+            # meta：console_running（非 status，因 console 恒 paused_manual）+ 轮次/token +
+            # stream/stream_phase（气泡流式：LLM 生成中 partial 文本 + 阶段 thinking/text，供前端气泡实时渲染）
+            meta = {"console_running": bool(sess.get("console_running", False)),
+                    "round": sess.get("round", 0), "total_tokens": sess.get("total_tokens", 0),
+                    "window_tokens": sess.get("window_tokens", 0),
+                    "token_budget": sess.get("token_budget", 0), "tool_count": len(tool_log),
+                    "stream": sess.get("stream_buffer", "") or "",
+                    "stream_phase": sess.get("stream_phase", "") or ""}
+            if meta != last_meta:
+                yield _sse("meta", meta)
+                last_meta = meta
+            if time.time() - start > _STREAM_MAX_SEC:
+                yield _sse("end", {"reason": "timeout", "message": "观察超时，请刷新重连"})
+                return
+            yield ":keepalive\n\n"
+            time.sleep(_CONSOLE_POLL_SEC)
+    except GeneratorExit:                   # 客户端断连（切菜单/关页面）→ 只断观察，后台回合不受影响
+        return
+    except Exception as exc:
+        logger.debug("console stream degraded: %s", exc)
+        try:
+            yield _sse("error", {"message": "流中断"})
+        except Exception:
+            pass
+
+
 @ns.route("/session/<string:session_id>/stream")
 class SessionStream(Resource):
     @ns.doc(security="token", description="需权限 pentest:read（只读实时观察运行中会话，SSE）")
@@ -301,6 +410,9 @@ def _action(session_id, fn_name):
     svc = _svc()
     if not svc:
         return err(CODE_ERROR, "渗透会话服务未就绪")
+    denied = _session_access_error(svc, session_id)
+    if denied is not None:
+        return denied
     r = getattr(svc, fn_name)(session_id)
     return err(CODE_BAD_REQUEST, r["error"]) if isinstance(r, dict) and r.get("error") else ok(r)
 
@@ -346,6 +458,27 @@ class SessionInject(Resource):
         return ok(r)
 
 
+@ns.route("/session/<string:session_id>/context")
+class SessionContext(Resource):
+    @ns.doc(security="token", description="需权限 pentest:write（会话台接管时放大本会话上下文上限，只增不减）")
+    def post(self, session_id):
+        """人工接管时放大会话上下文上限。body:{max_context_tokens}（-1=原生上限/正数=token）。
+        只允许放大（≥当前生效上限），引擎下一轮据此重算 budget。归属校验同插话。"""
+        svc = _svc()
+        if not svc or not hasattr(svc, "set_session_context"):
+            return err(CODE_ERROR, "渗透会话服务未就绪")
+        body = request.get_json(silent=True) or {}
+        try:
+            mct = int(body.get("max_context_tokens", 0))
+        except (TypeError, ValueError):
+            return err(CODE_BAD_REQUEST, "max_context_tokens 须为整数")
+        r = svc.set_session_context(session_id, mct,
+                                    caller=_current_username(), can_view_all=_can_view_all())
+        if isinstance(r, dict) and r.get("error"):
+            return err(CODE_FORBIDDEN, r["error"]) if r.get("forbidden") else err(CODE_BAD_REQUEST, r["error"])
+        return ok(r)
+
+
 @ns.route("/session/<string:session_id>/delete")
 class SessionDelete(Resource):
     @ns.doc(security="token", description="需权限 pentest:write")
@@ -358,12 +491,19 @@ class SessionDelete(Resource):
 class SessionSetProvider(Resource):
     @ns.doc(security="token", description="需权限 pentest:write（改会话锁定 AI 模型；仅非运行态+同协议）")
     def post(self, session_id):
-        """改会话锁定的 AI 模型（#14）。body:{provider_id}。运行态/跨协议→拒绝(forbidden)。"""
+        """改会话锁定的 AI 模型（#14）+ 备用模型（需求2）。
+        body:{provider_id, backup_provider_id?}。backup_provider_id 缺省=不改该字段；""=清空备用；
+        非空=校验同首要协议后设为备用。运行态/跨协议→拒绝(forbidden)。"""
         svc = _svc()
         if not svc or not hasattr(svc, "update_session_provider"):
             return err(CODE_ERROR, "渗透会话服务未就绪")
+        denied = _session_access_error(svc, session_id)
+        if denied is not None:
+            return denied
         body = request.get_json(silent=True) or {}
-        r = svc.update_session_provider(session_id, body.get("provider_id", ""))
+        # 含键则传值（空串=清空），不含键则传 None（向后兼容旧前端只传 provider_id）
+        backup = body.get("backup_provider_id") if "backup_provider_id" in body else None
+        r = svc.update_session_provider(session_id, body.get("provider_id", ""), backup)
         if isinstance(r, dict) and r.get("error"):
             return err(CODE_FORBIDDEN, r["error"]) if r.get("forbidden") else err(CODE_BAD_REQUEST, r["error"])
         return ok(r)
@@ -374,7 +514,8 @@ class SessionSetProvider(Resource):
 class ConsoleNew(Resource):
     @ns.doc(security="token", description="需权限 pentest:write（会话台新建作战会话，权限最高/全工具/无闸刀）")
     def post(self):
-        """会话台新建作战会话（白板会话，site 可空，人工接管全开放）。body: {site?, name?, prompt?, mode?}
+        """会话台新建作战会话（白板会话，site 可空，人工接管全开放）。
+        body: {site?, name?, prompt?, mode?, provider_id?}（provider_id=#7 锁定 AI 模型，空=全局默认）。
         返回 {_id, resume_key, site, status}。用返回的 resume_key 进会话台对话。"""
         svc = _svc()
         if not (svc and hasattr(svc, "console_create_session")):
@@ -385,6 +526,9 @@ class ConsoleNew(Resource):
             name=(body.get("name") or "").strip(),
             prompt=(body.get("prompt") or "").strip(),
             mode=(body.get("mode") or "src").strip(),
+            provider_id=(body.get("provider_id") or "").strip(),
+            backup_provider_id=(body.get("backup_provider_id") or "").strip(),
+            max_context_tokens=body.get("max_context_tokens"),
             owner=_current_username())
         return err(CODE_BAD_REQUEST, r["error"]) if isinstance(r, dict) and r.get("error") else ok(r)
 
@@ -488,6 +632,48 @@ class ConsoleStop(Resource):
         if isinstance(r, dict) and r.get("error"):
             return err(CODE_FORBIDDEN, r["error"]) if r.get("forbidden") else err(CODE_BAD_REQUEST, r["error"])
         return ok(r)
+
+
+@ns.route("/session/console/<string:resume_key>/submit")
+class ConsoleSubmit(Resource):
+    @ns.doc(security="token", description="需权限 pentest:write（会话台发一句：入队+触发后台回合，执行与请求解耦）")
+    def post(self, resume_key):
+        """会话台「发一句」（v1.21.157-62 后台执行模型）：body {message}。指令入队 + 触发 worker 后台回合，
+        AI 输出经 /observe 观察流推出。切菜单/关页面不再中断执行（治「LLM 调用期间切菜单→命令中断/浏览器失控」）。"""
+        svc = _svc()
+        if not (svc and hasattr(svc, "console_submit")):
+            return err(CODE_ERROR, "渗透会话服务未就绪")
+        body = request.get_json(silent=True) or {}
+        message = (body.get("message") or "").strip()
+        if not message:
+            return err(CODE_BAD_REQUEST, "message 必填")
+        r = svc.console_submit(resume_key, message, caller=_current_username(), can_view_all=_can_view_all())
+        if isinstance(r, dict) and r.get("error"):
+            return err(CODE_FORBIDDEN, r["error"]) if r.get("forbidden") else err(CODE_BAD_REQUEST, r["error"])
+        return ok(r)
+
+
+@ns.route("/session/console/<string:resume_key>/observe")
+class ConsoleObserve(Resource):
+    @ns.doc(security="token", description="需权限 pentest:read（会话台只读观察：SSE 增量推对话/工具/meta，跨菜单不断执行）")
+    def get(self, resume_key):
+        """会话台只读观察流（SSE）：增量推 console_messages 对话 + tool_log 工具 + meta(console_running)。
+        执行在后台 worker，本流仅观察——切菜单 abort 本流不影响后台回合。"""
+        svc = _svc()
+        if not (svc and hasattr(svc, "find_by_resume_key")):
+            return err(CODE_ERROR, "渗透会话服务未就绪")
+        sess = svc.find_by_resume_key(resume_key, with_messages=False)
+        if not sess:
+            return err(CODE_NOT_FOUND, "会话不存在")
+        if not _can_view_all():
+            owner = (sess.get("owner") or "").strip()
+            if not (_current_username() and owner == _current_username()):
+                return err(CODE_FORBIDDEN, "无权观察该会话（仅创建人或具备查看全部权限者可看）")
+        resp = Response(stream_with_context(_console_event_stream(str(sess["_id"]), svc)),
+                        mimetype="text/event-stream")
+        resp.headers["Cache-Control"] = "no-cache"
+        resp.headers["X-Accel-Buffering"] = "no"
+        return resp
 
 
 @ns.route("/session/console/<string:resume_key>/browser")

@@ -41,6 +41,16 @@ class IPRec:
 
 
 @dataclass
+class AliveRec:
+    """主机存活探测结果（ICMP echo 或 TCP 降级）。method: icmp/tcp/none/dns_fail。"""
+    host: str
+    ip: str = ""
+    alive: bool = False
+    rtt_ms: float = 0.0
+    method: str = ""
+
+
+@dataclass
 class SiteRec:
     """一个存活站点（对齐 site 集合；tag/screenshot 由平台/截图回填）。"""
     url: str

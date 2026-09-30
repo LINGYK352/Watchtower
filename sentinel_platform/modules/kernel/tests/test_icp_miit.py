@@ -91,5 +91,39 @@ class TestQueryDegrade(unittest.TestCase):
         self.assertEqual(out["source"], "miit")
 
 
+class TestReverseTriState(unittest.TestCase):
+    """问题9：reverse_by_unit_miit 三态区分（empty=权威判无备案 vs unavailable=工具失效）。"""
+    def test_status_ok(self):
+        rows = [{"domain": "real.com", "unitName": "某公司"}]
+        with mock.patch.object(m, "_auth", return_value=("tok", "ck")), \
+             mock.patch.object(m, "_solve_captcha", return_value=("s", "u")), \
+             mock.patch.object(m, "_query_condition", return_value=rows):
+            r = m.reverse_by_unit_miit("某公司")
+        self.assertEqual(r["status"], "ok")
+        self.assertIn("real.com", r["domains"])
+
+    def test_status_empty_query_ok_but_no_record(self):
+        # 查询成功但 rows 空 → empty（权威说无备案，非工具失效）
+        with mock.patch.object(m, "_auth", return_value=("tok", "ck")), \
+             mock.patch.object(m, "_solve_captcha", return_value=("s", "u")), \
+             mock.patch.object(m, "_query_condition", return_value=[]):
+            r = m.reverse_by_unit_miit("无备案单位")
+        self.assertEqual(r["status"], "empty")
+
+    def test_status_unavailable_query_failed(self):
+        # 查询失败(None，WAF/风控/网络) → unavailable（工具失效，≠无备案）
+        with mock.patch.object(m, "_auth", return_value=("tok", "ck")), \
+             mock.patch.object(m, "_solve_captcha", return_value=("s", "u")), \
+             mock.patch.object(m, "_query_condition", return_value=None):
+            r = m.reverse_by_unit_miit("查询失败单位")
+        self.assertEqual(r["status"], "unavailable")
+
+    def test_status_unavailable_auth_failed(self):
+        # auth 失败(出口IP风控) → unavailable
+        with mock.patch.object(m, "_auth", return_value=("", "")):
+            r = m.reverse_by_unit_miit("单位")
+        self.assertEqual(r["status"], "unavailable")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,7 @@ from ..models import NucleiRec
 class Nuclei(ExternalTool):
     binary = "nuclei"
     adapter = "nuclei"
+    resource_heavy = True   # nuclei 大量模板并发扫，吃内存 → 受资源门控让位 AI（问题11）
 
     def build_argv(self, concurrency: int = 25, **kwargs: Any) -> List[str]:
         return ["-silent", "-jsonl", "-c", str(concurrency)]

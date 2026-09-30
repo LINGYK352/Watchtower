@@ -139,10 +139,21 @@ def _norm_priority(v: Any) -> int:
 
 
 def _normalize_source(source: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """来源子文档归一（仅用于结果归档贯穿 unit，不污染扫描 options）。全空返 None。"""
+    """来源子文档归一（仅用于结果归档贯穿 unit，不污染扫描 options）。全空返 None。
+    额外保留源查询归档字段 sources(源名列表)/queries(各源查询语句 dict)——供任务详情页展示/复现
+    「当时用什么源、什么查询语句导入」（此前被过滤丢弃，详情页无从显示）。"""
     if not isinstance(source, dict):
         return None
     s = {k: (source.get(k) or "") for k in ("platform", "category", "unit", "src_id")}
+    src_list = source.get("sources")
+    if isinstance(src_list, list) and src_list:
+        s["sources"] = src_list
+    queries = source.get("queries")
+    if isinstance(queries, dict) and queries:
+        s["queries"] = {k: v for k, v in queries.items() if v}
+    limits = source.get("limits")
+    if isinstance(limits, dict) and limits:
+        s["limits"] = {k: v for k, v in limits.items() if v}   # 各源抓取数量限制，供详情页展示/复现
     return s if any(s.values()) else None
 
 
@@ -194,37 +205,84 @@ class TaskCreateServiceImpl:
             logger.debug("task_create: resolve options failed: %s", exc)
             return None
 
+    @staticmethod
+    def _apply_ctx_tokens(options: Dict[str, Any], pentest_max_context_tokens: Optional[int]) -> None:
+        """单会话上下文上限从新建任务覆盖策略值（用户 2026-09-15）。仅当策略绑定了 AI 渗透
+        （options.auto_pentest=True）才生效——未绑定 AI 渗透的策略不该有上下文上限概念。
+        None=前端未传（不覆盖，向后兼容）；传了则原样写进 options.max_context_tokens
+        （0=跟随全局默认/-1=原生上限「拉满」/正数=固定值），归一由下游 session._norm_ctx_tokens 单点做。
+        不设上界（守禁硬限制铁律）。"""
+        if pentest_max_context_tokens is None:
+            return
+        if not options.get("auto_pentest", False):
+            return
+        try:
+            options["max_context_tokens"] = int(pentest_max_context_tokens)
+        except (TypeError, ValueError):
+            pass
+
     def _create_tasks(self, name: str, ip_list: List[str], domain_list: List[str],
                       options: Dict[str, Any], source: Optional[Dict[str, Any]],
                       priority: Any) -> List[Dict[str, Any]]:
-        """按目标类型拆 task 文档落库（IP 一篇 + 每域名一篇，对齐旧 submit_task_task 粒度）。"""
+        """按目标落 task 文档（v1.21.157-48：**多目标合并成一篇**，治"多个 URL/域名被拆成多个任务"）。
+
+        - 单目标（单 IP 批 或 单域名）：一篇，行为不变（type=ip/domain，target=该目标）。
+        - 多目标（多域名、或 IP+域名混合）：**一篇聚合任务**，target=展示串，全量目标按 ip/domain 分类
+          存 options.multi_targets={ip:[...],domain:[...]}，_recon_handler 分批侦察（域名批保留子域枚举，
+          IP 批走 ip 侦察）。对齐用户"多个 url 依旧是一个任务"。"""
         repo = get_repo()
         coll = repo.collection(Collections.TASK)
-        created: List[Dict[str, Any]] = []
-        jobs: List[Tuple[str, str]] = []
-        if ip_list:
-            jobs.append((",".join(ip_list), models.TaskType.IP))     # IP 目标合并一篇
-        for d in domain_list:
-            jobs.append((d, models.TaskType.DOMAIN))                  # 每域名一篇
-        for tgt, ttype in jobs:
-            doc = _build_task_doc(name, tgt, ttype, models.TaskTag.TASK, options, source, priority)
-            res = coll.insert_one(doc)
-            tid = str(getattr(res, "inserted_id", ""))
-            doc["_id"] = tid
-            doc["task_id"] = tid
-            doc["dispatch"] = _try_dispatch(tid, doc)
-            created.append({"task_id": tid, "target": tgt, "type": ttype,
-                            "status": doc["status"], "dispatch": doc["dispatch"]})
-        return created
+        total_targets = len(ip_list) + len(domain_list)
+
+        # 单目标：保持原粒度（一篇），零行为变化
+        if total_targets <= 1:
+            created: List[Dict[str, Any]] = []
+            jobs: List[Tuple[str, str]] = []
+            if ip_list:
+                jobs.append((",".join(ip_list), models.TaskType.IP))
+            for d in domain_list:
+                jobs.append((d, models.TaskType.DOMAIN))
+            for tgt, ttype in jobs:
+                doc = _build_task_doc(name, tgt, ttype, models.TaskTag.TASK, options, source, priority)
+                res = coll.insert_one(doc)
+                tid = str(getattr(res, "inserted_id", ""))
+                doc["_id"] = tid; doc["task_id"] = tid
+                doc["dispatch"] = _try_dispatch(tid, doc)
+                created.append({"task_id": tid, "target": tgt, "type": ttype,
+                                "status": doc["status"], "dispatch": doc["dispatch"]})
+            return created
+
+        # 多目标 → 一篇聚合任务
+        opts = dict(options or {})
+        opts["multi_targets"] = {"ip": list(ip_list), "domain": list(domain_list)}
+        # 主类型：有域名按 domain（保留子域枚举），纯 IP 按 ip。展示 target 用"首个 等 N 个目标"。
+        primary_type = models.TaskType.DOMAIN if domain_list else models.TaskType.IP
+        first = (domain_list or ip_list)[0]
+        display_target = "{} 等 {} 个目标".format(first, total_targets)
+        doc = _build_task_doc(name, display_target, primary_type, models.TaskTag.TASK, opts, source, priority)
+        res = coll.insert_one(doc)
+        tid = str(getattr(res, "inserted_id", ""))
+        doc["_id"] = tid; doc["task_id"] = tid
+        doc["dispatch"] = _try_dispatch(tid, doc)
+        return [{"task_id": tid, "target": display_target, "type": primary_type,
+                 "status": doc["status"], "dispatch": doc["dispatch"]}]
 
     def create_by_policy(self, name: str, policy_id: str, target: str, task_tag: str = "task",
                          priority: Any = 2, source: Optional[Dict[str, Any]] = None,
                          pentest_whitelist: str = "", mission_intel: str = "",
-                         pentest_provider_id: str = "", pentest_egress_mode: str = "") -> Dict[str, Any]:
+                         pentest_provider_id: str = "", pentest_backup_provider_id: str = "",
+                         pentest_egress_mode: str = "",
+                         pentest_fallback_egress_mode: str = "",
+                         observer_enabled: bool = False, observer_provider_id: str = "",
+                         pentest_max_context_tokens: Optional[int] = None) -> Dict[str, Any]:
         """按策略下发任务（主入口，taskApi.policy）。经 policy_service 展开 options，按目标拆 task 落库。
         返回 {ok, items:[...], created:N} 或 {ok:False, error}。
         pentest_provider_id=为本任务派发的 AI 渗透会话锁定 AI 模型（空=跟随全局默认）。
-        pentest_egress_mode=本任务 AI 攻击出口（direct/global/smart，空=跟随策略默认）——出口选择从策略移到任务。"""
+        pentest_egress_mode=本任务 AI 攻击出口（direct/global/smart，空=跟随策略默认）——出口选择从策略移到任务。
+        observer_enabled=启用监督者（Observer 旁路语义监督，默认关）；observer_provider_id=监督者独立模型（空=默认）。
+        pentest_max_context_tokens=本任务单会话上下文上限（0=跟随全局默认/-1=模型原生上限「拉满」/正数=固定 token）
+          ——上下文上限从策略移到新建任务（用户 2026-09-15），仅当所选策略 auto_pentest=True 时生效。
+          None=前端未传（不覆盖，向后兼容旧调用）。归一在下游 session._norm_ctx_tokens 单点做。"""
         name = (name or "").strip()
         policy_id = (policy_id or "").strip()
         if not name or not policy_id or not (target or "").strip():
@@ -241,12 +299,28 @@ class TaskCreateServiceImpl:
             options["mission_intel_raw"] = mission_intel   # 端点已可预清洗；此处原样贯穿供派发解析
         if (pentest_provider_id or "").strip():
             options["pentest_provider_id"] = pentest_provider_id.strip()   # 锁定 AI 模型，透传到派发会话
+        if (pentest_backup_provider_id or "").strip():
+            options["pentest_backup_provider_id"] = pentest_backup_provider_id.strip()
+        # 监督者（默认关）：开则透传到派发会话；独立模型空=跟随监督者 scene/全局默认。
+        if observer_enabled:
+            options["observer_enabled"] = True
+            if (observer_provider_id or "").strip():
+                options["observer_provider_id"] = observer_provider_id.strip()
         # AI 攻击出口（从策略移到任务）：任务传了就覆盖 options 的 pentest_egress.mode，rule_id 沿用策略。
         _egm = (pentest_egress_mode or "").strip()
         if _egm in ("direct", "global", "smart"):
             _peg = dict(options.get("pentest_egress") or {})
             _peg["mode"] = _egm
             options["pentest_egress"] = _peg
+        # AI 封禁备用出口（同样任务传了覆盖策略默认，rule_id 沿用）
+        _fbm = (pentest_fallback_egress_mode or "").strip()
+        if _fbm in ("direct", "global", "smart"):
+            _fbeg = dict(options.get("pentest_fallback_egress") or {})
+            _fbeg["mode"] = _fbm
+            options["pentest_fallback_egress"] = _fbeg
+        # 单会话上下文上限（从策略移到任务，用户 2026-09-15）：仅当所选策略绑定了 AI 渗透
+        # （auto_pentest=True）才生效；任务传了就覆盖策略展开出的 max_context_tokens。归一交下游。
+        self._apply_ctx_tokens(options, pentest_max_context_tokens)
         ip_list, domain_list, invalid = classify_targets(target)
         if not ip_list and not domain_list:
             return {"ok": False, "error": "无有效目标", "invalid": invalid}
@@ -264,7 +338,11 @@ class TaskCreateServiceImpl:
     def create_from_targets(self, name: str, targets: List[str], policy_id: str,
                             priority: Any = 2, source: Optional[Dict[str, Any]] = None,
                             pentest_whitelist: str = "", mission_intel: str = "",
-                            pentest_provider_id: str = "", pentest_egress_mode: str = "") -> Dict[str, Any]:
+                            pentest_provider_id: str = "", pentest_backup_provider_id: str = "",
+                            pentest_egress_mode: str = "",
+                            pentest_fallback_egress_mode: str = "",
+                            observer_enabled: bool = False, observer_provider_id: str = "",
+                            pentest_max_context_tokens: Optional[int] = None) -> Dict[str, Any]:
         """从**已解析的目标列表**下发（FOFA 导入用；targets 由端点经 ext_source.fofa_query 解析）。
         创建 **1 个聚合任务**（type=fofa），对齐旧代码行为——任务列表只显示 1 条而非 N 条。
         目标列表存 options.fofa_ip 供 orchestration 拆解扫描。**FOFA 路径同步可用**
@@ -282,13 +360,24 @@ class TaskCreateServiceImpl:
             options["mission_intel_raw"] = mission_intel
         if (pentest_provider_id or "").strip():
             options["pentest_provider_id"] = pentest_provider_id.strip()
+        if (pentest_backup_provider_id or "").strip():
+            options["pentest_backup_provider_id"] = pentest_backup_provider_id.strip()
+        if observer_enabled:
+            options["observer_enabled"] = True
+            if (observer_provider_id or "").strip():
+                options["observer_provider_id"] = observer_provider_id.strip()
         _egm = (pentest_egress_mode or "").strip()
         if _egm in ("direct", "global", "smart"):
             _peg = dict(options.get("pentest_egress") or {}); _peg["mode"] = _egm
             options["pentest_egress"] = _peg
+        _fbm = (pentest_fallback_egress_mode or "").strip()
+        if _fbm in ("direct", "global", "smart"):
+            _fbeg = dict(options.get("pentest_fallback_egress") or {}); _fbeg["mode"] = _fbm
+            options["pentest_fallback_egress"] = _fbeg
+        self._apply_ctx_tokens(options, pentest_max_context_tokens)   # 上下文上限（仅 auto_pentest 生效）
         # FOFA 聚合任务：1 个 task 文档包含所有 targets（对齐旧 taskFofa submit_fofa_task 行为）
-        options["fofa_ip"] = targets   # orchestration 消费此字段拆解扫描
-        display_target = "FOFA 目标 {}".format(len(targets))
+        options["fofa_ip"] = targets   # orchestration 消费此字段拆解扫描（字段名沿用 fofa_ip 为兼容，不改数据契约）
+        display_target = "源查询 {} 个目标".format(len(targets))
         try:
             coll = get_repo().collection(Collections.TASK)
             doc = _build_task_doc(name, display_target, "fofa", models.TaskTag.TASK,
@@ -307,7 +396,10 @@ class TaskCreateServiceImpl:
     def create_unit_task(self, name: str, units: List[str], policy_id: str, priority: Any = 2,
                          source: Optional[Dict[str, Any]] = None, pentest_whitelist: str = "",
                          mission_intel: str = "", pentest_provider_id: str = "",
-                         pentest_egress_mode: str = "") -> Dict[str, Any]:
+                         pentest_backup_provider_id: str = "", pentest_egress_mode: str = "",
+                         pentest_fallback_egress_mode: str = "",
+                         observer_enabled: bool = False, observer_provider_id: str = "",
+                         pentest_max_context_tokens: Optional[int] = None) -> Dict[str, Any]:
         """单位名建任务（一个任务装多单位）。**反查(单位→资产)是 orchestration worker 职责**（ext_source
         未暴露反查），本叶子落一篇 type=unit 的 WAITING 任务，unit_names 存 options；orchestration 建成后
         读它异步反查种子 + 转 ip/domain 子任务（对齐旧 v2.7.62）。返回 {ok, task_id, name, unit_count}。"""
@@ -326,10 +418,21 @@ class TaskCreateServiceImpl:
             options["mission_intel_raw"] = mission_intel
         if (pentest_provider_id or "").strip():
             options["pentest_provider_id"] = pentest_provider_id.strip()
+        if (pentest_backup_provider_id or "").strip():
+            options["pentest_backup_provider_id"] = pentest_backup_provider_id.strip()
+        if observer_enabled:
+            options["observer_enabled"] = True
+            if (observer_provider_id or "").strip():
+                options["observer_provider_id"] = observer_provider_id.strip()
         _egm = (pentest_egress_mode or "").strip()
         if _egm in ("direct", "global", "smart"):
             _peg = dict(options.get("pentest_egress") or {}); _peg["mode"] = _egm
             options["pentest_egress"] = _peg
+        _fbm = (pentest_fallback_egress_mode or "").strip()
+        if _fbm in ("direct", "global", "smart"):
+            _fbeg = dict(options.get("pentest_fallback_egress") or {}); _fbeg["mode"] = _fbm
+            options["pentest_fallback_egress"] = _fbeg
+        self._apply_ctx_tokens(options, pentest_max_context_tokens)   # 上下文上限（仅 auto_pentest 生效）
         try:
             coll = get_repo().collection(Collections.TASK)
             # type="unit"：orchestration dispatch 表消费（未建则留 WAITING，正确降级）。target 展示用单位名。
@@ -352,4 +455,3 @@ _service = TaskCreateServiceImpl()
 
 def get_service() -> TaskCreateServiceImpl:
     return _service
-

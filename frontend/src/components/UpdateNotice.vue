@@ -8,7 +8,9 @@
       <a-tag color="green" class="update-badge">热更新 · 不影响现有业务</a-tag>
 
       <div class="update-changelog" v-if="changelogs.length">
-        <div class="changelog-title">更新内容</div>
+        <div class="changelog-title">
+          将直接升级到最新版 {{ latestVersion }}<span v-if="changelogs.length > 1">（一次到位，涵盖以下 {{ changelogs.length }} 个版本的更新内容）</span>
+        </div>
         <div class="changelog-item" v-for="item in changelogs" :key="item.ver">
           <span class="changelog-ver">{{ item.ver }}</span>
           <span class="changelog-text">{{ item.summary }}</span>
@@ -42,6 +44,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { APP_VERSION } from '../config/brand'
 import { request } from '../api/request'
+import { fetchServerVersion } from '../composables/useServerVersion'
 
 const showModal = ref(false)
 const latestVersion = ref('')
@@ -95,6 +98,10 @@ function _cmpVer(a: string, b: string): number {
 
 async function checkUpdate() {
   try {
+    // 比对基准用**后端真实版本**（version.txt），非编译进包的 APP_VERSION——跳板逐级更新时前端产物
+    // brand 标签可能滞后/错配（如落地157却标159），用 APP_VERSION 比会漏判「还有更新」。
+    const curVer = await fetchServerVersion()
+    // check?client= 仍上报前端构建版本（后端据此判「刷新拿新构建」，是另一维度）
     const res = await request<any>('/api/about/check?client=' + APP_VERSION)
     // If server explicitly says unauthorized → 延迟重试一次确认（排除激活后竞态：多 worker 间 key 同步需要时间）
     if (res.error_type === 'unauthorized') {
@@ -108,8 +115,8 @@ async function checkUpdate() {
     }
     _unauthorizedConfirmed = false  // 成功时重置
     if (res.has_update && res.latest_version) {
-      // 前端侧保险：latest_version 必须真的 > APP_VERSION 才弹（数值比较，防字符串误判）
-      if (_cmpVer(res.latest_version, APP_VERSION) <= 0) return
+      // 前端侧保险：latest_version 必须真的 > 后端当前版本才弹（数值比较，防字符串误判）
+      if (_cmpVer(res.latest_version, curVer) <= 0) return
       const dismissed = localStorage.getItem(DISMISS_KEY)
       if (dismissed === res.latest_version) return
       // 已有更新在进行（用户在更新检测页手动更新中 / 另一实例在更新）→ 不弹自动提醒，避免撞车
@@ -122,7 +129,7 @@ async function checkUpdate() {
       try {
         const logs = await request<any[]>('/api/about/changelog')
         changelogs.value = (logs || [])
-          .filter((l: any) => _cmpVer(l.ver, APP_VERSION) > 0)   // 数值比较：只留真正比当前新的版本
+          .filter((l: any) => _cmpVer(l.ver, curVer) > 0)        // 只留比后端当前版本新的
           .sort((a: any, b: any) => _cmpVer(b.ver, a.ver))       // 新→旧排序
           .slice(0, 10)
       } catch { changelogs.value = [] }
@@ -188,19 +195,19 @@ defineExpose({ checkUpdate })
 <style scoped>
 .update-wrap { padding: 8px 0; }
 .update-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px }
-.update-header h2 { font-size: 18px; font-weight: 700; margin: 0 }
+.update-header h2 { font-size: 18px; font-weight: 700; margin: 0; color: var(--dt-text, #1f2328) }
 .update-ver { font-size: 14px }
 .update-badge { margin-bottom: 16px }
-.update-changelog { background: #f6f8fa; border-radius: 8px; padding: 14px; margin-bottom: 20px; max-height: 200px; overflow-y: auto }
-.changelog-title { font-size: 13px; font-weight: 600; color: #1f2328; margin-bottom: 8px }
-.changelog-item { padding: 6px 0; border-bottom: 1px solid #e1e4e8; font-size: 13px; display: flex; gap: 8px }
+.update-changelog { background: var(--dt-hover, #f6f8fa); border-radius: 8px; padding: 14px; margin-bottom: 20px; max-height: 200px; overflow-y: auto }
+.changelog-title { font-size: 13px; font-weight: 600; color: var(--dt-text, #1f2328); margin-bottom: 8px }
+.changelog-item { padding: 6px 0; border-bottom: 1px solid var(--dt-border, #e1e4e8); font-size: 13px; display: flex; gap: 8px }
 .changelog-item:last-child { border-bottom: none }
-.changelog-ver { color: #0969da; font-weight: 600; flex-shrink: 0; font-size: 12px }
-.changelog-text { color: #656d76 }
+.changelog-ver { color: var(--dt-link, #0969da); font-weight: 600; flex-shrink: 0; font-size: 12px }
+.changelog-text { color: var(--dt-muted, #656d76) }
 .update-progress { margin: 16px 0 }
-.progress-msg { font-size: 12px; color: #656d76; margin-top: 6px }
+.progress-msg { font-size: 12px; color: var(--dt-muted, #656d76); margin-top: 6px }
 .update-actions { display: flex; flex-direction: column; gap: 8px }
-.btn-later { color: #656d76 }
+.btn-later { color: var(--dt-muted, #656d76) }
 .update-done { text-align: center; padding: 12px 0 }
 .update-error { text-align: center; padding: 12px 0 }
 </style>

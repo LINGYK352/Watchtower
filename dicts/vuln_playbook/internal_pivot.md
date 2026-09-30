@@ -1,3 +1,14 @@
+---
+type: 内网横向
+aliases: 内网渗透, internal pivot, 横向移动, lateral movement, 内网立足, 后渗透, pivot
+stage: post_exploitation
+entry_points: [立足点, 内网服务, 路由, 网络分段]
+cwe_ids: [CWE-284]
+owasp_id: PTES-Post-Exploitation
+severity_base: critical
+chains_with: [rce, ad_security, kerberos, windows_postexploit, linux_postexploit]
+tech_stack: [internal]
+---
 # 内网立足 / 后渗透方法论（internal pivot）
 
 > 面向瞭望塔「内网立足」工具链（foothold_register / foothold_exec / internal_recon / internal_portscan /
@@ -53,3 +64,12 @@ application.yml / db.conf）、SSH 私钥路径。命中疑似凭据（密码/to
 - **破坏命令仍受闸刀**：rm -rf / 提权 / 清库等在非红队模式会被拦；红队模式放行但记录。
 - **授权范围**：内网段不自动越界，客户授权外的目标不碰。
 - **凭据是线索不是结论**：harvest 到的凭据需实际验证（登录成功）才算有效，写情报池标"待验证"。
+
+## 验证与反证
+已有执行点、路由可见、端口开放、认证成功和目标权限是不同层次，不应直接连成已确认路径。每一跳记录主机/主体/范围/时间与实际回执；发现新网段不自动扩展范围。
+
+## 修复与复测
+结合已证明路径收紧服务暴露、网络分段和身份权限；复测原路径受阻且正常管理功能可用，完成落点、测试凭据和临时文件的清理交接。
+
+## 定级与阶段交接
+以 `query_finding_template` 的当前定级口径及已验证影响为准；`severity_base` 与 `chains_with` 不是漏洞成立、提权成功或自动升级的证据。证据不足记线索，未覆盖写明原因；完成后转 `post_assessment` 核对残留、修复及复测。

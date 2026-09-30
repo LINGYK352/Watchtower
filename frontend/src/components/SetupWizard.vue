@@ -84,7 +84,7 @@ const router = useRouter()
 const showActivation = ref(false)
 const expired = ref(false)
 const expiresAt = ref('')
-const sourceUrl = ref('http://124.222.145.172:5080')
+const sourceUrl = ref('https://watchtowers.info')
 const keyInput = ref('')
 const activateLoading = ref(false)
 

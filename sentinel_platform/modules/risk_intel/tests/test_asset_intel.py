@@ -62,13 +62,36 @@ class _MemColl:
 
     def update_one(self, q, update, upsert=False):
         m = self._match(q)
+        modified = 0
         if m:
             tgt = next(d for d in self.docs if d.get("_id") == m[0].get("_id"))
-            tgt.update(update.get("$set", {}))
-            for k, v in update.get("$addToSet", {}).items():
-                tgt.setdefault(k, [])
-                if v not in tgt[k]:
-                    tgt[k].append(v)
+            self._apply(tgt, update)
+            modified = 1
+        elif upsert:
+            self._n += 1
+            doc = {}
+            # upsert 新建：先落等值查询条件里的字段（模拟 Mongo 用 filter 作初值），再套 $ 运算
+            for k, v in (q or {}).items():
+                if not k.startswith("$") and not isinstance(v, dict):
+                    doc[k] = v
+            doc.setdefault("_id", "o%d" % self._n)
+            self._apply(doc, update, on_insert=True)
+            self.docs.append(doc)
+        return type("R", (), {"modified_count": modified,
+                              "upserted_id": None if modified else (self.docs[-1].get("_id") if upsert else None)})()
+
+    def _apply(self, tgt, update, on_insert=False):
+        for k, v in update.get("$set", {}).items():
+            tgt[k] = v
+        for k, v in update.get("$inc", {}).items():
+            tgt[k] = (tgt.get(k, 0) or 0) + v
+        for k, v in update.get("$addToSet", {}).items():
+            tgt.setdefault(k, [])
+            if v not in tgt[k]:
+                tgt[k].append(v)
+        if on_insert:
+            for k, v in update.get("$setOnInsert", {}).items():
+                tgt.setdefault(k, v)
 
     def delete_many(self, q):
         m = self._match(q)
@@ -300,6 +323,82 @@ class AssetIntelTest(unittest.TestCase):
         pb = match_playbook(["tomcat"])
         self.assertEqual(pb["playbooks"][0]["vuln_type"], "B")  # 有效分高排首
 
+    def test_decay_factor_halflife(self):
+        """有效分时间衰减：半衰期 30 天，age=0→1.0 / age=30→0.5 / 空日期→1.0（不误伤）。"""
+        import time
+        from sentinel_platform.modules.risk_intel import asset_intel as AI
+        now = time.time()
+        def d(days): return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - days * 86400))
+        self.assertAlmostEqual(AI._decay_factor(d(0), now), 1.0, places=2)
+        self.assertAlmostEqual(AI._decay_factor(d(30), now), 0.5, places=2)
+        self.assertAlmostEqual(AI._decay_factor(d(60), now), 0.25, places=2)
+        self.assertEqual(AI._decay_factor("", now), 1.0)      # 空不误伤
+        self.assertEqual(AI._decay_factor("garbage", now), 1.0)  # 解析失败不误伤
+
+    def test_playbook_decay_stale_sinks(self):
+        """陈旧打法（高 eff 但久未证实）被时间衰减压到新证实打法之后；mark_useful 后 age 归零复原。"""
+        import time
+        from sentinel_platform.modules.risk_intel import asset_intel as AI
+        from sentinel_platform.modules.risk_intel.asset_intel import (
+            write_playbook, match_playbook, mark_playbook_useful)
+        from sentinel_platform.core import get_repo
+        coll = get_repo().collection("intel_playbook")
+        # 陈旧打法：高 eff=100 但 last_useful_date 是 120 天前
+        r_old = write_playbook(["redis"], "OLD", method="陈旧打法")
+        old_date = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() - 120 * 86400))
+        coll.update_one({"vuln_type": "OLD"},
+                        {"$set": {"effective_score": 100, "last_useful_date": old_date}})
+        # 新打法：eff=30 但刚证实
+        r_new = write_playbook(["redis"], "NEW", method="新打法")
+        coll.update_one({"vuln_type": "NEW"}, {"$set": {"effective_score": 30}})
+        pb = match_playbook(["redis"])
+        # 陈旧 base20+100×0.5^4≈26 < 新 base20+30×1≈50 → 新排前（衰减生效）
+        self.assertEqual(pb["playbooks"][0]["vuln_type"], "NEW")
+        # 陈旧打法再次被证实有用 → last_useful_date 归零 → eff 权重复原 → 反超
+        mark_playbook_useful(playbook_id=r_old["playbook_id"], out_high=True)
+        pb2 = match_playbook(["redis"])
+        self.assertEqual(pb2["playbooks"][0]["vuln_type"], "OLD")
+
+    # —— 缺陷5：指纹纠错传播门控（confidence + 多会话投票，防单会话污染共享 system）——
+    def test_record_component_medium_no_shared_propagation(self):
+        from sentinel_platform.modules.risk_intel.asset_intel import record_component
+        from sentinel_platform.core import get_repo
+        ac = get_repo().collection("intel_asset"); sc = get_repo().collection("intel_system")
+        ac.insert_one({"key": "http://x:80", "finger_names": ["nginx"], "system_id": "sys1", "title": "t"})
+        sc.insert_one({"_id": "sys1", "finger_names": ["nginx"]})
+        # medium 单会话：进本资产，不传播共享 system
+        r1 = record_component("http://x:80", "shiro", "报错回显", "medium", session_id="s1")
+        self.assertIn("shiro", ac.find_one({"key": "http://x:80"})["finger_names"])
+        self.assertNotIn("shiro", sc.find_one({"_id": "sys1"})["finger_names"])  # 未传播
+        self.assertEqual(r1["promoted"]["add"], [])
+        # 第2个不同会话确认 → 达 2 票 → 传播共享 system
+        r2 = record_component("http://x:80", "shiro", "另一会话确认", "medium", session_id="s2")
+        self.assertIn("shiro", r2["promoted"]["add"])
+        self.assertIn("shiro", sc.find_one({"_id": "sys1"})["finger_names"])
+
+    def test_record_component_high_propagates_single_session(self):
+        from sentinel_platform.modules.risk_intel.asset_intel import record_component
+        from sentinel_platform.core import get_repo
+        ac = get_repo().collection("intel_asset"); sc = get_repo().collection("intel_system")
+        ac.insert_one({"key": "http://y:80", "finger_names": [], "system_id": "sys2", "title": "t"})
+        sc.insert_one({"_id": "sys2", "finger_names": []})
+        r = record_component("http://y:80", "tomcat", "banner实证", "high", session_id="s1")
+        self.assertIn("tomcat", r["promoted"]["add"])
+        self.assertIn("tomcat", sc.find_one({"_id": "sys2"})["finger_names"])  # high 单会话即传播
+
+    def test_playbook_upsert_no_double_insert(self):
+        """P2 并发原子化：同 key 写两次 → 仅一条文档，seen_count 累加（upsert 幂等，不双插）。"""
+        from sentinel_platform.modules.risk_intel.asset_intel import write_playbook
+        from sentinel_platform.core import get_repo
+        r1 = write_playbook(["weblogic"], "wls_deser", method="T3")
+        self.assertFalse(r1["dup"])
+        r2 = write_playbook(["weblogic"], "wls_deser", method="T3", unit="U1")
+        self.assertTrue(r2["dup"])
+        self.assertEqual(r1["playbook_id"], r2["playbook_id"])   # 同一条
+        pb = get_repo().collection("intel_playbook")._match({"vuln_type": "wls_deser"})
+        self.assertEqual(len(pb), 1)                              # 只一条，无双插
+        self.assertEqual(pb[0]["seen_count"], 2)                 # 累加
+
     def test_playbook_score_only_high_adds(self):
         """有效分（核心链路 §6.2）：只有出高危及以上 +5，其余一律不加分（不减）。"""
         from sentinel_platform.modules.risk_intel.asset_intel import (
@@ -449,6 +548,36 @@ class ReportDetailAndDeleteTest(unittest.TestCase):
         self.assertIn("honest degrade", out.get("skipped", ""))           # 明确 honest degrade
         garbage = repo.collection("intel_asset").count_documents({"key": "http://上海禾赛科技有限公司"})
         self.assertEqual(garbage, 0)                                      # 无垃圾资产落库
+
+    def test_fallback_unit_no_host_fragmentation(self):
+        """v1.21.157-48 item3：无 user-unit/ICP 时回退**任务名**（缺则 fld），不再拼 host 碎片化。"""
+        from sentinel_platform.modules.risk_intel.asset_intel import _fallback_unit
+        # 优先任务名 → 同任务资产落同一桶（不含 host）
+        self.assertEqual(_fallback_unit("政府-探测", "dhyct.cn"), "政府-探测")
+        self.assertNotIn("_", _fallback_unit("政府-探测", "3g.zzxm.hnzwfw.gov.cn"))  # 不再拼 host
+        # 任务名缺 → 退主域 fld（同主域聚一起）
+        self.assertEqual(_fallback_unit("", "dhyct.cn"), "dhyct.cn")
+        self.assertEqual(_fallback_unit("", ""), "")
+
+    def test_upsert_asset_unit_priority(self):
+        """单位优先级：user-unit > ICP unit_map(按fld) > fallback(任务名)。"""
+        from sentinel_platform.modules.risk_intel.asset_intel import upsert_asset
+        from sentinel_platform.core import get_repo
+        # ① user-unit 优先
+        r1 = upsert_asset({"site": "http://a.dhyct.cn", "hostname": "a.dhyct.cn", "fld": "dhyct.cn"},
+                          unit="真实单位A", task_name="任务X", unit_map={"dhyct.cn": "ICP单位"})
+        d1 = get_repo().collection("intel_asset").find_one({"key": r1["asset_key"]})
+        self.assertEqual(d1["unit"], "真实单位A")
+        # ② 无 user-unit → ICP unit_map(按 fld)
+        r2 = upsert_asset({"site": "http://b.dhyct.cn", "hostname": "b.dhyct.cn", "fld": "dhyct.cn"},
+                          unit="", task_name="任务X", unit_map={"dhyct.cn": "ICP单位"})
+        d2 = get_repo().collection("intel_asset").find_one({"key": r2["asset_key"]})
+        self.assertEqual(d2["unit"], "ICP单位")
+        # ③ 都无 → fallback 任务名（不拼 host）
+        r3 = upsert_asset({"site": "http://c.other.cn", "hostname": "c.other.cn", "fld": "other.cn"},
+                          unit="", task_name="任务X", unit_map={})
+        d3 = get_repo().collection("intel_asset").find_one({"key": r3["asset_key"]})
+        self.assertEqual(d3["unit"], "任务X")
 
 
 if __name__ == "__main__":

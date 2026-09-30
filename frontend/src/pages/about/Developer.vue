@@ -101,11 +101,12 @@
 <script setup lang="ts">
 import PageContainer from '../../layouts/PageContainer.vue'
 import CopyText from '../../components/CopyText.vue'
-import { APP_VERSION } from '../../config/brand'
+import { useServerVersion } from '../../composables/useServerVersion'
 
 const email = 'lingyangkang352@163.com'
 const wechat = 'LINGYK352'
-const version = APP_VERSION
+// 显示后端真实版本（version.txt），非编译进包的 APP_VERSION（跳板逐级更新时前端 brand 可能滞后/错配）
+const { serverVersion: version } = useServerVersion()
 
 // 特别贡献者（卡片网格展示，新增贡献者在此追加即可）。wechat 可空（不展示微信行）。
 const contributors = [

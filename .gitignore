@@ -7,6 +7,9 @@ external/
 # 离线依赖 wheel（47M，按 requirements 重装即可）
 vendor/
 
+# 运行时注入的第三方依赖树（vendored .so/.dist-info，与 external/vendor 同类；靠热更新按文件系统分发，不入源码库）
+runtime_libs/
+
 # 前端依赖与构建产物
 frontend/node_modules/
 frontend/dist/
@@ -23,10 +26,23 @@ docker/config/config.yaml
 sentinel_platform/config.yaml
 *.key
 .env
+.activation_key
+.activation_revoked
+.app_platform_key
+.disclaimer_accepted
+/_agent_out.log
+
+# VM/生产部署脚本 + VM 相关脚手架（含硬编码 VM/生产 IP+密码）：仅本地开发用，绝不入库、绝不派发
+/vm_test/
 
 # 运行时数据（实例持久化，非源码）
 shared/
 *.db
+
+# 运行时/调试输出与本地暂存（非源码）
+audit_evidence/
+image/
+.update_stage_local/
 
 # Python 缓存
 __pycache__/
@@ -51,3 +67,15 @@ __pycache__/
 _vm-*.tar.gz
 *.tmp
 *.bak
+
+# 一次性排查/诊断/临时脚本与输出转储（根目录 scratch，不入库；跑完即弃）
+# 注意：只挡根目录一层，不误伤 sentinel_platform/**/_engine.py 等以 _ 开头的正式实现
+/_*.py
+/diagnose_*.py
+/verify_*.py
+/check_prompts.py
+/test_prompt_decoupling.py
+/_*.txt
+/_dryrun*.txt
+/_shots_tmp/
+frontend-dist-*.tar.gz

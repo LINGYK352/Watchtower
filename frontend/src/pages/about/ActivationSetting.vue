@@ -8,7 +8,7 @@
         <div>
           <div class="act-label">激活状态</div>
           <a-tag :color="info.activated ? 'green' : 'red'" class="act-tag">
-            {{ info.activated ? '已激活' : '未激活 / 已过期' }}
+            {{ getStatusText(info) }}
           </a-tag>
         </div>
       </div>
@@ -69,6 +69,8 @@ const loaded = ref(false)
 const disc = reactive({ accepted: false, accepted_version: '', accepted_at: '' })
 const info = reactive({
   activated: false,
+  expired: false,
+  revoked: false,
   key_masked: '',
   activated_at: '',
   expires_at: '',
@@ -80,6 +82,13 @@ const info = reactive({
 const showModal = ref(false)
 const newKey = ref('')
 const submitting = ref(false)
+
+function getStatusText(i: typeof info) {
+  if (i.activated) return '已激活'
+  if (i.revoked) return '已被吊销'
+  if (i.expired) return '已过期'
+  return '未激活'
+}
 
 async function fetchInfo() {
   try {

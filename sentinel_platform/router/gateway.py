@@ -14,7 +14,7 @@ from typing import Any, Optional, Tuple
 
 from sentinel_platform.core import get_config, get_logger
 from sentinel_platform.contracts import get_registry, ROLE
-from .envelope import CODE_UNAUTHORIZED, CODE_FORBIDDEN, envelope
+from .envelope import CODE_UNAUTHORIZED, CODE_FORBIDDEN, CODE_ACTIVATION_REQUIRED, envelope
 
 logger = get_logger()
 
@@ -24,6 +24,7 @@ PUBLIC_PREFIXES = (
     "/api/doc", "/swagger",
     "/api/meta/health", "/api/meta/version",
     "/api/image/",   # 截图 <img> 直连无 Token 头，必须公开（否则 auth 开启时截图全 401）
+    "/api/appbridge/",  # 光纤桥接：光纤非浏览器用户、不带用户 Token，改由端点内 platform_key 鉴权（见 appbridge.py/§6.9）
 )
 
 # 仅特定方法公开的路径（method, prefix）：免责声明签署状态 GET 必须公开——
@@ -39,6 +40,52 @@ def is_public(path: str, method: str = "") -> bool:
         return True
     m = (method or "").upper()
     return any(m == pm and path.startswith(pp) for pm, pp in PUBLIC_METHOD_PREFIXES)
+
+
+# —— 激活门控：核心业务端点（未激活/过期时硬拦，返回 CODE_ACTIVATION_REQUIRED）——
+# 只锁"值钱能力"：AI 渗透 / 扫描任务 / 情报 / 扩展 / 小程序 / 探针 / PoC / GitHub 采集。
+# 只读展示类（仪表盘/设置/日志/代理/关于/资产查看）不锁——未激活也能进来看、能到激活页激活。
+ACTIVATION_GATED_PREFIXES = (
+    "/api/pentest",        # AI 渗透会话 + 扩展商店（/pentest/extensions）
+    "/api/task",           # 扫描任务（含 /task_fofa /task_schedule，startswith 覆盖）
+    "/api/intel",          # 资产情报归集/派发
+    "/api/miniapp",        # 小程序渗透
+    "/api/app_pentest",    # APP 渗透（设备管理/光纤生成；appbridge 光纤连接层不门控，见 appbridge.py）
+    "/api/probe",          # 探针/Agent
+    "/api/poc",            # PoC 插件
+    "/api/github_task",    # GitHub 情报采集任务
+    "/api/scheduler",      # 调度触发
+)
+
+
+def activation_enforced() -> bool:
+    """是否强制激活门控（默认开）。配置 ACTIVATION.ENFORCE=false 可关（特殊部署/调试）。
+    段名候选 SENTINEL.ACTIVATION_ENFORCE → ACTIVATION.ENFORCE，默认 True（未配即强制）。"""
+    cfg = get_config()
+    val = cfg.section("SENTINEL", "ACTIVATION_ENFORCE", default=None)
+    if val is None:
+        val = cfg.section("ACTIVATION", "ENFORCE", default=None)
+    return True if val is None else bool(val)
+
+
+def is_activation_gated(path: str) -> bool:
+    """该路径是否属于"需激活才能用"的核心业务端点。"""
+    return any(path.startswith(p) for p in ACTIVATION_GATED_PREFIXES)
+
+
+def activation_ok() -> bool:
+    """系统当前是否处于"已激活且未过期"状态（本地离线校验 JWT 时效，唯一权威 activation.local_status）。
+
+    走 registry 弱依赖：activation 模块缺失/异常时**降级放行**（fail-open，守孤岛可跑，
+    与 auth/rbac 的降级哲学一致——门控是增强项，不能因依赖未就绪反而锁死系统）。
+    无宽限期：activated 为真才放行，过期即拦（remaining_days 归零那一刻起 local_status.activated=False）。
+    """
+    try:
+        from sentinel_platform.modules.system import activation
+        return bool(activation.local_status().get("activated"))
+    except Exception as e:      # 模块缺失/读盘异常：降级放行，不阻断（同 rbac_error_failopen）
+        logger.warning("activation gate check error (fail-open): %s", e)
+        return True
 
 
 def auth_enabled() -> bool:
@@ -83,18 +130,32 @@ def verify_token(token: str) -> Optional[dict]:
 
 
 def check_rbac(user: dict, path: str, method: str) -> Tuple[bool, str]:
-    """RBAC 校验。权限服务未注册 → 降级放行（已认证前提），返回 (allow, reason)。"""
+    """RBAC 校验。权限服务未注册 → 读操作降级放行，敏感写操作拒绝。返回 (allow, reason)。"""
     if (user or {}).get("role") == "admin":
         return True, "admin"
     rbac_svc = get_registry().get(ROLE.RBAC)
     if not (rbac_svc and hasattr(rbac_svc, "check_permission")):
-        return True, "rbac_not_ready"      # 依赖未就绪，降级放行不阻断（守孤岛可跑）
+        if _is_rbac_fail_closed(path, method):
+            return False, "rbac_not_ready_failclosed"
+        return True, "rbac_not_ready"
     try:
         allow, reason = rbac_svc.check_permission(user, path, method)
         return bool(allow), str(reason)
     except Exception as e:
         logger.warning("rbac check error: %s", e)
+        if _is_rbac_fail_closed(path, method):
+            return False, "rbac_error_failclosed"
         return True, "rbac_error_failopen"
+
+
+_RBAC_FAIL_CLOSED_PREFIXES = ("/api/probe", "/api/system")
+_RBAC_FAIL_CLOSED_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+
+
+def _is_rbac_fail_closed(path: str, method: str) -> bool:
+    if method.upper() not in _RBAC_FAIL_CLOSED_METHODS:
+        return False
+    return any(path.startswith(p) for p in _RBAC_FAIL_CLOSED_PREFIXES)
 
 
 def install_gateway(app: Any) -> None:
@@ -108,8 +169,31 @@ def install_gateway(app: Any) -> None:
         path = request.path or ""
         method = (request.method or "GET").upper()
         g._alog_start = _time.time()   # 计时起点（供 after_request 审计算 elapsed_ms）
-        if not path.startswith("/api") or method == "OPTIONS" or is_public(path, method):
+        if not path.startswith("/api") or method == "OPTIONS":
             return None
+        # 攻击告警 IP 封禁拦截（**最前置，在 public 判断之前**：被封 IP 连探活/登录等 public 端点也一律 403，
+        # 不给任何可乘之机）。取真实客户端 IP 用 X-Real-IP（nginx 反代时 remote_addr 是 nginx 内网 IP）。
+        # 封禁服务缺失/异常一律 fail-open（不因封禁模块问题拖垮全站）。
+        try:
+            from sentinel_platform.modules.honeypot_defense.attack_alert import is_banned
+            _cip = (request.headers.get("X-Real-IP", "")
+                    or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                    or request.remote_addr or "")
+            if _cip and is_banned(_cip):
+                resp = jsonify(envelope(code=CODE_FORBIDDEN, message="您的 IP 因攻击行为已被封禁"))
+                resp.status_code = 403
+                return resp
+        except Exception:
+            pass   # fail-open
+        # public 端点（探活/登录等）在封禁检查之后放行
+        if is_public(path, method):
+            return None
+        # 激活硬门控：核心业务端点未激活/过期即拦（独立于 auth——关掉 AUTH 也不能绕过 license 锁）。
+        # 无宽限期，activation_ok() 依赖缺失时 fail-open（守孤岛可跑）。激活页/登录/状态查询均不在门控前缀内，不会死锁。
+        if activation_enforced() and is_activation_gated(path) and not activation_ok():
+            resp = jsonify(envelope(code=CODE_ACTIVATION_REQUIRED))
+            resp.status_code = CODE_ACTIVATION_REQUIRED
+            return resp
         if not auth_enabled():
             return None
         token = request.headers.get("Token", "") or request.headers.get("token", "")

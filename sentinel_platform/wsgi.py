@@ -37,6 +37,12 @@ def _install_celery_delivery() -> None:
         _celery_adapter.make_celery(broker)                 # 建 app + 注册 sentinel.run_task（供 .delay 投递）
         installed = _celery_adapter.install_celery_executor()
         logger.info("wsgi celery delivery installed=%s broker=%s", installed, broker)
+        # broker 降级自愈：若上次已降级（Mongo 记录 mode=thread）→ 保持线程模式，不把已知坏的 broker 又用起来。
+        try:
+            from sentinel_platform.modules.kernel import _broker_health
+            _broker_health.sync_executor_on_boot()
+        except Exception as exc:
+            logger.debug("wsgi broker_health sync 降级: %s", exc)
     except ImportError:
         logger.warning("wsgi: celery 未装，submit_task 降级线程执行器（开发/离线可，生产应装 celery）")
     except Exception as exc:

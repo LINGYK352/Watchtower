@@ -44,9 +44,18 @@ _list_parser.add_argument("unit", type=str, location="args", help="单位过滤"
 _list_parser.add_argument("status", type=str, location="args", help="状态过滤 building/done")
 _list_parser.add_argument("page", type=int, location="args", help="页码, 默认1")
 _list_parser.add_argument("size", type=int, location="args", help="每页条数, 默认20（无硬上限，传多大返多少）")
+_list_parser.add_argument("min_severity", type=str, location="args",
+                          help="危害门槛, 默认 high（只列高危及以上利用链）；传 info/空显示全部含低危链")
 
 _stat_parser = ns.parser()
 _stat_parser.add_argument("unit", type=str, location="args", help="单位过滤（可选）")
+_stat_parser.add_argument("min_severity", type=str, location="args",
+                          help="危害门槛, 默认 high；传 info/空统计全部")
+
+
+def _floor_arg(v) -> str:
+    """危害门槛入参归一：None（未传）→ 默认 'high'；显式传空串 → '' 表示不过滤（显示全部）。"""
+    return "high" if v is None else str(v)
 
 _del_req = ns.model("ChainDeleteReq", {})    # body {_id:[...]}
 
@@ -67,7 +76,7 @@ class ChainList(Resource):
         except (TypeError, ValueError):
             page, size = 1, 20
         return ok(svc.list_chains(unit=a.get("unit") or "", status=a.get("status") or "",
-                                  page=page, size=size))
+                                  page=page, size=size, min_severity=_floor_arg(a.get("min_severity"))))
 
 
 @ns.route("/chain/stat/")
@@ -79,7 +88,8 @@ class ChainStat(Resource):
         svc = _svc()
         if not svc:
             return err(CODE_ERROR, "攻击链服务未就绪")
-        return ok(svc.stat(request.args.get("unit") or ""))
+        return ok(svc.stat(request.args.get("unit") or "",
+                            min_severity=_floor_arg(request.args.get("min_severity"))))
 
 
 @ns.route("/chain/delete/")

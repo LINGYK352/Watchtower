@@ -31,10 +31,13 @@ class _FakeColl:
         d = self.find_one(q)
         if d:
             d.update(upd.get("$set", {}))
+            return type("R", (), {"matched_count": 1, "modified_count": 1})()
         elif upsert:
             nd = dict(q)
             nd.update(upd.get("$set", {}))
             self.docs.append(nd)
+            return type("R", (), {"matched_count": 0, "modified_count": 0})()
+        return type("R", (), {"matched_count": 0, "modified_count": 0})()
 
     def delete_one(self, q):
         d = self.find_one(q)
@@ -71,9 +74,9 @@ class TestRbac(unittest.TestCase):
         allow, _ = rbac.check_permission({"role": "viewer"}, "/api/task/create", "POST")
         self.assertFalse(allow)
 
-    def test_check_get_default_allow(self):
+    def test_check_unmapped_get_denied(self):
         allow, _ = rbac.check_permission({"role": "viewer"}, "/api/unmapped", "GET")
-        self.assertTrue(allow)
+        self.assertFalse(allow)
 
     def test_write_failclosed(self):
         # operator 对未映射写操作 → 需 user:manage → 拒
@@ -124,6 +127,60 @@ class TestUserManageService(unittest.TestCase):
 
     def test_verify_bad_token(self):
         self.assertIsNone(self.svc.verify_token("garbage"))
+
+    def test_logout_revokes_token(self):
+        """AUD-09：登出（revoke_token）按 token 精确清除服务端 token，旧 token 立即失效。"""
+        token = self.svc.login("admin", "admin123")["token"]
+        self.assertIsNotNone(self.svc.verify_token(token))   # 登出前有效
+        r = self.svc.revoke_token(token)
+        self.assertTrue(r["ok"])
+        self.assertTrue(r["revoked"])
+        self.assertIsNone(self.svc.verify_token(token))      # 登出后立即失效
+        # 幂等：重复 revoke 无副作用
+        self.assertTrue(self.svc.revoke_token(token)["ok"])
+        self.assertTrue(self.svc.revoke_token("")["ok"])
+
+    def test_salt_reads_sentinel_section(self):
+        """AUD-14：_salt 优先读 SENTINEL.SALT（配置样例要求配的位置）。"""
+        from unittest import mock
+        from sentinel_platform.modules.system import user_manage as um
+
+        class _Cfg:
+            def __init__(self, d):
+                self.d = d
+            def section(self, *keys, default=None):
+                cur = self.d
+                for k in keys:
+                    if not isinstance(cur, dict) or k not in cur:
+                        return default
+                    cur = cur[k]
+                return cur if cur is not None else default
+
+        with mock.patch.object(um, "get_config", return_value=_Cfg({"SENTINEL": {"SALT": "CUSTOM_SALT"}})):
+            self.assertEqual(um._salt(), "CUSTOM_SALT")
+
+    def test_login_migrates_legacy_salt(self):
+        """AUD-14 平滑迁移：存量密码用历史盐哈希 → 新盐验不过，历史盐命中仍可登录，且回写新盐。"""
+        from unittest import mock
+        import hashlib
+        from sentinel_platform.modules.system.user_manage import _users
+        from sentinel_platform.modules.system import user_manage as um
+        # 直接种一个用历史固定盐 sentinel$alt 哈希的密码（模拟改盐前的存量账户）
+        legacy = hashlib.md5(("pw12345" + "sentinel$alt").encode()).hexdigest()
+        _users().update_one({"username": "admin"}, {"$set": {"password": legacy}})
+
+        class _Cfg:
+            def section(self, *keys, default=None):
+                # 当前有效盐 = SENTINEL.SALT=NEWSALT（与历史 sentinel$alt 不同）
+                if keys == ("SENTINEL", "SALT"):
+                    return "NEWSALT"
+                return default
+        with mock.patch.object(um, "get_config", return_value=_Cfg()):
+            r = self.svc.login("admin", "pw12345")
+            self.assertIn("token", r)                        # 历史盐命中，登录成功
+            # 回写：密码已用新盐重哈希
+            doc = _users().find_one({"username": "admin"})
+            self.assertEqual(doc["password"], hashlib.md5(("pw12345" + "NEWSALT").encode()).hexdigest())
 
     def test_password_hashed_not_plain(self):
         from sentinel_platform.modules.system.user_manage import _users

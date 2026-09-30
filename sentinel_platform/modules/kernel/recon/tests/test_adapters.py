@@ -66,6 +66,28 @@ class TestHttpx(unittest.TestCase):
         rec = Httpx().parse_record({"url": "http://a", "status_code": "bad"})
         self.assertEqual(rec.status, 0)
 
+    def test_build_argv_has_browser_ua(self):
+        # 增强：build_argv 注入浏览器 UA（绕 WAF/防爬）。
+        argv = Httpx().build_argv()
+        self.assertIn("-H", argv)
+        ua_idx = argv.index("-H") + 1
+        self.assertTrue(argv[ua_idx].startswith("User-Agent: Mozilla/5.0"))
+
+    def test_expand_schemes_double_probe(self):
+        # 增强：裸目标展开 http+https 双探；已带 scheme 原样透传；去重保序；空目标丢弃。
+        from sentinel_platform.modules.kernel.recon.tools.httpx import _expand_schemes
+        self.assertEqual(_expand_schemes(["example.com"]),
+                         ["http://example.com", "https://example.com"])
+        self.assertEqual(_expand_schemes(["1.2.3.4:8080"]),
+                         ["http://1.2.3.4:8080", "https://1.2.3.4:8080"])
+        self.assertEqual(_expand_schemes(["https://x.com"]), ["https://x.com"])
+        # 已带 http 的目标不再重复生成 http 变体（去重保序）
+        self.assertEqual(_expand_schemes(["http://a.com", "a.com"]),
+                         ["http://a.com", "https://a.com"])
+        self.assertEqual(_expand_schemes(["", "  ", "b.com"]),
+                         ["http://b.com", "https://b.com"])
+        self.assertEqual(_expand_schemes([]), [])
+
 
 class TestNaabu(unittest.TestCase):
     def test_parse_port(self):

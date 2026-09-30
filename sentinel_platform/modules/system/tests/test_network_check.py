@@ -129,5 +129,49 @@ class TestGradientVsCliff(unittest.TestCase):
         self.assertGreaterEqual(res["score"], 90)   # 1/4 略慢，总分仍高——回应"别扣太狠"
 
 
+class TestNetworkQualityAlert(unittest.TestCase):
+    """网络质量低分 → 记 WARNING 日志（落日志检测）+ 去重节流 + 恢复清标记。与资源告警对称。"""
+
+    def setUp(self):
+        # 复位模块级去重标记，隔离用例
+        nc._netq_alert_last["low"] = False
+        nc._netq_alert_last["ts"] = 0.0
+
+    def _assess(self, score):
+        return {"score": score, "level": "critical" if score < 30 else "poor",
+                "level_text": "严重" if score < 30 else "差", "summary": "主要问题：出网不稳定", "dims": {}}
+
+    def test_low_score_logs_warning(self):
+        # 直接 patch 真实 notify 函数（避免真实推送副作用 + 跨文件测试污染，同 test_log_monitor 处理）
+        with mock.patch("sentinel_platform.modules.kernel.notify.notify_critical_log"), \
+             mock.patch.object(nc.logger, "warning") as warn:
+            nc._alert_network_quality(self._assess(20))
+        warn.assert_called_once()
+        self.assertIn("网络告警", warn.call_args[0][0])
+        self.assertTrue(nc._netq_alert_last["low"])
+
+    def test_healthy_score_no_log(self):
+        with mock.patch("sentinel_platform.modules.kernel.notify.notify_critical_log"), \
+             mock.patch.object(nc.logger, "warning") as warn:
+            nc._alert_network_quality(self._assess(85))
+        warn.assert_not_called()
+        self.assertFalse(nc._netq_alert_last["low"])
+
+    def test_dedup_within_ttl(self):
+        with mock.patch("sentinel_platform.modules.kernel.notify.notify_critical_log"), \
+             mock.patch.object(nc.logger, "warning") as warn:
+            nc._alert_network_quality(self._assess(20))   # 首次记
+            nc._alert_network_quality(self._assess(18))   # TTL 内不重复
+        self.assertEqual(warn.call_count, 1)
+
+    def test_recover_then_worsen_logs_again(self):
+        with mock.patch("sentinel_platform.modules.kernel.notify.notify_critical_log"), \
+             mock.patch.object(nc.logger, "warning") as warn:
+            nc._alert_network_quality(self._assess(20))   # 低分记
+            nc._alert_network_quality(self._assess(85))   # 恢复清标记
+            nc._alert_network_quality(self._assess(15))   # 再转差应再记
+        self.assertEqual(warn.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

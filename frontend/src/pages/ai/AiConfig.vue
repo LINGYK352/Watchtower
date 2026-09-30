@@ -14,33 +14,10 @@
             </a-form-item>
           </a-col>
           <a-col :span="6"><a-form-item label="超时(秒)"><a-input-number v-model:value="config.timeout" :min="1" style="width: 100%" /></a-form-item></a-col>
-          <a-col :span="6">
-            <a-form-item label="出口走代理">
-              <a-space>
-                <a-switch v-model:checked="config.use_proxy" />
-                <a-select v-if="config.use_proxy" v-model:value="config.proxy_mode" size="small" style="width:130px"
-                  :options="proxyModeOptions" placeholder="选代理模式" />
-              </a-space>
-              <span class="hint">默认直连;中转站建议关,境外直连 LLM 可开。勾选后选代理模式(全局/智能/公共代理)。</span>
-            </a-form-item>
-          </a-col>
+          <!-- 问题18：删全局「出口走代理」开关。入口代理下沉到每个 provider 的「入口代理」（新增/编辑里选具体自定义代理条目）。 -->
         </a-row>
         <a-form-item label="代码审计源码落地目录">
           <a-input v-model:value="config.source_code_dir" placeholder="开源系统拉取源码的服务器根目录" />
-        </a-form-item>
-        <a-form-item label="单会话上下文上限">
-          <a-row :gutter="12" align="middle">
-            <a-col :span="18">
-              <a-slider v-model:value="config.max_context_tokens" :min="8000" :max="1000000" :step="8000"
-                :tip-formatter="(v: number) => `${Math.round(v / 1000)}k`" />
-            </a-col>
-            <a-col :span="6">
-              <a-input-number v-model:value="config.max_context_tokens" :min="8000" :max="2000000" :step="8000"
-                :formatter="(v: number | string) => `${Math.round(Number(v) / 1000)}k`"
-                :parser="(v: string) => Number(String(v).replace('k', '')) * 1000" style="width: 100%" />
-            </a-col>
-          </a-row>
-          <span class="hint">单个 AI 渗透会话累积上下文(messages)的 token 预算,达 95% 自动收尾出结论。默认 200k。</span>
         </a-form-item>
         <a-form-item label="AI 渗透会话并发上限">
           <a-row :gutter="12" align="middle">
@@ -98,8 +75,9 @@
             <a-badge v-if="record.enabled" status="success" text="已启用" />
             <a-tag v-else color="default">停用</a-tag>
           </template>
-          <template v-else-if="column.key === 'use_proxy'">
-            <a-tag :color="record.use_proxy ? 'blue' : 'default'">{{ record.use_proxy ? '走代理' : '直连' }}</a-tag>
+          <template v-else-if="column.key === 'proxy_id'">
+            <!-- 问题18：入口代理列。按 proxy_id 在已加载自定义代理列表里查名字，空/查不到=直连 -->
+            <a-tag :color="record.proxy_id ? 'blue' : 'default'">{{ proxyName(record.proxy_id) }}</a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
             <a-space>
@@ -146,7 +124,7 @@
     <a-card class="page-card" title="AI 任务环节" size="small">
       <template #extra><a-button type="primary" size="small" @click="openPrompt()">新增环节</a-button></template>
       <a-alert type="info" show-icon style="margin-bottom: 12px"
-        message="每个环节可单独勾选启用、绑定不同的 AI(如渗透用 DeepSeek、审源码用 GPT)、编辑该环节专属提示词。未绑定 AI 的环节回退用上方“默认 AI”。" />
+        message="每个环节可单独勾选启用、编辑该环节专属提示词。AI 模型已改在「新建任务」时按任务选择，环节「绑定 AI」已冻结（存量绑定仍生效，未绑定回退上方“默认 AI”）。" />
       <a-table :columns="sceneColumns" :data-source="prompts" :loading="loading" row-key="_id"
         :pagination="false" size="middle" bordered>
         <template #bodyCell="{ column, record }">
@@ -164,19 +142,16 @@
             </span>
           </template>
           <template v-else-if="column.key === 'provider'">
-            <a-select :value="(record as AIPrompt).provider_id || ''" size="small" style="min-width: 180px"
-              @change="(v: any) => bindScene(record as AIPrompt, String(v))">
-              <a-select-option value="">默认 AI (兜底)</a-select-option>
-              <a-select-option v-for="p in providers" :key="p._id" :value="p._id">
-                <span class="provider-opt">
-                  <span class="provider-icon" v-html="providerIcon(iconKey(String(p.type)))"></span>
-                  <span>{{ p.name }}</span>
-                </span>
-              </a-select-option>
-            </a-select>
+            <!-- v1.21.157-47 冻结：模型改在「新建任务」按任务选（pentest_provider_id 等），scene 绑定已废弃。
+                 只读展示已绑定值(存量保留可解析)，不允许改。 -->
+            <a-tooltip title="已改为在「新建任务」时按任务选择 AI 模型，此处不再绑定">
+              <a-tag :color="(record as AIPrompt).provider_id ? 'blue' : 'default'">
+                {{ (record as AIPrompt).provider_name || '默认 AI (兜底)' }}
+              </a-tag>
+            </a-tooltip>
           </template>
           <template v-else-if="column.key === 'content'">
-            <a-tooltip v-if="(record as AIPrompt).builtin" title="内置提示词,不可编辑(防误改坏渗透/审查质量),只能在「绑定 AI」选模型">
+            <a-tooltip v-if="(record as AIPrompt).builtin" title="内置提示词,不可编辑(防误改坏渗透/审查质量)">
               <a-tag color="blue">内置</a-tag>
             </a-tooltip>
             <a-tag v-else-if="!record.content" color="orange">未填写</a-tag>
@@ -184,7 +159,7 @@
           </template>
           <template v-else-if="column.key === 'action'">
             <a-space>
-              <a-tooltip v-if="(record as AIPrompt).builtin" title="内置提示词不可编辑(防误改);只需在「绑定 AI」选模型即可">
+              <a-tooltip v-if="(record as AIPrompt).builtin" title="内置提示词不可编辑(防误改)；AI 模型改在「新建任务」按任务选">
                 <a-button type="link" size="small" disabled>编辑提示词</a-button>
               </a-tooltip>
               <a-button v-else type="link" size="small" @click="openPrompt(record as AIPrompt)">编辑提示词</a-button>
@@ -228,13 +203,28 @@
             </a-form-item>
           </a-col>
         </a-row>
+        <!-- 问题18：入口代理选择——调用 AI(访问中转站/LLM)的入口代理，选具体自定义代理条目，默认直连。
+             与任务发起时的攻击出口(AI→目标)彻底双轨分离。选中即写入下方 JSON 的 proxy_id(JSON 仍是提交源)。 -->
+        <a-form-item label="入口代理（访问中转站/LLM 出网）">
+          <a-select v-model:value="ingressProxyId" :options="ingressProxyOptions" style="width:100%"
+            placeholder="默认直连；可选一条已启用的自定义代理" />
+          <span class="hint">仅用于平台调用 AI 时的出网（境外中转站可选代理连通）。与「任务发起→AI 攻击目标」的出口代理是两回事，互不影响。可选条目来自「代理中心 · 自定义代理」（仅列已启用）。</span>
+        </a-form-item>
         <a-form-item label="配置">
           <a-alert v-if="editingId" type="info" style="margin-bottom:8px" show-icon
             message="api_key 留空保持原值，输入新值覆盖。base_url 可直接修改。" />
           <a-textarea v-model:value="cfgText" :rows="14" spellcheck="false"
             style="font-family: monospace; font-size: 13px"
             placeholder='选厂商自动生成模板,在此填 api_key、按需改 base_url/model/reasoning_effort' />
-          <span class="hint">直接编辑这段 JSON 即可:<b>api_key</b> 填你的 key;<b>base_url</b> 可改中转地址;<b>reasoning_effort</b> 按厂商填(OpenAI系 low/medium/high,Claude系 数字budget,DeepSeek留空);<b>protocol</b> 决定调用方式。也支持直接粘贴 Claude Code 的 settings.json(含 env.ANTHROPIC_*)。编辑模式下 api_key 留空=保留原 key。</span>
+          <div class="field-guide">
+            <div class="fg-title">各字段说明（直接编辑上方 JSON）：</div>
+            <div class="fg-item"><b>base_url</b>：接口地址。填 AI 服务/中转站的 API 根地址（如 <code>https://api.openai.com/v1</code>、<code>https://api.deepseek.com</code>；本地部署填 <code>http://localhost:11434/v1</code> 等 OpenAI 兼容地址）。选厂商已自动填好，用中转站才需改。</div>
+            <div class="fg-item"><b>api_key</b>：你的密钥。填 AI 服务商或中转站给你的 API Key（<code>sk-...</code> 之类）。<span v-if="editingId">编辑时留空=保留原 key。</span></div>
+            <div class="fg-item"><b>model</b>：模型名。填要用的模型标识（如 <code>gpt-4o</code>、<code>claude-opus-4-8</code>、<code>deepseek-chat</code>）。以服务商文档为准，选厂商已带默认。</div>
+            <div class="fg-item"><b>reasoning_effort</b>：思考程度（推理投入）。<b>默认 high（高）</b>——想更快/更省可改 <code>medium</code>/<code>low</code>；Claude 系可填数字 thinking budget；DeepSeek 等不支持的填空串 <code>""</code>。</div>
+            <div class="fg-item"><b>protocol</b>：调用协议。<code>openai</code>（OpenAI 兼容）或 <code>claude</code>（Anthropic），决定按哪种格式调用，选厂商已自动定。</div>
+            <div class="fg-note">也支持直接粘贴 Claude Code 的 settings.json（含 env.ANTHROPIC_*）。</div>
+          </div>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -251,15 +241,12 @@
           <a-col :span="8"><a-form-item label="环节名"><a-input v-model:value="promptForm.name" /></a-form-item></a-col>
           <a-col :span="8">
             <a-form-item label="绑定 AI">
-              <a-select v-model:value="promptForm.provider_id" placeholder="默认 AI (兜底)">
+              <!-- v1.21.157-47 冻结：改在「新建任务」按任务选 AI 模型；此处只读展示，不再绑定 -->
+              <a-select v-model:value="promptForm.provider_id" disabled placeholder="默认 AI (兜底)">
                 <a-select-option value="">默认 AI (兜底)</a-select-option>
-                <a-select-option v-for="p in providers" :key="p._id" :value="p._id">
-                  <span class="provider-opt">
-                    <span class="provider-icon" v-html="providerIcon(iconKey(String(p.type)))"></span>
-                    <span>{{ p.name }}</span>
-                  </span>
-                </a-select-option>
+                <a-select-option v-for="p in providers" :key="p._id" :value="p._id">{{ p.name }}</a-select-option>
               </a-select>
+              <div class="hint">模型已改在「新建任务」时按任务选择，此处不再绑定。</div>
             </a-form-item>
           </a-col>
         </a-row>
@@ -278,6 +265,7 @@ import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
 import { aiConfigApi, type AIConfig, type AIProvider, type AIPrompt, type AIPreset, type UsageStat } from '../../api/aiConfig'
+import { proxyApi, type CustomProxy } from '../../api/proxy'
 import { providerIcon } from '../../config/providerIcons'
 
 const loading = ref(false)
@@ -290,14 +278,21 @@ const usageCols = [
 const usage = ref<UsageStat>({ overall: { calls: 0, prompt: 0, completion: 0, total: 0, fail_calls: 0 }, by_provider: [], by_scene: [] })
 
 const config = reactive<AIConfig>({
-  active_provider_id: '', max_context_tokens: 200000, max_concurrent_sessions: 0, timeout: 300,
-  source_code_dir: '', use_proxy: false, proxy_mode: 'smart'
+  active_provider_id: '', max_context_tokens: 400000, max_concurrent_sessions: 0, timeout: 300,
+  source_code_dir: ''
 } as AIConfig)
-const proxyModeOptions = [
-  { label: '全局代理', value: 'global' },
-  { label: '智能(推荐)', value: 'smart' },
-  { label: '公共代理', value: 'pool' }
-]
+// 问题18：入口代理下拉数据源（只列 enabled 的自定义代理条目），provider.proxy_id 引用其 _id
+const customProxies = ref<CustomProxy[]>([])
+// 入口代理下拉选项：默认「直连」(value='')，其后是各 enabled 自定义代理
+const ingressProxyOptions = computed(() => [
+  { label: '直连（不走代理）', value: '' },
+  ...customProxies.value.map(c => ({ label: c.name || c.url, value: c._id }))
+])
+// 按 proxy_id 查代理名（供列表列展示），空/查不到=直连
+function proxyName(id?: string): string {
+  if (!id) return '直连'
+  return customProxies.value.find(c => c._id === id)?.name || '直连'
+}
 const providers = ref<AIProvider[]>([])
 const presets = ref<AIPreset[]>([])
 const prompts = ref<AIPrompt[]>([])
@@ -329,7 +324,7 @@ const providerColumns = [
   { title: '接口地址', dataIndex: 'base_url', width: 200, ellipsis: true },
   { title: 'API Key', dataIndex: 'api_key', width: 160, ellipsis: true },
   { title: '状态', key: 'enabled', width: 84 },
-  { title: '出口', key: 'use_proxy', width: 90 },
+  { title: '代理', key: 'proxy_id', width: 120 },
   { title: '操作', key: 'action', width: 180, fixed: 'right' }
 ]
 
@@ -374,7 +369,12 @@ async function loadPresets() {
 async function loadUsage() {
   try { usage.value = await aiConfigApi.usageStat() } catch (e) { message.error((e as Error).message) }
 }
-function loadAll() { loadPresets(); loadConfig(); loadProviders(); loadPrompts(); loadUsage() }
+// 问题18：加载可选入口代理（只列 enabled 的自定义代理供 provider 选）；失败静默降级空列表
+async function loadCustomProxies() {
+  try { customProxies.value = (await proxyApi.customList()).items.filter(c => c.enabled) }
+  catch { customProxies.value = [] }
+}
+function loadAll() { loadPresets(); loadConfig(); loadProviders(); loadPrompts(); loadUsage(); loadCustomProxies() }
 
 // AI 测试面板
 const testId = ref<string | undefined>(undefined)
@@ -408,8 +408,7 @@ async function saveConfig() {
       active_provider_id: config.active_provider_id,
       max_context_tokens: config.max_context_tokens,
       max_concurrent_sessions: config.max_concurrent_sessions, timeout: config.timeout,
-      source_code_dir: config.source_code_dir, use_proxy: config.use_proxy,
-      proxy_mode: (config as any).proxy_mode || 'smart'
+      source_code_dir: config.source_code_dir
     }))
     message.success('已保存')
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
@@ -422,9 +421,40 @@ const cfgType = ref('openai')
 const cfgText = ref('')
 const validating = ref(false)   // 保存前模型校验中（弹窗遮罩）
 
+// 问题18：入口代理下拉与 JSON(cfgText) 双向绑定——JSON 仍是提交源，下拉只是便捷入口。
+// 读：解析 cfgText 取 proxy_id（解析失败=空）；写：把选中值回填进 JSON 的 proxy_id 再序列化。
+const ingressProxyId = computed<string>({
+  get() {
+    try { return (JSON.parse(cfgText.value || '{}').proxy_id as string) || '' } catch { return '' }
+  },
+  set(v: string) {
+    let obj: Record<string, unknown>
+    try { obj = JSON.parse(cfgText.value || '{}') } catch { return }  // JSON 手改坏时不覆盖，避免丢用户输入
+    obj.proxy_id = v || ''
+    cfgText.value = JSON.stringify(obj, null, 2)
+  }
+})
+
+// 默认模型名自增（需求5）：类型(厂商 preset key)与名称(name)是两个东西——名称可自填，
+// 用默认名时同名冲突（换中转站配同一模型）要能新增。规则：第一个用裸 label（如 "Claude (Anthropic)"），
+// 已存在则取首个空位后缀 " - 1"/" - 2"…。仅生成默认值，用户仍可在 JSON 里手改 name。
+function nextProviderName(label: string): string {
+  if (!label) return ''
+  const existing = new Set(providers.value.map(p => (p.name || '').trim()))
+  if (!existing.has(label)) return label
+  for (let i = 1; ; i++) {
+    const candidate = `${label} - ${i}`
+    if (!existing.has(candidate)) return candidate
+  }
+}
 function templateFor(t: string): string {
   const p = presetMap.value[t]
-  const tpl = p?.template ?? { name: '', protocol: 'openai', base_url: '', api_key: '', model: '', reasoning_effort: '', enabled: true, use_proxy: false }
+  const tpl = { ...(p?.template ?? { name: '', protocol: 'openai', base_url: '', api_key: '', model: '', reasoning_effort: '', enabled: true, proxy_id: '' }) }
+  // 默认名基于 preset.label 自增；无 preset（自定义）保持模板原 name
+  const label = (p?.label ?? '').trim() || (typeof tpl.name === 'string' ? tpl.name : '')
+  if (label) tpl.name = nextProviderName(label)
+  // 思考程度默认「高」：模板未显式指定 reasoning_effort 时填 high（用户可在 JSON 里改 medium/low/""）
+  if (tpl.reasoning_effort === undefined || tpl.reasoning_effort === '') tpl.reasoning_effort = 'high'
   return JSON.stringify(tpl, null, 2)
 }
 function applyTemplate(t: string) {
@@ -442,8 +472,8 @@ function openProvider(record?: AIProvider) {
     // 编辑:展示现有配置(api_key 用掩码占位,留空=保留原 key)
     cfgText.value = JSON.stringify({
       name: record.name, protocol: record.protocol, base_url: record.base_url,
-      api_key: '', model: record.model, reasoning_effort: record.reasoning_effort || '',
-      enabled: record.enabled, use_proxy: record.use_proxy
+      api_key: '', model: record.model, reasoning_effort: record.reasoning_effort || 'high',
+      enabled: record.enabled, proxy_id: record.proxy_id || ''
     }, null, 2)
   } else {
     editingId.value = undefined
@@ -498,10 +528,7 @@ async function toggleScene(record: AIPrompt, enabled: boolean) {
   try { await aiConfigApi.updatePrompt(record._id, { enabled }); record.enabled = enabled }
   catch (e) { message.error((e as Error).message); loadPrompts() }
 }
-async function bindScene(record: AIPrompt, providerId: string) {
-  try { await aiConfigApi.updatePrompt(record._id, { provider_id: providerId }); loadPrompts() }
-  catch (e) { message.error((e as Error).message) }
-}
+// bindScene 已随「绑定 AI」冻结移除（v1.21.157-47，模型改在新建任务按任务选）。
 async function removePrompt(id: string) {
   try { await aiConfigApi.deletePrompt(id); message.success('已删除'); loadPrompts() }
   catch (e) { message.error((e as Error).message) }
@@ -529,5 +556,23 @@ onMounted(loadAll)
 .t-result.fail { background: #fff2f0; border-color: #ffccc7; }
 .t-meta { font-size: 12px; color: #888; margin-bottom: 8px; }
 .t-meta span { margin-left: 6px; }
-.t-reply { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; margin: 0; max-height: 320px; overflow: auto; }
+.t-reply { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; margin: 0; max-height: 320px; overflow: auto; color: var(--dt-text, #1f2328); }
+/* 夜间模式：测试结果区暗底亮字（此前硬编码浅绿/浅红底+默认文字→暗色下白底看不清） */
+[data-theme="dark"] .t-result { border-color: rgba(255,255,255,.12); }
+[data-theme="dark"] .t-result.ok { background: rgba(82,196,26,.12); border-color: rgba(82,196,26,.4); }
+[data-theme="dark"] .t-result.fail { background: rgba(255,77,79,.12); border-color: rgba(255,77,79,.4); }
+[data-theme="dark"] .t-reply { color: #e6edf3; }
+[data-theme="dark"] .t-label, [data-theme="dark"] .t-meta { color: #9aa7b4; }
+/* Provider 字段说明块（逐字段解释该填什么，夜间适配走 CSS 变量） */
+.field-guide { margin-top: 8px; padding: 10px 12px; border-radius: 6px; background: var(--dt-hover, #f6f8fa);
+  border: 1px solid var(--dt-border, #eaecef); font-size: 12px; line-height: 1.75; color: var(--dt-text, #444); }
+.field-guide .fg-title { font-weight: 600; margin-bottom: 4px; color: var(--dt-text, #1f2328); }
+.field-guide .fg-item { margin: 2px 0; }
+.field-guide .fg-item b { color: var(--dt-link, #0969da); }
+.field-guide code { padding: 1px 5px; border-radius: 3px; background: var(--dt-code-bg, rgba(175,184,193,.2)); font-size: 12px; }
+.field-guide .fg-note { margin-top: 6px; color: var(--dt-muted, #888); }
+[data-theme="dark"] .field-guide { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); color: #c9d1d9; }
+[data-theme="dark"] .field-guide .fg-title { color: #e6edf3; }
+[data-theme="dark"] .field-guide .fg-item b { color: #6cb6ff; }
+[data-theme="dark"] .field-guide code { background: rgba(110,118,129,.4); color: #e6edf3; }
 </style>

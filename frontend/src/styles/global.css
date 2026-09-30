@@ -256,3 +256,21 @@ a { color: var(--dt-primary); }
 .cc-modal .cc-btn.ghost:hover { border-color: #00e5ff; color: #00e5ff; }
 .cc-modal .cc-btn.primary { background: linear-gradient(90deg, #00e5ff, #0091ff); color: #001018; font-weight: 700; border: none; }
 .cc-modal .cc-btn.primary:disabled { opacity: .5; cursor: not-allowed; }
+
+/* 日间浅色覆盖（会话台弹窗 teleport 到 body，data-theme=light 是其祖先）——外壳 + 内部 .ns-* 元素 */
+[data-theme="light"] .cc-modal .ant-modal-content { background: #ffffff !important; border: 1px solid #d4e0ec; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
+[data-theme="light"] .cc-modal .ant-modal-header { border-bottom: 1px solid #eef1f5; }
+[data-theme="light"] .cc-modal .ant-modal-title { color: var(--dt-primary) !important; text-shadow: none; }
+[data-theme="light"] .cc-modal .ant-modal-close-x { color: var(--dt-muted); }
+[data-theme="light"] .cc-modal .ant-modal-close-x:hover { color: var(--dt-primary); }
+[data-theme="light"] .cc-modal .cc-btn { border: 1px solid var(--dt-border); background: var(--dt-bg); color: var(--dt-text); }
+[data-theme="light"] .cc-modal .cc-btn.ghost:hover { border-color: var(--dt-primary); color: var(--dt-primary); }
+[data-theme="light"] .cc-modal .cc-btn.primary { background: var(--dt-gradient); color: #ffffff; }
+/* NewSessionModal 内部元素（scoped 硬编码深色，用属性选择器 + !important 覆盖） */
+[data-theme="light"] .cc-modal .ns-in,
+[data-theme="light"] .cc-modal .ns-ta,
+[data-theme="light"] .cc-modal .ns-mode { background: #ffffff !important; border-color: #cbd8e6 !important; color: #1f2a37 !important; }
+[data-theme="light"] .cc-modal .ns-lb { color: #3a5068 !important; }
+[data-theme="light"] .cc-modal .ns-opt,
+[data-theme="light"] .cc-modal .ns-modehint,
+[data-theme="light"] .cc-modal .ns-tip .ns-opt { color: #6b7d90 !important; }

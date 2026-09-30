@@ -138,6 +138,32 @@ class AttackChainTest(unittest.TestCase):
         d = im.get_chain(r["chain_id"])
         self.assertEqual(d["max_severity"], "high")   # 取高
 
+    # —— 严重度中英文归一（治①：AI 给中文"高/中"标签无标识）——
+    def test_severity_chinese_normalized(self):
+        im = self._impl()
+        # AI 给中文 severity → 存/max_severity 都应归一英文
+        r = im.record_step("ACME", "链B", "弱口令登录", severity="高危")
+        d = im.get_chain(r["chain_id"])
+        self.assertEqual(d["steps"][0]["severity"], "high")   # step 归一
+        self.assertEqual(d["max_severity"], "high")
+        # 追加"中"，最高仍 high
+        im.record_step("ACME", "链B", "越权读数据", severity="中")
+        d2 = im.get_chain(r["chain_id"])
+        self.assertEqual(d2["steps"][1]["severity"], "medium")
+        self.assertEqual(d2["max_severity"], "high")
+        # "严重" > high
+        im.record_step("ACME", "链B", "命令执行", severity="严重")
+        self.assertEqual(im.get_chain(r["chain_id"])["max_severity"], "critical")
+
+    def test_norm_sev_helper(self):
+        from sentinel_platform.modules.risk_intel.attack_chain import _norm_sev
+        self.assertEqual(_norm_sev("高"), "high")
+        self.assertEqual(_norm_sev("中危"), "medium")
+        self.assertEqual(_norm_sev("严重"), "critical")
+        self.assertEqual(_norm_sev("HIGH"), "high")
+        self.assertEqual(_norm_sev(""), "unknown")
+        self.assertEqual(_norm_sev("乱写的"), "unknown")
+
     # —— 幂等去重：同 action+target 不重复追加 ——
     def test_record_dedup(self):
         im = self._impl()
@@ -173,22 +199,26 @@ class AttackChainTest(unittest.TestCase):
         r = self._impl().record_step("ACME", "链A", "打后台", target="http://a.com/admin", tool_log=None)
         self.assertEqual(r["action"], "created")
 
-    # —— read_chains 接力简表 ——
+    # —— read_chains 接力简表（默认危害门槛=high，问题15）——
     def test_read_chains(self):
         im = self._impl()
         im.record_step("ACME", "链A", "step1 泄露", severity="low")
         im.record_step("ACME", "链B", "step1 越权", severity="high")
+        # 默认 min_severity=high：只返回高危链（链A low 被过滤，链B high 保留）
         r = im.read_chains("ACME")
-        self.assertEqual(r["count"], 2)
+        self.assertEqual(r["count"], 1)
+        self.assertEqual(r["chains"][0]["title"], "链B")
         self.assertIn("outline", r["chains"][0])
+        # 关闭门槛看全部
+        self.assertEqual(im.read_chains("ACME", min_severity="")["count"], 2)
         # 另一单位不串
         self.assertEqual(im.read_chains("OTHER")["count"], 0)
 
-    # —— list 分页 + 禁硬限制（size 透传大值不砍）——
+    # —— list 分页 + 禁硬限制（size 透传大值不砍）；min_severity="" 看全部 ——
     def test_list_no_hard_limit(self):
         im = self._impl()
         for i in range(25):
-            im.record_step("ACME", "链{}".format(i), "step")
+            im.record_step("ACME", "链{}".format(i), "step", severity="high")
         r = im.list_chains(size=1000)
         self.assertEqual(r["size"], 1000)
         self.assertEqual(r["total"], 25)
@@ -196,20 +226,41 @@ class AttackChainTest(unittest.TestCase):
 
     def test_list_filter_unit(self):
         im = self._impl()
-        im.record_step("ACME", "链A", "s")
-        im.record_step("OTHER", "链B", "s")
+        im.record_step("ACME", "链A", "s", severity="high")
+        im.record_step("OTHER", "链B", "s", severity="high")
         self.assertEqual(im.list_chains(unit="ACME")["total"], 1)
 
-    # —— stat ——
+    # —— 危害门槛（问题15）：默认只列/统计 max_severity>=high 的链，低危链持久化但隐身 ——
+    def test_severity_gate_hides_low_chains(self):
+        im = self._impl()
+        im.record_step("ACME", "链低", "info 步", severity="info")
+        im.record_step("ACME", "链中", "medium 步", severity="medium")
+        im.record_step("ACME", "链高", "high 步", severity="high")
+        # 默认门槛=high：只见「链高」
+        self.assertEqual(im.list_chains(unit="ACME")["total"], 1)
+        self.assertEqual(im.list_chains(unit="ACME")["items"][0]["title"], "链高")
+        # 关闭门槛见全部 3 条（低危链仍持久化，未丢）
+        self.assertEqual(im.list_chains(unit="ACME", min_severity="")["total"], 3)
+        # 低危链后续追加出 high 环节 → 整链升级 → 自然显现（不丢前置环节）
+        im.record_step("ACME", "链低", "越权拿全量", severity="critical")
+        r = im.list_chains(unit="ACME")
+        self.assertEqual(r["total"], 2)   # 「链高」+ 升级后的「链低」
+        low_now = next(x for x in r["items"] if x["title"] == "链低")
+        self.assertEqual(low_now["step_count"], 2)      # 前置 info 环节仍在
+        self.assertEqual(low_now["max_severity"], "critical")
+
+    # —— stat（默认危害门槛=high）——
     def test_stat(self):
         im = self._impl()
-        im.record_step("ACME", "链A", "s1", session_id="x")
+        im.record_step("ACME", "链A", "s1", session_id="x", severity="high")
         im.record_step("ACME", "链A", "s2", session_id="y", severity="critical")  # 跨会话
-        im.record_step("ACME", "链B", "s", severity="low")
+        im.record_step("ACME", "链B", "s", severity="low")   # 低危链，默认门槛下不计入
         st = im.stat("ACME")
-        self.assertEqual(st["total"], 2)
+        self.assertEqual(st["total"], 1)                     # 只统计高危链（链A）
         self.assertEqual(st["cross_session"], 1)
         self.assertEqual(st["by_severity"]["critical"], 1)
+        # 关闭门槛：链A + 链B 都计入
+        self.assertEqual(im.stat("ACME", min_severity="")["total"], 2)
 
     # —— delete 批量 ——
     def test_delete(self):

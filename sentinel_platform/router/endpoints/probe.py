@@ -49,6 +49,7 @@ class ProbeCreate(Resource):
             name=body.get("name", ""),
             vps_ip=vps_ip,
             port=int(body.get("port", 8443)),
+            tunnel_port=int(body.get("tunnel_port", 8444)),
             auth_key=body.get("auth_key", ""),
             protocol=body.get("protocol", "https"),
             probe_type=body.get("type", "red"),
@@ -81,7 +82,9 @@ class ProbeDownload(Resource):
         path = svc.get_build_path(probe_id)
         if not path or not os.path.exists(path):
             return err(CODE_NOT_FOUND, "探针尚未打包或文件不存在")
-        return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+        resp = send_file(path, as_attachment=True, download_name=os.path.basename(path))
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+        return resp
 
 
 @ns.route("/delete/<string:probe_id>")
@@ -172,7 +175,9 @@ class AgentDownload(Resource):
         path = svc.get_agent_build_path(agent_id)
         if not path or not os.path.exists(path):
             return err(CODE_NOT_FOUND, "Agent 尚未打包或文件不存在")
-        return send_file(path, as_attachment=True, download_name=os.path.basename(path))
+        resp = send_file(path, as_attachment=True, download_name=os.path.basename(path))
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+        return resp
 
 
 @ns.route("/agent/<string:agent_id>")

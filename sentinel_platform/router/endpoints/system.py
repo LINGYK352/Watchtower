@@ -47,12 +47,13 @@ class Login(Resource):
 class Logout(Resource):
     @ns.doc(security="token")
     def get(self):
-        """登出（清除会话 token）"""
+        """登出（AUD-09：按请求 Token 头精确撤销服务端 token，旧持有者立即失效）。
+        登出是 public 端点，网关不设 g.current_user，故凭请求携带的 Token 定位撤销，不依赖用户名。"""
         svc = _user_svc()
-        u = _current_username()
-        if svc and u and hasattr(svc, "update_user"):
+        token = (request.headers.get("Token") or "").strip()
+        if svc and hasattr(svc, "revoke_token"):
             try:
-                svc.update_user(u, token=None)
+                svc.revoke_token(token)
             except Exception:
                 pass
         return ok({})

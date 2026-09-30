@@ -43,8 +43,10 @@ class StageResult:
 
     @property
     def terminal(self) -> bool:
-        """除失败外均为已判定终态，重投不再重复打目标。"""
-        return self.status != "failed"
+        """除失败/资源延后外均为已判定终态，重投不再重复打目标。
+        AUD-11：deferred_resource（资源门超时未执行）与 failed 一样**非终态**——不加进 done_steps，
+        恢复资源后重投会重跑该阶段，不把"根本没执行"误当"执行了无发现"。"""
+        return self.status not in ("failed", "deferred_resource")
 
 
 @dataclass
@@ -66,6 +68,7 @@ class ReconContext:
     nuclei: List[NucleiRec] = field(default_factory=list)
     fileleaks: List[FileLeakRec] = field(default_factory=list)
     wih: List[Any] = field(default_factory=list)
+    alives: List[Any] = field(default_factory=list)         # 主机存活探测结果（AliveRec，ICMP/TCP）
 
     # 富化字段（ip_type/geo/tag/fld）不在冻结 dataclass 上，按物理标识暂存在此，summary 时合并进 dict。
     ip_enrichment: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -75,6 +78,26 @@ class ReconContext:
 
     # —— 断点续扫：已完成阶段集合（重投时跳过，不重扫）——
     done_steps: List[str] = field(default_factory=list)
+
+    # —— 批级流式回调（Pipeline 注入）：站点阶段每批探通即调 on_batch(ctx, stage_name)，
+    # 触发增量落库 + 归集派发（目标级流式：一批站点探通就派 AI，不等整阶段所有目标探完）。
+    # 幂等派发保证多次触发不重派（asset_key upsert + skip_pentested）。None 时不回调（向后兼容）。
+    on_batch: Optional[Callable[["ReconContext", str], None]] = None
+
+    # —— 资源门（recon_bridge 从外部注入的纯 callable，守 recon 自包含铁律）——
+    # gate(tool_name) 返回一个上下文管理器：内存足即放行、不足则阻塞等待并让位 AI（写 task.resource_wait
+    # 徽标 + 轮询），超时/取消诚实降级。recon/ 内部只调这个注入的 callable，绝不 import 资源池（问题11）。
+    # None 时不做资源门控（向后兼容/单测）。
+    resource_gate: Optional[Callable[[str], Any]] = None
+
+    def emit_batch(self, stage_name: str) -> None:
+        """站点阶段批间调用：触发一次流式落库+派发。异常全吞（绝不反噬扫描，守 §0.4）。"""
+        if self.on_batch is None:
+            return
+        try:
+            self.on_batch(self, stage_name)
+        except Exception:
+            pass
 
     def add_result(self, r: StageResult) -> None:
         self.results.append(r)

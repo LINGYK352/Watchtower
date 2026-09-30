@@ -38,12 +38,12 @@ KEY_DEFS: List[Dict[str, Any]] = [
     {"id": "passivetotal", "label": "PassiveTotal", "group": "资产测绘/情报", "fields": ["email", "key"], "site": "https://community.riskiq.com"},
     {"id": "github", "label": "GitHub Token", "group": "代码情报", "fields": ["token"], "site": "https://github.com/settings/tokens"},
     {"id": "feishu", "label": "飞书 Webhook", "group": "告警推送",
-     "fields": ["webhook", "secret", "min_severity", "vuln_feed_notify"],
+     "fields": ["webhook", "secret", "min_severity", "vuln_feed_notify", "proxy_down_notify", "attack_alert_notify"],
      "select": {"min_severity": [
          {"value": "critical", "label": "仅严重"},
          {"value": "high", "label": "高危及以上"},
          {"value": "medium", "label": "中危及以上"}]},
-     "defaults": {"min_severity": "medium", "vuln_feed_notify": True},
+     "defaults": {"min_severity": "medium", "vuln_feed_notify": True, "proxy_down_notify": True, "attack_alert_notify": True},
      "site": "https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot"},
     {"id": "dingtalk", "label": "钉钉 Webhook", "group": "告警推送",
      "fields": ["webhook", "secret"],
@@ -107,7 +107,14 @@ def list_keys() -> Dict[str, Any]:
             "fields": d["fields"], "select": d.get("select", {}), "enabled": bool(sub.get("enabled")),
         }
         for f in d["fields"]:
-            val = sub.get(f, "") or ""
+            raw = sub.get(f)
+            if isinstance(raw, bool):
+                # bool 开关字段（vuln_feed_notify/proxy_down_notify）原样透出，绝不 `or ""` 成空串
+                # （否则存的 False 变 ""，前端按"默认 true"回显→关了又变开，坑）。
+                out[f] = raw
+                out[f + "_set"] = True
+                continue
+            val = raw or ""
             out[f] = _mask(val) if f in SECRET_FIELDS else val
             out[f + "_set"] = bool(val)
         for f in (d.get("select") or {}):

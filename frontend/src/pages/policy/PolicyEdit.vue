@@ -18,6 +18,23 @@
             <span v-else>subfinder 被动枚举(证书透明日志/DNS 聚合/搜索引擎等多源) + 子域名字典爆破(按上方选项),尽可能收全资产。</span>
           </div>
         </a-form-item>
+        <a-form-item v-if="cfg.collect_mode === 'multi_brute'" label="广域收集源">
+          <a-checkbox-group v-model:value="cfg.collect_sources" class="collect-source-grid">
+            <a-tooltip v-for="s in collectionSources" :key="s.id"
+              :title="s.available ? `${s.label} 已配置，保存后参与广域子域收集` : `${s.label} 尚未在 API 密钥页启用并完整配置`">
+              <a-checkbox :value="s.id" :disabled="!s.available">
+                {{ s.label }}
+                <span :class="s.available ? 'source-ready' : 'source-missing'">{{ s.available ? '已配置' : '未配置' }}</span>
+              </a-checkbox>
+            </a-tooltip>
+          </a-checkbox-group>
+          <div v-if="!collectionSources.some(s => s.available)" class="source-empty">
+            暂无可用 API 收集源；请先到「API 密钥」启用并配置。广域模式仍会运行 subfinder 公共被动源与所选字典爆破。
+          </div>
+          <div v-else style="margin-top:6px;color:#888;font-size:12px">
+            已配置的来源默认全选；可按策略取消。未配置来源置灰且不会由后端调用。这里仅控制 API 增强源，subfinder 公共被动源仍会运行。
+          </div>
+        </a-form-item>
         <a-space wrap>
           <span style="color:#888">域名爆破</span>
           <a-select v-model:value="cfg.domain_config.domain_brute_type" style="width: 120px" :options="bruteTypeOptions" :disabled="cfg.collect_mode === 'single'" />
@@ -104,6 +121,19 @@
             <a-radio-button v-for="m in PENTEST_MODES" :key="m.value" :value="m.value">{{ m.label }}</a-radio-button>
           </a-radio-group>
           <div style="margin-top:6px;color:#d46b08;font-size:12px" v-if="currentModeWarn">⚠ {{ currentModeWarn }}</div>
+          <!-- 蜜罐检测选项 -->
+          <div style="margin-top:10px">
+            <a-checkbox v-model:checked="cfg.honeypot_detection">
+              <span>启用蜜罐检测</span>
+              <a-tooltip title="在派发 AI 渗透会话前自动检测目标是否为蜜罐，检测到蜜罐时提前预警 AI">
+                <QuestionCircleOutlined style="margin-left:4px;color:#888" />
+              </a-tooltip>
+            </a-checkbox>
+            <div style="margin-left:24px;margin-top:4px;color:#888;font-size:12px">
+              启用后，AI 渗透会话派发前会自动检测目标是否为蜜罐（SSH/Web 蜜罐特征识别）。
+              检测到蜜罐时会预警 AI，由 AI 判断是否继续渗透。确认是蜜罐的会话会被标记"蜜罐"标签。
+            </div>
+          </div>
           <!-- AI 攻击出口已移到「新建任务」页选择（cfg.pentest_egress 仍作策略默认兜底，任务传了则覆盖）。 -->
           <div style="margin-top:10px;color:#888;font-size:12px">
             AI 攻击出口（直连/全局/智能）改在<b>新建任务</b>时按任务选择，未绑定代理源的模式会置灰。本策略默认：{{ cfg.pentest_egress?.mode === 'global' ? '全局' : cfg.pentest_egress?.mode === 'smart' ? '智能' : '直连' }}。
@@ -128,8 +158,11 @@
           </div>
           <div style="margin-top:10px">
             <a-checkbox v-model:checked="cfg.intel_enabled">启用情报体系</a-checkbox>
-            <div style="margin-top:6px;color:#888;font-size:12px">启用(默认)=AI 中期可查历史打法/单位画像/凭证等情报辅助渗透;关闭=不查情报(靠自身探测打),但渗透报告/打法/凭证等成果照常回写沉淀。</div>
+            <div style="margin-top:6px;color:#888;font-size:12px">启用(默认)=渗透产出的打法/单位画像/凭证线索/指纹纠错等沉淀进共享情报库,供后续任务借鉴。关闭=该策略任务<b>不创建情报</b>(不往共享库沉淀,适合一次性/敏感目标);但仍可查询消费现有情报打,漏洞成果也照常上报。</div>
           </div>
+          <!-- #3 用户 2026-09-15：单会话上下文上限已从策略移到「新建任务」（仅绑定 AI 渗透的策略可配，
+               拉满=模型原生上限）。此处 UI 移除；后端 policy.max_context_tokens 字段保留作兜底（任务不传时用），
+               任务传了则覆盖。 -->
         </div>
         <a-form-item label="关联资产组" style="margin-top: 12px; max-width: 420px">
           <a-select v-model:value="cfg.scope_config.scope_id" allow-clear placeholder="不关联" :options="scopeOptions" show-search :filter-option="filterScope" />
@@ -163,6 +196,7 @@
           <a-space>
             <a-button type="primary" :loading="saving" @click="save">保存</a-button>
             <a-button @click="router.push('/policy')">返回</a-button>
+            <span v-if="dirty" style="color:#d48806;font-size:12px;font-weight:600">● 有未保存修改</span>
           </a-space>
         </a-form-item>
       </a-form>
@@ -176,10 +210,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import { policyApi, defaultPolicyConfig, type PolicyConfig } from '../../api/policy'
+import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 import { PENTEST_MODES } from '../../api/pentest'
 import { pocApi } from '../../api/poc'
 import { assetScopeApi } from '../../api/scope'
 import { getSetupStatus, type SetupStatusResult } from '../../api/meta'
+import { apiKeysApi, type ApiKeyItem } from '../../api/apiKeys'
 import type { SelectOption } from '../../api/types'
 
 interface TransferItem { key: string; title: string; description: string }
@@ -195,7 +231,29 @@ const name = ref('')
 const desc = ref('')
 const cfg = reactive<PolicyConfig>(defaultPolicyConfig())
 const currentModeWarn = computed(() => PENTEST_MODES.find(m => m.value === cfg.pentest_mode)?.warn)
+
+// #3：单会话上下文上限 UI 已移到「新建任务」。此处不再提供三态控件；cfg.max_context_tokens 仍随
+// 策略 load/save 原样保留（后端兜底：任务未传上下文上限时用策略值），只是策略页不再编辑它。
 const setupStatus = ref<SetupStatusResult | null>(null)
+
+interface CollectionSource { id: string; label: string; available: boolean }
+const collectionSources = ref<CollectionSource[]>([])
+
+async function loadCollectionSources() {
+  try {
+    const data = await apiKeysApi.options()
+    collectionSources.value = (data.items || [])
+      .filter((item: ApiKeyItem) => item.group === '资产测绘/情报')
+      .map((item: ApiKeyItem) => ({
+        id: item.id,
+        label: item.label,
+        // 资产测绘组的字段均是运行所需凭据；PassiveTotal 等复合凭据必须全部配置才可选。
+        available: !!item.enabled && item.fields.every(f => !!item[`${f}_set`]),
+      }))
+  } catch {
+    collectionSources.value = []
+  }
+}
 
 // 代理模式：全局代理是否开启（用于直连标签提示）
 const globalOn = ref(false)
@@ -218,6 +276,11 @@ const pocPlugins = ref<TransferItem[]>([])
 const brutePlugins = ref<TransferItem[]>([])
 const pocKeys = ref<string[]>([])
 const bruteKeys = ref<string[]>([])
+
+// 未保存提示（问题4）：策略编辑改了没点保存就切走会丢失。序列化覆盖名称/描述/配置/插件选择。
+const { dirty, markSaved } = useUnsavedGuard(
+  () => JSON.stringify({ name: name.value, desc: desc.value, cfg, pocKeys: pocKeys.value, bruteKeys: bruteKeys.value }),
+  { content: '当前策略配置尚未保存，直接离开将丢失这些修改。确定要离开吗？' })
 function filterPlugin(input: string, option: TransferItem) {
   return (option.title + option.description).toLowerCase().includes(input.toLowerCase())
 }
@@ -249,10 +312,13 @@ async function loadPlugins() {
 }
 
 async function loadOne() {
-  await loadPlugins()
-  await loadScopes()
-  await loadProxyRules()
-  if (isNew.value) return
+  await Promise.all([loadPlugins(), loadScopes(), loadProxyRules(), loadCollectionSources()])
+  const availableSourceIds = collectionSources.value.filter(s => s.available).map(s => s.id)
+  if (isNew.value) {
+    cfg.collect_sources = availableSourceIds
+    markSaved()   // 新建策略：以默认配置为基线，之后编辑才算「未保存」
+    return
+  }
   loading.value = true
   try {
     const data = await policyApi.list({ _id: id.value, page: 1, size: 1 })
@@ -260,7 +326,13 @@ async function loadOne() {
     if (item) {
       name.value = String(item.name || '')
       desc.value = String(item.desc || '')
-      Object.assign(cfg, { ...defaultPolicyConfig(), ...(item.policy as PolicyConfig) })
+      const storedPolicy = (item.policy || {}) as PolicyConfig
+      Object.assign(cfg, { ...defaultPolicyConfig(), ...storedPolicy })
+      // 存量策略无 collect_sources：按原有“全部可用源”语义迁移；显式数组则保留选择，
+      // 但剔除当前未配置来源，保证界面灰态与后端真实可用性一致。
+      cfg.collect_sources = Array.isArray(storedPolicy.collect_sources)
+        ? storedPolicy.collect_sources.filter(s => availableSourceIds.includes(s))
+        : availableSourceIds
       // 代理出口 4模式（2026-08 重构）：优先新 scan_egress/pentest_egress；旧字段迁移。
       const anyCfg = cfg as any
       if (!anyCfg.scan_egress || !anyCfg.scan_egress.mode) {
@@ -289,6 +361,7 @@ async function loadOne() {
   } finally {
     loading.value = false
   }
+  markSaved()   // 载入 + 各字段迁移落定后设为基线，避免迁移写入被误判为「未保存修改」
 }
 async function save() {
   if (!name.value) return message.warning('请填写策略名称')
@@ -315,12 +388,15 @@ async function save() {
     return
   }
   saving.value = true
+  const availableSourceIds = new Set(collectionSources.value.filter(s => s.available).map(s => s.id))
+  cfg.collect_sources = (cfg.collect_sources || []).filter(s => availableSourceIds.has(s))
   // 组装 poc_config / brute_config（后端要求 {plugin_name, enable}）
   cfg.poc_config = pocKeys.value.map(plugin_name => ({ plugin_name, enable: true }))
   cfg.brute_config = bruteKeys.value.map(plugin_name => ({ plugin_name, enable: true }))
   try {
     if (isNew.value) await policyApi.add({ name: name.value, desc: desc.value, policy: cfg })
     else await policyApi.edit(id.value, { name: name.value, desc: desc.value, policy: cfg })
+    markSaved()   // 保存成功后重置基线，随后 router.push 离开不再误弹未保存提示
     message.success('已保存'); router.push('/policy')
   } catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
   finally { saving.value = false }
@@ -342,5 +418,18 @@ onMounted(() => {
   flex: 1 1 0;
   text-align: center;
   padding-inline: 8px;
+}
+.collect-source-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 16px;
+  width: 100%;
+}
+.source-ready, .source-missing { margin-left: 4px; font-size: 11px; }
+.source-ready { color: #52c41a; }
+.source-missing { color: #999; }
+.source-empty { margin-top: 6px; color: #d46b08; font-size: 12px; }
+@media (max-width: 900px) {
+  .collect-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

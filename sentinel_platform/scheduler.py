@@ -28,6 +28,9 @@ _L2_THRESHOLD = 3  # 连续 N 个 tick critical 才触发 L2 暂停
 # —— GitHub 执行防线程堆积（GitHub 限速 sleep 长，一轮没跑完不再起新线程）——
 _github_running = False
 
+# —— 报告模板异步学习兜底（worker 崩溃致学习线程死 → 心跳超时的 learning 模板重跑；防线程堆积）——
+_tpl_learn_running = False
+
 # —— 代理出口健康检测节流（每 10 分钟一次，按时间戳判定，不受 tick 周期变化影响）——
 _last_proxy_health = 0.0
 _PROXY_HEALTH_INTERVAL = 600  # 秒；代理失效检测周期（用户要求每 10 分钟检测代理出口）
@@ -57,6 +60,18 @@ def tick() -> dict:
         logger.debug("scheduler tick reclaim_stalled degraded: %s", exc)
     result["due_schedules"] = _promote_due_schedules()
     result["sessions"] = _tick_sessions()
+    # 会话台后台回合 crash 兜底（独立于自动会话；只清 console_running 死锁 + 按 pending 重投，不碰 status）
+    try:
+        result["console_sessions"] = _tick_console_sessions()
+    except Exception as exc:
+        logger.debug("scheduler tick console_sessions degraded: %s", exc)
+    # 链式更新看门狗：续跑子进程被 docker restart web 连带杀死→无人推进→progress 永停 applying 时，
+    # scheduler（独立容器不随 web 重启）检测停滞、清陈旧锁、兜底重派下一跳。非攀爬中零副作用。
+    try:
+        from sentinel_platform.modules.about._updater import tick_chain_watchdog
+        result["chain_update"] = tick_chain_watchdog()
+    except Exception as exc:
+        logger.debug("scheduler tick chain_update degraded: %s", exc)
     # GitHub 任务/监控执行（后台线程，不阻塞 tick——GitHub 限速 sleep 长）
     try:
         result["github"] = _tick_github()
@@ -67,6 +82,11 @@ def tick() -> dict:
         result["monitors"] = _tick_monitors()
     except Exception as exc:
         logger.debug("scheduler tick monitors degraded: %s", exc)
+    # 报告模板异步学习兜底：捡心跳超时仍 learning 的模板（worker 崩溃线程死）重跑
+    try:
+        result["tpl_learn"] = _tick_template_learn()
+    except Exception as exc:
+        logger.debug("scheduler tick tpl_learn degraded: %s", exc)
     # 代理内核维护（自愈拉起 + 节点 failover + 流量采样；对齐旧 proxy_health_monitor）
     try:
         result["proxy"] = _tick_proxy()
@@ -82,10 +102,13 @@ def tick() -> dict:
         result["netcheck"] = _tick_netcheck()
     except Exception:
         pass
-    # 资源采样（每 tick 写一次 resource_history，dashboard 读）
+    # 资源采样（每 tick 写一次 resource_history，dashboard 读）+ 多维水位告警推送
     try:
-        from sentinel_platform.modules.system.log_monitor import sample_resource
+        from sentinel_platform.modules.system.log_monitor import sample_resource, check_and_alert_resource
         sample_resource()
+        # 采样后立即判定：内存/CPU/磁盘任一达 tight+ → notify 渠道推送（带 10min 去重节流，回落自动解除）。
+        # 前端弹窗侧独立轮询 get_resource_alert 自判（仅 critical 弹），推送与弹窗解耦。
+        result["res_alert"] = check_and_alert_resource()
     except Exception:
         pass
     # L2 资源水位检查：critical 连续 3tick → 暂停低优先级会话
@@ -93,6 +116,17 @@ def tick() -> dict:
         result["l2"] = _check_resource_l2()
     except Exception:
         pass
+    # L3 工具资源清理：每 10 个 tick 清理一次僵尸资源（约 5 分钟）
+    global _tick_count
+    _tick_count = globals().get("_tick_count", 0) + 1
+    if _tick_count % 10 == 0:
+        try:
+            from sentinel_platform.modules.ai_pentest.tool_resources import cleanup_stale_resources
+            cleaned = cleanup_stale_resources()
+            if cleaned > 0:
+                result["tool_res_cleaned"] = cleaned
+        except Exception as exc:
+            logger.debug("cleanup_stale_resources degraded: %s", exc)
     return result
 
 
@@ -116,46 +150,81 @@ _QUEUED_ORPHAN_SECONDS = 180   # queued 中间态超此秒数无进展 = 投递�
 _MAX_TASK_RECLAIM = 3          # running 僵尸重投续扫上限：超此次数仍僵死 = 真坏任务，标 error 防无限重投
 
 
+def _heartbeat_age(doc: dict, now_epoch: float) -> float:
+    """据 update_date 心跳算距今秒数（AUD-08）。缺失/无法解析 → 返 inf（视为无心跳=可回收）。"""
+    ud = (doc.get("update_date") or doc.get("start_time") or "").strip()
+    if not ud:
+        return float("inf")
+    try:
+        return now_epoch - time.mktime(time.strptime(ud, "%Y-%m-%d %H:%M:%S"))
+    except (ValueError, TypeError):
+        return float("inf")
+
+
 def _reclaim_on_startup() -> dict:
-    """**scheduler 启动即回收被打断的 running 任务/会话，立即续跑（不等心跳超时阈值）**。
-    根据：scheduler 一启动就意味着上一轮进程已终止（重启/热更/容器 recreate/崩溃）——此刻残留的
-    running 任务、running/dispatching 会话**必然是被打断的**（worker 也随之重启，不会有真正在跑的），
-    无需傻等 TASK_STALL_SECONDS(默认2h)/会话 STALL(15min) 的僵尸判定。直接回收续跑。
-    **区分用户手动停止（铁律，绝不误续）**：扫描手动停=status="stop"、会话手动停=status="stopped"+
-    stop_requested，二者都不是 running/dispatching，本函数只动 running/dispatching，天然不碰手动停止的。
-    续跑数据不丢：扫描 recon 断点续扫(_load_checkpoint 跳已完成阶段)、会话 checkpoint 接续。
-    重投上限沿用（running 任务累加 reclaim_count，超 _MAX_TASK_RECLAIM 才在后续 tick 判死）。"""
+    """**scheduler 启动回收被打断的 running 任务/会话——但只回收心跳已过期的（AUD-08）**。
+    修复前假设"scheduler 启动 = worker 也重启了"，无条件回收所有 running。但当前 compose 是
+    **独立容器**（worker / scheduler 各自独立进程，可单独重启/热更）——若只 scheduler 重启、worker
+    仍在跑，无条件回收会把**正在被活着的 worker 执行**的任务/会话回收重投 → 重复扫描/重复 LLM 调用/
+    checkpoint 竞争覆盖。
+    修法（复用既有心跳，与周期 watchdog 同口径）：running 任务/会话的 update_date 是每轮 checkpoint
+    刷新的心跳；启动时只回收**心跳已 stale**（worker 真死）的，心跳新鲜的（worker 还活着在跑）**不动**，
+    交给周期 watchdog 按 STALL 阈值判。启动回收阈值取 max(3×tick, 90s)——比周期 STALL 短，让 scheduler
+    单独重启后能较快接管真死的，又不会误回收心跳仍在刷新的活任务。
+    **区分用户手动停止**：只动 running/dispatching + 排除 stop_requested，天然不碰手动停止的。
+    续跑数据不丢：扫描 recon 断点续扫、会话 checkpoint 接续。重投上限沿用（reclaim_count）。"""
     from sentinel_platform.core import get_repo
-    out = {"tasks": 0, "sessions": 0}
+    now_epoch = time.time()
+    # 启动回收心跳阈值：足够短以便 scheduler 单独重启后快速接管真死实例，又长于几个 checkpoint 周期
+    # （避免把心跳刚好在刷新间隙的活任务误判死）。
+    stale_th = max(_tick_seconds() * 3, 90)
+    out = {"tasks": 0, "sessions": 0, "kept_alive": 0}
     try:
         tcoll = get_repo().collection("task")
-        # running 扫描任务 → waiting（下轮 run_waiting_tasks 立即重投，断点续扫）。原子条件 status=running。
-        for doc in tcoll.find({"status": "running"}, {"_id": 1, "reclaim_count": 1}):
+        for doc in tcoll.find({"status": "running"}, {"_id": 1, "reclaim_count": 1,
+                                                       "update_date": 1, "start_time": 1}):
+            if _heartbeat_age(doc, now_epoch) < stale_th:
+                out["kept_alive"] += 1        # 心跳新鲜=worker 还在跑，不回收（AUD-08 核心）
+                continue
             rc = int(doc.get("reclaim_count", 0) or 0)
             r = tcoll.update_one({"_id": doc["_id"], "status": "running"}, {"$set": {
                 "status": "waiting", "reclaim_count": rc + 1,
-                "dispatch_error": "调度器启动检测到中断（进程重启/热更/容器重建），立即回收续扫（第 {} 次）".format(rc + 1)}})
+                "dispatch_error": "调度器启动检测到中断且心跳已过期（worker 疑似已终止），回收续扫（第 {} 次）".format(rc + 1)}})
             out["tasks"] += getattr(r, "modified_count", 0)
     except Exception as exc:
         logger.debug("startup reclaim tasks degraded: %s", exc)
     try:
         scoll = get_repo().collection("intel_pentest_session")
-        # running/dispatching 会话 → queued（下轮 _tick_sessions 按并发槽位立即恢复）。
-        # 绝不碰 stopped(手动停+stop_requested)/paused_manual/done/fatal 等终态。
-        # **额外排除 stop_requested=True**（与 orchestration._claim_session 认领条件同口径，BUG-019）：
-        # 用户显式 stop 过的会话即使因竞态状态落在 running（stop 撞上引擎写 running 的窄窗口），也绝不续跑；
-        # 否则回收成 queued 后 _claim_session 会拒认领→卡 queued 不干净。带 stop_requested 的保持不动。
+        # running/dispatching 会话 → queued，但同样只回收心跳过期的；stop_requested 绝不续跑。
         for doc in scoll.find({"status": {"$in": ["running", "dispatching"]},
-                               "stop_requested": {"$ne": True}}, {"_id": 1}):
+                               "stop_requested": {"$ne": True}},
+                              {"_id": 1, "update_date": 1, "start_time": 1}):
+            if _heartbeat_age(doc, now_epoch) < stale_th:
+                out["kept_alive"] += 1
+                continue
             r = scoll.update_one({"_id": doc["_id"], "status": {"$in": ["running", "dispatching"]},
                                   "stop_requested": {"$ne": True}},
                                  {"$set": {"status": "queued"}})
             out["sessions"] += getattr(r, "modified_count", 0)
     except Exception as exc:
         logger.debug("startup reclaim sessions degraded: %s", exc)
-    if out["tasks"] or out["sessions"]:
-        logger.info("scheduler 启动回收：中断任务 %d 个→waiting、中断会话 %d 个→queued，立即续跑",
-                    out["tasks"], out["sessions"])
+    # 会话台后台回合（v1.21.157-62）：启动时清心跳过期的 console_running 死锁（worker 崩溃残留）；
+    # 有 pending 的由周期 _tick_console_sessions 重投。此处只解锁，不续跑半截回合（防重复工具执行）。
+    try:
+        ccoll = get_repo().collection("intel_pentest_session")
+        for doc in ccoll.find({"console_created": True, "console_running": True},
+                              {"_id": 1, "console_update": 1}):
+            if _heartbeat_age({"update_date": doc.get("console_update", "")}, now_epoch) < stale_th:
+                continue                     # 心跳新鲜=worker 还在跑该回合，不动
+            ccoll.update_one({"_id": doc["_id"], "console_running": True},
+                             {"$set": {"console_running": False}})
+            out["console_unlocked"] = out.get("console_unlocked", 0) + 1
+    except Exception as exc:
+        logger.debug("startup reclaim console degraded: %s", exc)
+    if out["tasks"] or out["sessions"] or out["kept_alive"]:
+        logger.info("scheduler 启动回收：心跳过期任务 %d→waiting、会话 %d→queued 续跑；"
+                    "心跳新鲜（worker 仍在跑）保留不动 %d 个（AUD-08 防独立 worker 拓扑下误回收）",
+                    out["tasks"], out["sessions"], out["kept_alive"])
     return out
 
 
@@ -250,9 +319,13 @@ def _tick_sessions() -> dict:
     from sentinel_platform.core import get_repo
     from sentinel_platform.modules.kernel import orchestration
     import time as _t
-    max_retry = _sess_cfg("MAX_TRANSIENT_RETRY", 5)
+    max_retry = _sess_cfg("MAX_TRANSIENT_RETRY", 12)   # v1.21.157-48 加长中断重试轮次(5→12)，中断会话更耐心自愈
     stall_sec = _sess_cfg("STALL_SECONDS", 900)   # 15min 无心跳判死
-    out = {"queued": 0, "resumed": 0, "stalled": 0, "degraded": 0}
+    # dispatching 停滞回收阈值：正常亚秒级转 running，超此秒数仍 dispatching = 派发消息丢失
+    # (rabbitmq recreate / consumers 掉线) 或 worker 起转前崩。默认 max(3×tick,90s)，远长于正常 dispatch。
+    dispatch_stall = _sess_cfg("DISPATCH_STALL_SECONDS", max(_tick_seconds() * 3, 90))
+    max_dispatch_reclaim = _sess_cfg("MAX_DISPATCH_RECLAIM", 3)   # 连续派发都起不来的降级上限，防无限抖动
+    out = {"queued": 0, "resumed": 0, "stalled": 0, "degraded": 0, "revived": 0}
     try:
         coll = get_repo().collection("intel_pentest_session")
         now_epoch = _t.time()
@@ -267,6 +340,29 @@ def _tick_sessions() -> dict:
                 coll.update_one({"_id": s["_id"], "status": "running"}, {"$set": {"status": "queued"}})
                 out["stalled"] += 1
 
+        # ①.5 回收 dispatching 停滞：周期 watchdog 此前只管 running，dispatching 卡死只能靠 scheduler 重启的
+        # _reclaim_on_startup，中间会一直占槽不动（实测 rabbitmq recreate 丢消息后会话永卡 dispatching）。
+        # dispatch 心跳(update_date，由 _claim_session 进 dispatching 时盖)超 dispatch_stall 且非 stop_requested
+        # → 回 queued 重新派发；连续回收超 MAX_DISPATCH_RECLAIM 次仍起不来(如 provider 失效/run_agent 起转即崩)
+        # → 降级 paused_manual(由 ②.5 隔 MANUAL_RETRY_SECONDS 延迟自愈)，别无限 queued↔dispatching 抖动占槽。
+        for s in coll.find({"status": "dispatching", "stop_requested": {"$ne": True}},
+                           {"_id": 1, "update_date": 1, "dispatch_reclaim_count": 1}):
+            if _heartbeat_age(s, now_epoch) <= dispatch_stall:
+                continue
+            drc = int(s.get("dispatch_reclaim_count", 0) or 0)
+            if drc >= max_dispatch_reclaim:
+                # 降级时盖 update_date=now：让 paused_manual 是「新鲜」的，20min MANUAL_RETRY 计时从头算，
+                # 否则携带派发前的旧心跳会被同 tick 的 ②.5 立即复活成 paused_transient，抵消「延迟自愈」本意。
+                coll.update_one({"_id": s["_id"], "status": "dispatching", "stop_requested": {"$ne": True}},
+                                {"$set": {"status": "paused_manual",
+                                          "update_date": _t.strftime("%Y-%m-%d %H:%M:%S"),
+                                          "dispatch_error": "dispatching 停滞回收 {} 次仍起不来，降级延迟自愈".format(drc)}})
+                out["degraded"] += 1
+            else:
+                coll.update_one({"_id": s["_id"], "status": "dispatching", "stop_requested": {"$ne": True}},
+                                {"$set": {"status": "queued"}, "$inc": {"dispatch_reclaim_count": 1}})
+                out["stalled"] += 1
+
         # ② running + dispatching 共同占用槽位；paused 和 queued 共享剩余槽位
         cap = _session_cap()
         occupied = coll.count_documents({"status": {"$in": ["running", "dispatching"]}})
@@ -274,7 +370,28 @@ def _tick_sessions() -> dict:
         if slots <= 0:
             return out
 
-        paused = list(coll.find({"status": "paused_transient"}, {"_id": 1, "retry_count": 1, "priority": 1}))
+        # ②.5 需人工处理的会话隔 N 分钟自行再拉起（用户 2026-09-21）：paused_manual 是「自愈耗尽/永久错误」
+        # 的搁浅态，此前只能人工 resume。现对**非会话台**的 paused_manual，距上次活动≥MANUAL_RETRY_SECONDS
+        # （默认 1200s=20min）就复活回 paused_transient（清 retry_count 重走自愈）——中转站恢复/额度回充/
+        # 网络恢复后能自动跑起来，不必人工干预。**绝不碰 console_created 会话台会话**（它天生 paused_manual、
+        # 自动拉起会用错提示词跑飞，见 console_create_session 设计）；也不碰 stop_requested（用户显式停的不复活）。
+        manual_retry_sec = _sess_cfg("MANUAL_RETRY_SECONDS", 1200)
+        for s in coll.find({"status": "paused_manual", "console_created": {"$ne": True},
+                            "stop_requested": {"$ne": True}},
+                           {"_id": 1, "update_date": 1}):
+            if _heartbeat_age(s, now_epoch) < manual_retry_sec:
+                continue   # 未到 20min 间隔，跳过（下个 tick 再看）
+            r = coll.update_one({"_id": s["_id"], "status": "paused_manual"},
+                                {"$set": {"status": "paused_transient", "retry_count": 0,
+                                          "update_date": _t.strftime("%Y-%m-%d %H:%M:%S")}})
+            if getattr(r, "modified_count", 0):
+                out["revived"] = out.get("revived", 0) + 1
+
+        # 候选查询排除 stop_requested（与 _claim_session 的 stop_requested!=True 认领过滤同口径）：
+        # 停掉的会话卡在 paused_transient/queued 时，若进候选并排到前面，会白占 slot 预算认领失败，
+        # 饿死后面健康候选（实测顽疾：3 个 stop_requested 的 paused_transient 排最前堵死 10 个健康 queued）。
+        paused = list(coll.find({"status": "paused_transient", "stop_requested": {"$ne": True}},
+                                {"_id": 1, "retry_count": 1, "priority": 1}))
         candidates = []
         for s in paused:
             rc = int(s.get("retry_count", 0) or 0)
@@ -284,20 +401,64 @@ def _tick_sessions() -> dict:
                 out["degraded"] += 1
             else:
                 candidates.append((0, -int(s.get("priority", 0) or 0), s, "paused_transient"))
-        for s in coll.find({"status": "queued"}, {"_id": 1, "priority": 1}):
+        for s in coll.find({"status": "queued", "stop_requested": {"$ne": True}}, {"_id": 1, "priority": 1}):
             candidates.append((1, -int(s.get("priority", 0) or 0), s, "queued"))
         candidates.sort(key=lambda item: (item[0], item[1]))  # 恢复优先，同类高价值优先
-        for _, _, s, source_status in candidates[:slots]:
+        # 填满 slots 个**成功派发**（而非切前 slots 个尝试）：认领失败(竞态/被停/状态漂移)不占 slot 预算，
+        # 继续尝试下一个健康候选——否则前 slots 个恰好都认领失败时，这一轮一个都提不上、健康候选被饿死。
+        promoted = 0
+        for _, _, s, source_status in candidates:
+            if promoted >= slots:
+                break
             r = orchestration.submit_session(str(s["_id"]), from_status=source_status) or {}
             # 兼容测试/旧门面返回 None：生产新门面会明确 submitted=False 表示认领失败。
-            if r and not r.get("submitted"):
-                continue
+            if not r.get("submitted"):
+                continue                       # 认领失败不计入 promoted，slot 预算留给下一个健康候选
+            promoted += 1
             if source_status == "paused_transient":
                 out["resumed"] += 1
             else:
                 out["queued"] += 1
     except Exception as exc:
         logger.debug("tick_sessions degraded: %s", exc)
+    return out
+
+
+def _tick_console_sessions() -> dict:
+    """会话台后台回合 crash 兜底（v1.21.157-62，**独立于 _tick_sessions，绝不碰 status/run_agent**）：
+    console 回合跑在 worker（run_console_agent），worker 崩溃会留下 console_running=True 的死锁 +
+    未消费的 pending_user_msgs。本 watchdog 查心跳（console_update）超 STALL 的 console_running 会话：
+      → 清 console_running（解死锁）；
+      → 若 pending_user_msgs 非空 → submit_console_turn 重投（捞回用户排队指令，幂等 CAS 认领）；
+      → **不自动续跑半截回合**（避免重复工具执行），符合「回合丢了就靠 pending 重投/等用户」。"""
+    from sentinel_platform.core import get_repo
+    from sentinel_platform.modules.kernel import orchestration
+    import time as _t
+    stall_sec = _sess_cfg("STALL_SECONDS", 900)
+    out = {"unlocked": 0, "resubmitted": 0}
+    try:
+        coll = get_repo().collection("intel_pentest_session")
+        now_epoch = _t.time()
+        for s in coll.find({"console_created": True, "console_running": True},
+                           {"_id": 1, "console_update": 1, "pending_user_msgs": 1}):
+            ud = s.get("console_update", "") or ""
+            try:
+                age = now_epoch - _t.mktime(_t.strptime(ud, "%Y-%m-%d %H:%M:%S"))
+            except (ValueError, TypeError):
+                age = stall_sec + 1   # 无心跳时间戳 → 视为超时（保守解锁）
+            if age <= stall_sec:
+                continue
+            # 心跳超时 = worker 死/回合卡死 → 解锁
+            coll.update_one({"_id": s["_id"], "console_running": True},
+                            {"$set": {"console_running": False}})
+            out["unlocked"] += 1
+            # 有排队指令 → 重投一个新回合（submit_console_turn 内 CAS 认领，幂等）
+            if s.get("pending_user_msgs"):
+                r = orchestration.submit_console_turn(str(s["_id"])) or {}
+                if r.get("submitted"):
+                    out["resubmitted"] += 1
+    except Exception as exc:
+        logger.debug("tick_console_sessions degraded: %s", exc)
     return out
 
 
@@ -322,7 +483,7 @@ def _tick_vuln_feed() -> bool:
     import time as _t
     try:
         from sentinel_platform.modules.risk_intel._feed import run_feed, get_feed_interval
-        from sentinel_platform.core import get_repo
+        from sentinel_platform.core import get_repo, get_config
         from sentinel_platform.contracts import Collections
         meta = get_repo().collection(Collections.VULN_FEED_META).find_one({"name": "default"}) or {}
         last_fetch = meta.get("last_fetch") or ""
@@ -338,10 +499,36 @@ def _tick_vuln_feed() -> bool:
             last_ts = 0
         if now - last_ts < interval:
             return False
-        # 到期或首次 → 后台线程拉取（不阻塞 scheduler tick）
+        # 到期或首次 → 后台线程拉取（不阻塞 scheduler tick）。
+        # 中心化（UPDATE.INTEL_PULL 默认开且已配 SOURCE_URL/KEY）：从分发系统拉外部源情报，
+        # 本地仅跑 arl_npoc/nuclei（本地可执行情报，反映本实例能力）；中心不可达 → 降级本地全 8 源直拉。
+        intel_pull_on = bool(get_config().section("UPDATE", "INTEL_PULL", default=True))
+        try:
+            from sentinel_platform.modules.system import activation
+            has_source = bool(activation.source_url()) and bool(activation.read_key())
+        except Exception:
+            has_source = False
+        central = intel_pull_on and has_source
+
+        def _job():
+            # 外部开源 CVE 情报：只从云端拉取（本系统不再本地爬外部源）。中心不可达则本轮暂缺、下轮重试。
+            if central:
+                try:
+                    from sentinel_platform.modules.risk_intel import intel_pull
+                    r = intel_pull.pull_and_upsert() or {}
+                    if r.get("ok"):
+                        logger.info("scheduler: vuln_feed central pull %s", r)
+                    else:
+                        logger.warning("scheduler: 云端情报拉取未成功(%s)，外部情报本轮暂缺，下轮重试", r.get("reason"))
+                except Exception as exc:
+                    logger.warning("scheduler: intel_pull 异常: %s", exc)
+            # 本地可执行能力源（arl_npoc/nuclei）始终本地跑（per-instance，非外部爬取）
+            run_feed()
+
         import threading
-        threading.Thread(target=run_feed, daemon=True).start()
-        logger.info("scheduler: vuln_feed triggered (last=%s, interval=%ss)", last_fetch or "never", interval)
+        threading.Thread(target=_job, daemon=True).start()
+        logger.info("scheduler: vuln_feed triggered (central=%s, last=%s, interval=%ss)",
+                    central, last_fetch or "never", interval)
         return True
     except Exception as exc:
         logger.debug("tick_vuln_feed degraded: %s", exc)
@@ -411,6 +598,37 @@ def _tick_github() -> dict:
             logger.debug("github tick run degraded: %s", exc)
         finally:
             _github_running = False
+
+    import threading
+    threading.Thread(target=_run, daemon=True).start()
+    return {"dispatched": True}
+
+
+def _tick_template_learn() -> dict:
+    """报告模板异步学习兜底：正常学习在 web worker 内 daemon 线程几分钟内完成；worker 崩溃/重启会让
+    线程死、模板永久卡 learning。本 tick 捡心跳(update_date)超时仍 learning 的模板重跑（同步跑完）。
+    经 registry 取 INTEL 服务的 run_pending_learn（缺失降级）。后台 daemon 线程跑（LLM 慢，不阻塞 tick）；
+    模块级 _tpl_learn_running 防线程堆积。"""
+    global _tpl_learn_running
+    if _tpl_learn_running:
+        return {"skipped": "prev_run_in_progress"}
+
+    def _run():
+        global _tpl_learn_running
+        _tpl_learn_running = True
+        try:
+            from sentinel_platform.contracts import get_registry, ROLE
+            svc = get_registry().get(ROLE.INTEL)
+            if svc and hasattr(svc, "run_pending_learn"):
+                try:
+                    stale = int(get_config().section("REPORT_TEMPLATE", "LEARN_STALE_SEC", default=600) or 600)
+                except (TypeError, ValueError):
+                    stale = 600   # 心跳超时阈值（可配，默认 10min）
+                svc.run_pending_learn(stale_seconds=stale)
+        except Exception as exc:
+            logger.debug("tpl_learn tick run degraded: %s", exc)
+        finally:
+            _tpl_learn_running = False
 
     import threading
     threading.Thread(target=_run, daemon=True).start()

@@ -17,6 +17,10 @@ SENTINEL:
   API_KEY: "CHANGE_ME_TO_A_RANDOM_SECRET"
   # 口令哈希盐（user_manage 用；生产务必改）
   SALT: "CHANGE_ME_SALT"
+  # 激活硬门控：未激活/激活过期时，网关对核心业务端点（AI 渗透/扫描任务/情报/小程序/
+  # 探针/PoC/GitHub 采集/调度）直接返回 402，只读展示类（仪表盘/设置/日志/代理/激活页）不拦。
+  # 无宽限期，到期即拦。默认 true（不配即强制）；仅特殊部署/调试才设 false 临时关闭。
+  ACTIVATION_ENFORCE: true
 
 # —— 系统版本（about/update_check 读；ops 升级时改，前端比对提示更新）——
 SYSTEM:
@@ -27,9 +31,10 @@ SYSTEM:
 # 默认查上游 /version 比对，能如实报出上游新版本。留空=退回纯本地比对（服务端 vs 前端构建）。
 # CHECK_REMOTE:false 可显式关闭查上游（强制本地比对）。KEY=授权 key（捐赠者实例填，走 X-Update-Key 头）。
 UPDATE:
-  SOURCE_URL: ""          # 例: "http://124.222.145.172:5080"
+  SOURCE_URL: ""          # 例: "https://watchtowers.info"
   KEY: ""
   CHECK_REMOTE: true
+  INTEL_PULL: true        # 漏洞情报从分发系统中心拉取(默认开)；false=各实例本地直拉外部源(旧行为)。中心不可达自动降级本地
   # RELOAD_CMD：一键更新写完文件后执行的重启命令（systemd 部署重启 worker/scheduler 让新代码生效）。
   # 留空则不执行（docker/gunicorn --reload 会自动热重载 web，前端产物落盘后浏览器刷新即生效）。
   RELOAD_CMD: ""          # 例: "systemctl restart sentinel-worker-v20260607001942 sentinel-scheduler"
@@ -67,6 +72,19 @@ RESOURCE:
   MEMORY_LOW: 60
   MEMORY_HIGH: 80
   MEMORY_CRITICAL: 90
+  # CPU / 磁盘水位告警阈值（%）：达 *_HIGH=tight（推送预警），达 *_CRITICAL=critical（弹窗+推送）。
+  # 综合水位取「内存/CPU/磁盘」最严重维度；缺省即用下列默认，可按机器调整。
+  CPU_HIGH: 85
+  CPU_CRITICAL: 95
+  DISK_HIGH: 85
+  DISK_CRITICAL: 95
+  # 仪表盘「资源运行可靠性」磁盘维用**绝对剩余空间**评分（需求导向：平台一直写扫描产出/mongo/日志/
+  # 镜像，一次大扫描可产出 1~2GB，绝对余量比百分比更能反映"还能不能写"）。剩余≥EXCELLENT 充裕/
+  # ≥GOOD 良好/≥TIGHT 偏紧/<CRIT 告急（且写入可能失败）。与 DISK_HIGH/CRITICAL(%) 取更差者。缺省即用下列默认。
+  DISK_FREE_EXCELLENT_GB: 20
+  DISK_FREE_GOOD_GB: 8
+  DISK_FREE_TIGHT_GB: 3
+  DISK_FREE_CRIT_GB: 1.5
   RELAXED_TASK_SLOTS: 5
   NORMAL_TASK_SLOTS: 3
   TIGHT_TASK_SLOTS: 1

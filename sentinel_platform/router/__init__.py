@@ -75,9 +75,14 @@ def _mount_namespaces(api: Any) -> None:
         ("sentinel_platform.router.endpoints.network", "ns"),        # /api/network/*（网络检测 ping）
         ("sentinel_platform.router.endpoints.probe", "ns"),          # /api/probe/*（探针管理）
         ("sentinel_platform.router.endpoints.miniapp", "ns"),        # /api/miniapp/*（小程序渗透：解包+提接口）
+        ("sentinel_platform.router.endpoints.app_pentest", "ns"),    # /api/app_pentest/*（APP 渗透：设备管理+光纤生成）
+        ("sentinel_platform.router.endpoints.appbridge", "ns"),      # /api/appbridge/*（光纤桥接：握手/取命令/回结果，platform_key 鉴权）
         ("sentinel_platform.router.endpoints.scan_result", "ns_vuln"),    # /api/vuln/*（PoC 扫描结果 list+delete）
         ("sentinel_platform.router.endpoints.scan_result", "ns_nuclei"),  # /api/nuclei_result/*（nuclei 命中 list+delete）
         ("sentinel_platform.router.endpoints.scan_result", "ns_npoc"),    # /api/npoc_service/*（非Web服务识别，仅 list）
+        ("sentinel_platform.router.endpoints.attack_alert", "ns"),        # /api/attack_alert/*（攻击告警，v1.21.160 新增）
+        ("sentinel_platform.router.endpoints.mascot", "ns"),              # /api/mascot/*（桌宠 AI 对话，复用 ai_config provider）
+        ("sentinel_platform.router.endpoints.broker_health", "ns"),       # /api/system/broker/*（调度降级状态查询+手动切回）
         # 其余类别端点各 AI 建好后在此追加：ai_pentest(session/ai_tools)/risk_intel(asset_intel/unit_view)
     ]
     for mod_path, ns_attr in endpoint_modules:

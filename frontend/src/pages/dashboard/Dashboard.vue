@@ -97,6 +97,19 @@
     <a-row :gutter="16" class="section-row">
       <a-col :xs="24" :lg="8">
         <a-card title="设备状态" :bordered="false" :loading="deviceLoading">
+          <!-- 资源分数 + 运行可靠性总评（实时，像网络质量一样评当前资源是否适合系统运行）-->
+          <div v-if="resScore != null" class="res-verdict" :class="'rv-' + resLevel">
+            <div class="rv-badge">
+              <div class="rv-level">{{ resLevelText }}</div>
+              <div class="rv-score">{{ resScore }}<span>分</span></div>
+            </div>
+            <div class="rv-body">
+              <div class="rv-title">资源运行可靠性</div>
+              <div class="rv-verdict">{{ resVerdict }}</div>
+              <div v-if="resTaskSlots != null" class="rv-slots">⚙ 当前可起并发任务：{{ resTaskSlots }} 个（随可用内存动态）</div>
+              <div v-if="resDiskNote" class="rv-disknote">🗄 {{ resDiskNote }}</div>
+            </div>
+          </div>
           <div class="dev-list">
             <div class="dev-row">
               <span class="dev-label">CPU（{{ cpuCount || '-' }} 核）</span>
@@ -270,6 +283,9 @@ const cpuCount = ref(0)
 const memTotalGb = ref(0); const memUsedGb = ref(0)
 const diskTotalGb = ref(0); const diskUsedGb = ref(0)
 const exitIp = ref(''); const proxyOk = ref(false); const proxyEnabled = ref(false)
+// 资源分数 + 运行可靠性（后端 device_info.resource 产出，实时评当前资源是否适合系统运行）
+const resScore = ref<number | null>(null)
+const resLevel = ref('good'); const resLevelText = ref(''); const resVerdict = ref(''); const resDiskNote = ref(''); const resTaskSlots = ref<number | null>(null)
 const uptimeText = computed(() => {
   const s = uptime.value
   if (!s) return '—'
@@ -305,6 +321,16 @@ async function loadDevice(silent = false) {
     exitIp.value = String(d.exit_ip ?? '')
     proxyOk.value = Boolean(d.proxy_ok)
     proxyEnabled.value = Boolean(d.proxy_enabled)
+    // 资源分数 + 运行可靠性
+    const res = d.resource as { score?: number; level?: string; level_text?: string; verdict?: string; disk_note?: string; task_slots?: number | null } | undefined
+    if (res && res.score != null) {
+      resScore.value = Number(res.score)
+      resLevel.value = String(res.level || 'good')
+      resLevelText.value = String(res.level_text || '')
+      resVerdict.value = String(res.verdict || '')
+      resDiskNote.value = String(res.disk_note || '')
+      resTaskSlots.value = res.task_slots == null ? null : Number(res.task_slots)
+    }
   } catch { /* 设备信息可选 */ } finally { deviceLoading.value = false }
 }
 
@@ -436,17 +462,42 @@ function drawChart() {
     return
   }
 
+  // X 轴按【真实时间】定位(治「只有几个点却被均匀拉满全宽=显示200多天假象」根因):
+  // 时间窗 = [now - chartDays 天, now]，点按其 ts 落在真实时间位置；数据只覆盖实际采集时段
+  // (只跑几天就只占图左侧一小段，不再摊满全宽)。ts 单位秒。
+  const nowSec = Math.floor(Date.now() / 1000)
+  const t1 = nowSec
+  const t0 = nowSec - chartDays.value * 86400
+  const span = Math.max(1, t1 - t0)
+  const tx = (ts: number) => pad.left + chartW * Math.min(1, Math.max(0, (ts - t0) / span))
+
+  // X 轴时间刻度(4 等分，按真实时间；跨度>2天显日期，否则显时:分)
+  ctx.fillStyle = '#aaa'
+  ctx.font = '10px sans-serif'
+  ctx.textAlign = 'center'
+  const multiDay = chartDays.value > 2
+  for (let k = 0; k <= 4; k++) {
+    const tt = t0 + (span * k) / 4
+    const x = pad.left + (chartW * k) / 4
+    const dt = new Date(tt * 1000)
+    const label = multiDay
+      ? `${dt.getMonth() + 1}/${dt.getDate()}`
+      : `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+    ctx.fillText(label, x, h - 6)
+  }
+  ctx.textAlign = 'left'
+
   function drawLine(key: 'cpu' | 'memory' | 'disk', color: string) {
     if (!ctx || points.length < 2) return
-    const step = chartW / (points.length - 1)
     ctx.strokeStyle = color
     ctx.lineWidth = 1.5
     ctx.lineJoin = 'round'
     ctx.beginPath()
+    let started = false
     for (let i = 0; i < points.length; i++) {
-      const x = pad.left + i * step
+      const x = tx(points[i].ts)          // 按真实时间戳定位，非索引均匀铺满
       const y = pad.top + chartH * (1 - (points[i][key] || 0) / 100)
-      if (i === 0) ctx.moveTo(x, y)
+      if (!started) { ctx.moveTo(x, y); started = true }
       else ctx.lineTo(x, y)
     }
     ctx.stroke()
@@ -465,7 +516,8 @@ function drawChart() {
 .metric-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
 .metric-text { min-width: 0; }
 .metric-title { font-size: 13px; color: #8c8c8c; line-height: 1.4; }
-.metric-value { font-size: 26px; font-weight: 600; color: #1f2937; line-height: 1.2; }
+/* 数值用主题文字色变量：亮=#0f1f33 / 暗=#cfe6f5。修复夜间模式暗字压在暗卡底(#0d1424)看不清 */
+.metric-value { font-size: 26px; font-weight: 600; color: var(--dt-text, #1f2937); line-height: 1.2; }
 .metric-value.loading { opacity: .4; }
 .metric-sub { font-size: 11px; color: #bbb; margin-top: 2px; }
 .section-row { margin-top: 16px; }
@@ -519,6 +571,22 @@ function drawChart() {
 .nq-poor .netq-badge { background: #fa8c16; }
 .nq-critical .netq-badge { background: #cf1322; }
 .nq-unknown .netq-badge { background: #bfbfbf; }
+/* 资源运行可靠性总评（设备状态卡内，仿网络质量徽章紧凑版）*/
+/* --dt-hover 两个主题都没定义→恒 fallback #fafafa 近白；夜间模式下白板压在暗卡上刺眼。
+   改用两态都有定义的 --dt-fill(亮 #fafafa / 暗 #0d1424) + --dt-border，暗色下自动跟随。 */
+.res-verdict { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 14px;
+  border-radius: 10px; background: var(--dt-fill, #fafafa); border: 1px solid var(--dt-border, #f0f0f0); }
+.rv-badge { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 68px; padding: 5px 10px; border-radius: 8px; color: #fff; }
+.rv-level { font-size: 15px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.rv-score { font-size: 12px; opacity: .95; } .rv-score span { font-size: 9px; }
+.rv-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.rv-verdict { font-size: 12px; color: var(--dt-muted, #888); line-height: 1.5; }
+.rv-disknote { font-size: 11px; color: #d48806; line-height: 1.5; margin-top: 2px; }
+.rv-slots { font-size: 11px; color: var(--dt-muted, #888); line-height: 1.5; margin-top: 2px; }
+.rv-excellent .rv-badge, .rv-good .rv-badge { background: #52c41a; }
+.rv-tight .rv-badge { background: #faad14; }
+.rv-critical .rv-badge { background: #cf1322; }
 .resource-chart { width: 100%; height: 180px; display: block; }
 .chart-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #8c8c8c; }
 .legend-item { display: flex; align-items: center; gap: 4px; }

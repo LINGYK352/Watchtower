@@ -2,6 +2,7 @@
   <PageContainer title="日志监测" kicker="Log Monitor" description="监测各组件、模块、代码的报错与启动错误，自动入库(WARNING 及以上)。">
     <template #extra>
       <a-space>
+        <a-button @click="openMyReports"><MessageOutlined /> 我的上报<a-badge v-if="myReplyCount" :count="myReplyCount" :offset="[6,-2]" /></a-button>
         <a-button @click="loadAll">刷新</a-button>
         <a-button @click="openRetention">保留设置</a-button>
         <ConfirmAction danger type="default" title="确认清空全部日志？" @confirm="clearAll">清空</ConfirmAction>
@@ -79,18 +80,42 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <!-- 我的上报：本用户上传过的报错 + 开发者回复/修复进展 -->
+    <a-drawer v-model:open="myOpen" title="我的上报" width="640" @open="loadMyReports">
+      <a-spin :spinning="myLoading">
+        <a-empty v-if="!myReports.length" description="你还没有上传过报错" />
+        <div v-for="r in myReports" :key="r.id" class="mr-card">
+          <div class="mr-head">
+            <span class="mr-ts">{{ r.ts }}</span>
+            <a-tag :color="r.reply ? 'green' : (r.handled ? 'blue' : 'orange')">
+              {{ r.reply ? '已回复' : (r.handled ? '已处理' : '待处理') }}
+            </a-tag>
+            <span v-if="r.version" class="mr-ver">{{ r.version }}</span>
+          </div>
+          <div class="mr-desc">{{ r.description || '(无描述)' }}</div>
+          <pre v-if="r.log_preview" class="mr-log">{{ r.log_preview }}{{ r.log_len > 200 ? ' …' : '' }}</pre>
+          <div v-if="r.reply" class="mr-reply">
+            <div class="mr-reply-hd">开发者回复<span v-if="r.fix_version" class="mr-fix">已修复：{{ r.fix_version }}</span>
+              <span v-if="r.replied_at" class="mr-rat">{{ r.replied_at }}</span></div>
+            <div class="mr-reply-body">{{ r.reply }}</div>
+          </div>
+          <div v-else class="mr-noreply">开发者暂未回复，请留意后续版本更新。</div>
+        </div>
+      </a-spin>
+    </a-drawer>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import { CloudUploadOutlined } from '@ant-design/icons-vue'
+import { CloudUploadOutlined, MessageOutlined } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import SearchBar from '../../components/SearchBar.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
 import { logMonitorApi, type LogStat, type LogRetention } from '../../api/logMonitor'
-import { reportError } from '../../api/about'
+import { reportError, getMyReports, type MyReport } from '../../api/about'
 import { APP_VERSION } from '../../config/brand'
 import type { RowRecord } from '../../api/types'
 
@@ -212,10 +237,46 @@ async function submitReport() {
   }
 }
 
-onMounted(loadAll)
+// —— 我的上报（本用户上传过的报错 + 开发者回复）——
+const myOpen = ref(false)
+const myLoading = ref(false)
+const myReports = ref<MyReport[]>([])
+const myReplyCount = ref(0)
+async function loadMyReports() {
+  myLoading.value = true
+  try {
+    const d = await getMyReports()
+    myReports.value = d.reports || []
+    myReplyCount.value = myReports.value.filter(r => r.reply).length
+  } catch { /* 未激活/分发系统不可达时静默降级空 */ }
+  finally { myLoading.value = false }
+}
+function openMyReports() { myOpen.value = true; loadMyReports() }
+// 进页轻量拉一次，只为在「我的上报」按钮上显示未读回复角标（失败静默）
+async function _probeReplies() {
+  try {
+    const d = await getMyReports()
+    myReplyCount.value = (d.reports || []).filter(r => r.reply).length
+  } catch { /* ignore */ }
+}
+
+onMounted(() => { loadAll(); _probeReplies() })
 </script>
 
 <style scoped>
 .log-msg { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
 .log-pre { white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 12px; margin: 0; max-height: 400px; overflow: auto; }
+/* 我的上报卡片 */
+.mr-card { border: 1px solid var(--dt-line, #eee); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.mr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.mr-ts { color: #8a94a6; font-size: 12px; }
+.mr-ver { color: #8a94a6; font-size: 12px; margin-left: auto; }
+.mr-desc { font-size: 13px; margin-bottom: 6px; }
+.mr-log { white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 11px; background: #f6f8fa; padding: 8px; border-radius: 6px; margin: 0 0 8px; max-height: 140px; overflow: auto; }
+.mr-reply { border-left: 3px solid #52c41a; background: rgba(82,196,26,.06); border-radius: 0 6px 6px 0; padding: 8px 10px; }
+.mr-reply-hd { font-weight: 600; color: #389e0d; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.mr-fix { background: #52c41a; color: #fff; font-size: 11px; padding: 0 6px; border-radius: 3px; font-weight: 400; }
+.mr-rat { color: #8a94a6; font-size: 11px; font-weight: 400; margin-left: auto; }
+.mr-reply-body { font-size: 13px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+.mr-noreply { color: #8a94a6; font-size: 12px; }
 </style>

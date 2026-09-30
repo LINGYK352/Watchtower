@@ -74,13 +74,19 @@ class ProxyTest(unittest.TestCase):
         from sentinel_platform.modules.system.proxy import ProxyServiceImpl
         self.assertEqual(ProxyServiceImpl().resolve_egress("direct"), ("", False))
 
+    def _expected_mihomo_url(self, port=17890):
+        # mihomo host 环境相关：容器设 MIHOMO_HOST=mihomo（独立容器架构），本地回退 127.0.0.1。
+        # 断言用实际 _mihomo_host() 而非硬编码，避免容器/本地跑出不同结果的假失败。
+        from sentinel_platform.modules.system.proxy import _mihomo_host
+        return "http://{}:{}".format(_mihomo_host(), port)
+
     def test_resolve_egress_global_enabled(self):
         # 新4模式：global 需 global_mode_enabled=True + 订阅源，才返回 URL
         set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890,
                            "global_mode_enabled": True, "global_source": {"type": "subscription", "ref_id": ""}}))
         from sentinel_platform.modules.system.proxy import ProxyServiceImpl
         url, fb = ProxyServiceImpl().resolve_egress("global")
-        self.assertEqual(url, "http://127.0.0.1:17890")
+        self.assertEqual(url, self._expected_mihomo_url())
         self.assertFalse(fb)
 
     def test_resolve_egress_global_disabled_direct(self):
@@ -95,7 +101,7 @@ class ProxyTest(unittest.TestCase):
                            "smart_source": {"type": "subscription", "ref_id": ""}}))
         from sentinel_platform.modules.system.proxy import ProxyServiceImpl
         url, fb = ProxyServiceImpl().resolve_egress("smart")
-        self.assertEqual(url, "http://127.0.0.1:17890")
+        self.assertEqual(url, self._expected_mihomo_url())
         self.assertTrue(fb)
 
     def test_resolve_egress_legacy_source_compat(self):
@@ -104,7 +110,7 @@ class ProxyTest(unittest.TestCase):
         from sentinel_platform.modules.system.proxy import ProxyServiceImpl
         svc = ProxyServiceImpl()
         url, force = svc.resolve_egress("proxy", source="subscription")
-        self.assertEqual(url, "http://127.0.0.1:17890")   # 旧 proxy+source 直接走订阅源
+        self.assertEqual(url, self._expected_mihomo_url())   # 旧 proxy+source 直接走订阅源
         self.assertTrue(force)                             # 旧 proxy=强制走代理(不回退)
         self.assertEqual(svc.resolve_egress("off"), ("", False))          # off→direct
 
@@ -142,6 +148,68 @@ class ProxyTest(unittest.TestCase):
         from sentinel_platform.modules.system.proxy import save_config
         r = save_config({"doh_endpoints": "https://a/dns, https://b/dns"})
         self.assertEqual(r["doh_endpoints"], ["https://a/dns", "https://b/dns"])
+
+    # —— 代理源结构性校验（选空源应拦保存，只查空不探可达）——
+    def test_save_config_rejects_empty_pool_source(self):
+        """核心 bug：全局代理选「公共代理」但池空(0可用) → 必须拦保存并给明确错误。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True}))
+        from sentinel_platform.modules.system import proxy as p
+        # 代理池服务返回空池（enabled=0/alive=0）
+        fake_pool = type("P", (), {"stats": lambda self: {"total": 0, "alive": 0, "enabled": 0}})()
+        get_registry().register("proxy_pool_service", fake_pool)
+        r = p.save_config({"global_mode_enabled": True, "global_source": {"type": "pool", "ref_id": ""}})
+        self.assertIn("error", r)
+        self.assertIn("公共代理", r["error"])
+
+    def test_save_config_accepts_pool_with_alive(self):
+        """公共代理池有可用代理 → 放行保存。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True}))
+        from sentinel_platform.modules.system import proxy as p
+        fake_pool = type("P", (), {"stats": lambda self: {"total": 5, "alive": 3, "enabled": 3}})()
+        get_registry().register("proxy_pool_service", fake_pool)
+        r = p.save_config({"global_mode_enabled": True, "global_source": {"type": "pool", "ref_id": ""}})
+        self.assertNotIn("error", r)
+        self.assertTrue(r["global_mode_enabled"])
+
+    def test_save_config_rejects_custom_without_ref(self):
+        """全局选「自定义」但没选具体条目 → 拦。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True}))
+        from sentinel_platform.modules.system import proxy as p
+        r = p.save_config({"global_mode_enabled": True, "global_source": {"type": "custom", "ref_id": ""}})
+        self.assertIn("error", r)
+        self.assertIn("自定义", r["error"])
+
+    def test_save_config_rejects_subscription_without_profile(self):
+        """智能代理选「内核代理」但无激活订阅(active_profile_id 空) → 拦。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True, "active_profile_id": ""}))
+        from sentinel_platform.modules.system import proxy as p
+        r = p.save_config({"smart_source": {"type": "subscription", "ref_id": "sub1"}})
+        self.assertIn("error", r)
+        self.assertIn("内核代理", r["error"])
+
+    def test_save_config_smart_default_placeholder_not_validated(self):
+        """智能源=订阅空占位(默认直连) → 不校验、不拦（避免误伤直连）。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True}))
+        from sentinel_platform.modules.system import proxy as p
+        r = p.save_config({"smart_source": {"type": "subscription", "ref_id": ""}})
+        self.assertNotIn("error", r)
+
+    def test_save_config_direct_switch_not_validated(self):
+        """切直连（global 关、源置空占位）→ 不校验源，正常保存。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True}))
+        from sentinel_platform.modules.system import proxy as p
+        r = p.save_config({"global_mode_enabled": False,
+                           "global_source": {"type": "subscription", "ref_id": ""},
+                           "smart_source": {"type": "subscription", "ref_id": ""}})
+        self.assertNotIn("error", r)
+
+    def test_save_config_port_change_skips_source_validation(self):
+        """只改端口/DoH（提交不带源字段）→ 不触发源校验（不受空池影响）。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True}))
+        from sentinel_platform.modules.system import proxy as p
+        r = p.save_config({"http_port": 18888})
+        self.assertNotIn("error", r)
+        self.assertEqual(r["http_port"], 18888)
 
     # —— 健康检测 ——
     def test_check_health_disabled_false(self):
@@ -196,15 +264,19 @@ class ProxyTest(unittest.TestCase):
         s = status()
         for k in ("config", "running", "proxy_url", "last_health_ok"):
             self.assertIn(k, s)
-        self.assertEqual(s["proxy_url"], "http://127.0.0.1:17890")
+        self.assertEqual(s["proxy_url"], self._expected_mihomo_url())
 
     def test_detect_exit_ip_proxied(self):
-        set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890}))
+        # 4模式架构：仅 enabled:True 不够，须开全局代理(global_mode_enabled)才真走代理探出口。
+        # （旧 config 只给 enabled 会被 current_platform_egress 判为 direct→不探代理，是过时写法。）
+        set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890,
+                           "global_mode_enabled": True,
+                           "global_source": {"type": "subscription", "ref_id": ""}}))
         from sentinel_platform.modules.system import proxy as p
         # 直连返 1.1.1.1，经代理返 2.2.2.2 → proxied True
         seq = [("1.1.1.1", ""), ("2.2.2.2", "")]
         with mock.patch.object(p, "_fetch_exit_ip", side_effect=seq):
-            r = p.detect_exit_ip()
+            r = p.detect_exit_ip(use_cache=False)
         self.assertEqual(r["direct_ip"], "1.1.1.1")
         self.assertEqual(r["proxy_ip"], "2.2.2.2")
         self.assertTrue(r["proxied"])
@@ -259,6 +331,84 @@ class ProxyTest(unittest.TestCase):
         self.assertEqual(ip, "8.8.8.8")
         self.assertFalse(seen["trust_env"])    # Session.trust_env 被关，忽略环境代理
         self.assertIsNone(seen["proxies"])     # 直连不传 proxies
+
+    # —— 需求2：健康检测异常文案归一 ——
+    def test_friendly_proxy_error_normalizes(self):
+        from sentinel_platform.modules.system import proxy as p
+        raw = ("HTTPSConnectionPool(host='ifconfig.me', port=443): Max retries exceeded "
+               "with url: /ip (Caused by ProxyError('Cannot connect to proxy.', "
+               "timeout('_ssl.c:1132: The handshake operation timed out')))")
+        self.assertEqual(p._friendly_proxy_error(raw), "代理失效（全部节点不可达）")
+        # 非代理连通类错误保持原样，不误伤
+        self.assertEqual(p._friendly_proxy_error("proxy not enabled"), "proxy not enabled")
+        self.assertEqual(p._friendly_proxy_error(""), "")
+
+    def test_check_health_failure_stores_friendly_error(self):
+        set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890}))
+        from sentinel_platform.modules.system import proxy as p
+        raw = "HTTPSConnectionPool ... ProxyError('Cannot connect to proxy')"
+        with mock.patch.object(p, "_fetch_exit_ip", return_value=("", raw)):
+            self.assertFalse(p.check_health(use_cache=False))
+        doc = p.get_config()
+        self.assertEqual(doc.get("last_health_error"), "代理失效（全部节点不可达）")
+
+    # —— 需求1：启用代理保存时探可达性，全挂则拦 ——
+    def test_save_config_blocks_when_enabled_proxy_unreachable(self):
+        set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890,
+                           "active_profile_id": "sub1"}))
+        from sentinel_platform.modules.system import proxy as p
+        with mock.patch.object(p, "_proxy_reachable", return_value=False):
+            r = p.save_config({"global_mode_enabled": True,
+                               "global_source": {"type": "subscription", "ref_id": "sub1"}})
+        self.assertIn("error", r)
+        self.assertIn("代理失效", r["error"])
+        # 不可达被拦→未落库启用（global_mode_enabled 仍为旧值/未写入）
+        self.assertNotEqual(p.get_config().get("global_mode_enabled"), True)
+
+    def test_save_config_passes_when_enabled_proxy_reachable(self):
+        set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890,
+                           "active_profile_id": "sub1"}))
+        from sentinel_platform.modules.system import proxy as p
+        with mock.patch.object(p, "_proxy_reachable", return_value=True):
+            r = p.save_config({"global_mode_enabled": True,
+                               "global_source": {"type": "subscription", "ref_id": "sub1"}})
+        self.assertNotIn("error", r)
+        self.assertTrue(p.get_config().get("global_mode_enabled"))
+
+    def test_save_config_smart_not_blocked_by_reachability(self):
+        """smart 模式设计上不可达自动降级直连，保存不因探测失败被拦。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890,
+                           "active_profile_id": "sub1"}))
+        from sentinel_platform.modules.system import proxy as p
+        with mock.patch.object(p, "_proxy_reachable", return_value=False):
+            r = p.save_config({"smart_source": {"type": "subscription", "ref_id": "sub1"}})
+        self.assertNotIn("error", r)
+
+    # —— 需求3：代理告警推送开关（默认开，可关） ——
+    def test_notify_down_gated_off_when_switch_false(self):
+        set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890}))
+        from sentinel_platform.modules.system import proxy as p
+        calls = []
+        fake_notify = type("N", (), {"notify": lambda self, msg, **kw: calls.append(msg) or {"ok": True}})()
+        fake_keys = type("K", (), {"get_key": lambda self, kid: {"proxy_down_notify": False}})()
+        get_registry().register(ROLE.NOTIFY, fake_notify)
+        get_registry().register("api_keys_service", fake_keys)
+        with mock.patch.object(p, "_fetch_exit_ip", return_value=("", "conn refused")):
+            p.check_health(use_cache=False); p.check_health(use_cache=False)   # 达阈值本应告警
+        self.assertEqual(len(calls), 0, "开关关闭时不推送代理告警")
+
+    def test_notify_down_on_by_default_when_field_absent(self):
+        """存量安装未存 proxy_down_notify（get_key 返 '' 或字段缺失）→ 默认开启，仍推送。"""
+        set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890}))
+        from sentinel_platform.modules.system import proxy as p
+        calls = []
+        fake_notify = type("N", (), {"notify": lambda self, msg, **kw: calls.append(msg) or {"ok": True}})()
+        fake_keys = type("K", (), {"get_key": lambda self, kid: {"proxy_down_notify": ""}})()  # 存量空串
+        get_registry().register(ROLE.NOTIFY, fake_notify)
+        get_registry().register("api_keys_service", fake_keys)
+        with mock.patch.object(p, "_fetch_exit_ip", return_value=("", "conn refused")):
+            p.check_health(use_cache=False); p.check_health(use_cache=False)
+        self.assertEqual(len(calls), 1, "字段缺失/空串按默认开启，正常推送")
 
 
 if __name__ == "__main__":

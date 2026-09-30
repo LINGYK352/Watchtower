@@ -1,174 +1,185 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>瞭望塔 Watchtower</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#0b1111">
+<meta name="description" content="瞭望塔 Watchtower，将资产侦察、AI 渗透验证、方法论与情报沉淀连接起来。私有部署，以真实证据推进安全评估。">
+<title>瞭望塔 Watchtower · 从攻击面，到真实证据</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#0b0f1a;color:#c9d1d9;min-height:100vh;line-height:1.7;-webkit-font-smoothing:antialiased}
-a{color:#58a6ff;text-decoration:none}a:hover{color:#79c0ff}
-.wrap{max-width:860px;margin:0 auto;padding:64px 20px 48px}
+:root{color-scheme:dark;--bg:#0b1111;--line:#29392e;--ink:#eaf1e9;--muted:#98aa9d;--accent:#c0f6aa;--mono:Consolas,"SFMono-Regular",monospace}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:100px}body{margin:0;color:var(--ink);background:var(--bg);font:14px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}h1,h2,h3,p{margin:0}a{color:inherit;text-decoration:none}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:5px}::selection{background:var(--accent);color:#111}svg{display:block}.container{max-width:1200px;padding:0 32px;margin:auto}.eyebrow{display:flex;align-items:center;gap:10px;font:10px var(--mono);letter-spacing:1.8px;color:var(--accent)}.eyebrow:before{content:"";width:6px;height:6px;background:var(--accent)}.arrow{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6}.icon{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.4}.dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}.skip{position:fixed;top:8px;left:16px;transform:translateY(-150%);background:var(--accent);color:#111;z-index:50;padding:8px 16px}.skip:focus{transform:translateY(0)}
+header{position:sticky;top:0;z-index:20;background:#0b1111ed;backdrop-filter:blur(18px);border-bottom:1px solid #ffffff0d}.nav{height:80px;display:flex;align-items:center;gap:30px}.brand{display:flex;align-items:center;gap:11px;white-space:nowrap}.brand svg{width:34px;height:38px;color:var(--accent)}.brand strong{display:block;font-size:19px;line-height:1.2;letter-spacing:1px}.brand small{display:block;margin-top:4px;font:9px var(--mono);letter-spacing:2px;color:#92a396}.nav-links{display:flex;gap:29px;margin-left:auto;font-size:12px;color:#a5b4aa}.nav-links a:hover,footer a:hover{color:var(--accent)}.nav-actions{display:flex;gap:20px;align-items:center;font-size:12px}.nav-login{color:#acbdb0}.nav-cta{padding:9px 15px;display:flex;gap:16px;align-items:center;border:1px solid #42563c;border-radius:5px;background:#c0f6aa08}.nav-cta:hover{border-color:var(--accent)}.mobile-menu{display:none;position:relative}.mobile-menu summary{padding:5px 9px;border:1px solid var(--line);border-radius:4px;cursor:pointer;list-style:none}.mobile-menu summary::-webkit-details-marker{display:none}.mobile-links{position:absolute;right:0;top:43px;background:#162219;padding:12px;border:1px solid var(--line);border-radius:6px;min-width:160px;box-shadow:0 15px 30px #0008}.mobile-links a{display:block;padding:9px}
+main{overflow:hidden}.hero{padding-top:85px;background:radial-gradient(ellipse at 77% 35%,#78b47813,transparent 50%)}.hero-grid{display:grid;grid-template-columns:1.05fr 1fr;gap:52px;align-items:center;padding-bottom:76px}.hero .eyebrow{margin-bottom:27px}.hero-chip{display:inline-flex;gap:10px;align-items:center;border:1px solid #344d38;border-radius:50px;padding:5px 12px;color:#afc8b2;font-size:11px;margin-bottom:24px}.hero-chip i{height:10px;width:1px;background:#425f46}h1{font-size:clamp(38px,4.3vw,59px);letter-spacing:-2.4px;line-height:1.25;font-weight:650;margin-bottom:24px}h1 em{font-style:normal;color:var(--accent)}.hero-description{color:#a0afa4;font-size:15px;line-height:1.95;max-width:460px}.buttons{display:flex;gap:13px;margin:30px 0 20px}.button{display:inline-flex;align-items:center;justify-content:center;gap:17px;padding:12px 20px;border:1px solid #36483b;border-radius:5px;font-size:13px;font-weight:600;transition:transform .18s,background .18s}.button:hover{transform:translateY(-2px);background:#223627}.primary{background:var(--accent);border-color:var(--accent);color:#182818}.primary:hover{background:#d2ffc1}.hero-notes{display:flex;gap:18px;font-size:11px;color:#899f8f}.hero-notes b{color:#8bca99;margin-right:5px;font-weight:400}
+.workspace{position:relative;border:1px solid #3c5040;border-radius:9px;background:#111c16;box-shadow:0 25px 80px #0006;transform:perspective(1600px) rotateY(-4deg);min-width:0}.workspace:before{content:"";position:absolute;inset:-18px;border:1px solid #6f986711;border-radius:22px;z-index:-1}.window-head{height:43px;display:flex;align-items:center;gap:5px;padding:0 14px;border-bottom:1px solid var(--line)}.window-dot{width:6px;height:6px;border-radius:50%;background:#669273}.window-dot:first-child{background:#937766}.window-dot:nth-child(2){background:#979061}.window-title{font:9px var(--mono);letter-spacing:.8px;color:#8fa797;margin-left:10px}.demo-label{margin-left:auto;color:#90a095;font-size:9px}.window-body{display:grid;grid-template-columns:43px 1fr;min-height:345px}.rail{border-right:1px solid var(--line);display:flex;align-items:center;flex-direction:column;gap:20px;padding-top:16px;color:#5a7560}.rail .active{color:var(--accent);background:#c0f6aa11;box-shadow:0 0 0 7px #c0f6aa11}.workspace-main{padding:17px;min-width:0}.workspace-topline{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px}.status-pill{display:flex;align-items:center;gap:6px;font:8px var(--mono);border:1px solid #3a503a;border-radius:50px;padding:5px 8px;color:#b1cdb1}.graph{position:relative;margin:18px 0 15px;height:178px;border:1px solid #2d4432;border-radius:5px;overflow:hidden;background:radial-gradient(ellipse at center,#263e2a99,transparent 68%),radial-gradient(#62825338 .7px,transparent .7px);background-size:auto,14px 14px}.graph svg{position:absolute;width:100%;height:100%;inset:0}.graph path{fill:none;stroke:#4b6b4c;stroke-width:1;stroke-dasharray:3 4}.node{position:absolute;display:flex;gap:6px;align-items:center;border:1px solid #3b563e;border-radius:5px;padding:7px 10px;background:#182a1d;font:9px var(--mono);color:#b0ccb5}.node i{width:5px;height:5px;background:#8bb78a;border-radius:50%}.node.root{left:8%;top:72px;border-color:#8cad70;color:#d0e9c1;background:#293e29}.n1{left:49%;top:21px}.n2{left:53%;top:72px}.n3{left:43%;top:127px}.node-end{position:absolute;right:5%;top:80px;border:1px solid #91b977;border-radius:50%;width:19px;height:19px;text-align:center;color:var(--accent);font-size:10px;line-height:17px;box-shadow:0 0 15px #a2df7629}.evidence{display:flex;align-items:center;gap:9px;border:1px solid #354f36;background:#c0f6aa06;border-radius:5px;padding:10px;font-size:10px}.evidence-check{width:23px;height:23px;display:grid;place-items:center;border:1px solid #5c7a4e;border-radius:50%;color:var(--accent)}.evidence small{display:block;font:8px var(--mono);color:#839c85;margin-top:3px}.evidence>span:last-child{margin-left:auto;color:var(--accent);font-size:9px;white-space:nowrap}.window-footer{display:flex;align-items:center;gap:9px;font:8px var(--mono);color:#809d85;padding-top:12px}.window-footer i{flex:1;height:1px;background:#344d39}.demo-caption{position:absolute;right:0;bottom:-26px;color:#718773;font:9px var(--mono)}.hero-strip{border-block:1px solid var(--line);display:grid;grid-template-columns:1.3fr repeat(4,1fr);gap:20px;align-items:center;padding:25px 0;color:#a9bbad;font-size:13px}.strip-label{color:#6f8476;font:10px var(--mono);letter-spacing:1px}.strip-item{display:flex;align-items:center;gap:10px}.strip-item span{font:11px var(--mono);color:#688368}
+.section{padding-top:89px}.section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:35px;margin:18px 0 32px}.section-head h2{font-size:32px;line-height:1.4;letter-spacing:-1px;font-weight:550}.section-head p{max-width:350px;color:var(--muted);font-size:13px;line-height:1.9}.features{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:15px}.feature{padding:25px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(150deg,#18251c,#101915);min-height:295px;min-width:0}.feature:hover{border-color:#526a46}.feature-label{display:flex;justify-content:space-between;gap:10px;color:#7b957f;font:10px var(--mono);letter-spacing:.6px}.feature h3{font-size:19px;font-weight:550;margin:19px 0 10px}.feature p{font-size:12px;line-height:1.9;color:#9aaca0}.mini-flow{display:flex;align-items:center;gap:6px;margin-top:27px}.mini-flow span{padding:6px 8px;border:1px solid #41593e;border-radius:3px;font-size:10px;color:#c1d9b9;white-space:nowrap}.mini-flow i{height:1px;background:#506e4c;flex:1}.code-preview{margin-top:21px;padding:12px;background:#0b160e;border:1px solid #304732;border-radius:5px;font:10px/2 var(--mono);color:#9db69f}.code-preview span{color:#6e8b71}.code-preview b{color:#c2dcaf;font-weight:400}.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:26px}.tags span{border:1px solid #39513a;border-radius:4px;padding:5px 9px;color:#a3bca5;font-size:10px}.tags span:nth-child(2){border-color:#5c7a45;color:var(--accent)}.capability-footer{border-bottom:1px solid var(--line);padding:22px 0;display:flex;align-items:center;gap:19px;font-size:11px;color:#8ba190}.capability-footer strong{font-size:11px;color:#c6d7c5;font-weight:500}.capability-footer i{width:3px;height:3px;border-radius:50%;background:#5e7b5e}
+.workflow{display:grid;grid-template-columns:270px 1fr;border:1px solid var(--line);border-radius:8px;background:#0f1a13;overflow:hidden}.tabs{padding:12px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:4px}.tab{border:1px solid transparent;background:none;text-align:left;padding:15px;display:flex;align-items:center;gap:15px;border-radius:5px;color:#99ad9d}.tab-no{font:11px var(--mono);color:#799777}.tab strong{font-size:13px;font-weight:500;display:block}.tab small{font-size:10px;color:#7e9583}.tab[aria-selected="true"]{border-color:#475e3f;background:#c0f6aa09;color:var(--accent)}.tab:hover{background:#ffffff05}.flow-panel{padding:34px 38px;min-width:0}.flow-kicker{color:#8eb185;font:10px var(--mono);letter-spacing:1px}.flow-panel h3{font-size:23px;line-height:1.5;font-weight:500;margin:14px 0 12px}.flow-panel>p{font-size:13px;line-height:1.95;color:#9caf9f;max-width:570px}.facts{display:grid;grid-template-columns:1fr 1fr;gap:17px;margin-top:24px}.fact{padding-top:12px;border-top:1px solid var(--line)}.fact span{display:block;margin-bottom:7px;font:9px var(--mono);color:#7c9a80}.fact p{font-size:11px;color:#bed0bc}.flow-progress{display:flex;gap:5px;margin-top:25px}.flow-progress i{width:31px;height:3px;border-radius:3px;background:#334c36}.flow-progress i.on{background:var(--accent)}
+.deploy-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:55px;align-items:start}.deploy-title{font-size:33px;font-weight:550;line-height:1.4;letter-spacing:-1px;margin:18px 0}.deploy-copy{color:var(--muted);font-size:13px;max-width:360px;line-height:1.9}.env-tags{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 25px}.env-tags span{padding:5px 9px;border:1px solid #354b38;border-radius:4px;font:10px var(--mono);color:#a9bfa9}.text-link{display:inline-flex;align-items:center;gap:12px;font-size:12px;color:var(--accent)}.terminal{border:1px solid #3e563c;border-radius:8px;background:#0f1812;overflow:hidden}.terminal-head{padding:13px 18px;background:#1a291e;border-bottom:1px solid #304632;display:flex;gap:10px;align-items:center;color:#b0c5ad;font:10px var(--mono)}.terminal-head small{margin-left:auto;color:#7c987e;font-size:9px}.terminal-body{padding:22px}.code-label{font:10px var(--mono);color:#819b83;margin-bottom:14px}.terminal pre{margin:0;white-space:pre-wrap;word-break:break-all;font:11px/1.95 var(--mono);color:#d5e7ca}.terminal-action{display:flex;align-items:center;justify-content:space-between;gap:15px;border-top:1px solid #2d432f;margin-top:20px;padding-top:15px}.terminal-action small{font-size:10px;color:#8aa08b}.copy{padding:7px 13px;border:1px solid #526c46;border-radius:4px;background:#c0f6aa09;display:flex;gap:8px;align-items:center;font-size:11px;white-space:nowrap;color:#d0e7bb}.copy:hover{background:#c0f6aa19}.bundle{display:flex;justify-content:space-between;align-items:center;gap:15px;border:1px solid var(--line);border-radius:5px;padding:12px 15px;margin-top:13px;font-size:10px;color:#849d89}.bundle strong{display:block;color:#c6d7c3;font-size:11px;font-weight:500;margin-bottom:2px}.bundle a{color:#c0dbb1;white-space:nowrap}.bundle a[aria-disabled="true"]{pointer-events:none;color:#748b75}.deploy-note{font-size:10px;color:#8ba08d;line-height:1.9;margin-top:13px}.guide-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:53px;padding-top:33px;border-top:1px solid var(--line)}.guide-title{font-size:14px;font-weight:500;margin-bottom:18px}.steps{list-style:none;padding:0;margin:0}.steps li{display:flex;gap:13px;align-items:flex-start;margin-bottom:16px}.step-no{width:24px;height:24px;border:1px solid #455d40;border-radius:50%;display:grid;place-items:center;font:10px var(--mono);color:#a2c093;flex-shrink:0}.steps h3{font-size:12px;font-weight:500;margin-bottom:3px}.steps p{font-size:11px;color:#94a897}.faq{border-bottom:1px solid var(--line)}.faq summary{display:flex;justify-content:space-between;gap:15px;padding:14px 0;font-size:12px;cursor:pointer;list-style:none}.faq summary:after{content:"+";font:18px var(--mono);color:#88a87b}.faq summary::-webkit-details-marker{display:none}.faq[open] summary:after{content:"−"}.faq p{padding:0 15px 17px 0;color:#98ad9b;font-size:11px;line-height:1.9}.cta{display:flex;align-items:center;justify-content:space-between;gap:30px;margin:77px 0 53px;padding:35px 37px;border:1px solid #445d39;border-radius:8px;background:radial-gradient(ellipse at 80% 70%,#a4cd6220,transparent 70%),#172519}.cta .eyebrow{font-size:9px;margin-bottom:10px}.cta h2{font-size:25px;font-weight:550;letter-spacing:-.6px}.cta p{font-size:12px;color:#a2b49a;margin-top:7px}.footer{display:flex;align-items:center;justify-content:space-between;gap:20px;border-top:1px solid var(--line);padding:25px 0 30px}.footer-brand{font-size:12px;color:#c1d2bc}.footer-brand span{font:10px var(--mono);color:#8ba088;margin-left:10px}.footer-links{display:flex;gap:20px;font-size:10px;color:#94aa96}.footer-note{font-size:9px;color:#829a84}
+@media(max-width:1050px){.container{padding:0 28px}.hero-grid{gap:28px}h1{font-size:43px}.nav{gap:22px}.nav-links{gap:21px}.feature{padding:20px}.feature-label{font-size:9px}.mini-flow span{padding:5px 6px}.hero-strip{font-size:11px}.deploy-grid{gap:30px}.workflow{grid-template-columns:235px 1fr}}
+@media(max-width:800px){.nav{height:68px}.nav-links{display:none}.nav-actions{margin-left:auto}.nav-login{display:none}.mobile-menu{display:block}.hero{padding-top:53px}.hero-grid{grid-template-columns:1fr;gap:44px;padding-bottom:64px}h1{font-size:49px}.hero-description{max-width:520px}.workspace{width:100%;max-width:565px;justify-self:center;transform:none}.hero-strip{grid-template-columns:repeat(4,1fr);gap:14px}.strip-label{display:none}.section{padding-top:65px}.section-head{align-items:flex-start;flex-direction:column;gap:14px}.section-head h2{font-size:27px}.section-head p{max-width:480px}.features{grid-template-columns:1fr}.feature{min-height:0;padding:25px;display:grid;grid-template-columns:1fr 1fr;column-gap:30px}.feature-label,.feature h3,.feature p{grid-column:1}.mini-flow,.code-preview,.tags{grid-column:2;grid-row:2/4;align-self:center;margin-top:0}.workflow{grid-template-columns:1fr}.tabs{flex-direction:row;border-right:0;border-bottom:1px solid var(--line);padding:8px}.tab{flex:1;justify-content:center;padding:12px 5px;gap:8px}.tab small{display:none}.tab strong{font-size:11px}.flow-panel{padding:27px;min-height:295px}.deploy-grid{grid-template-columns:1fr;gap:27px}.deploy-copy{max-width:600px}.guide-grid{gap:35px}.footer{flex-wrap:wrap}.capability-footer{flex-wrap:wrap;gap:12px}}
+@media(max-width:520px){.container{padding:0 21px}.brand strong{font-size:16px}.brand small{font-size:8px}.brand svg{width:29px}.nav-actions{gap:10px}.nav-cta{padding:7px 10px;font-size:10px;gap:7px}.nav-cta .arrow{width:12px}.mobile-menu summary{font-size:11px}.hero{padding-top:40px}.hero .eyebrow{font-size:9px;letter-spacing:1.3px;margin-bottom:23px}.hero-chip{font-size:10px;margin-bottom:20px}h1{font-size:39px;letter-spacing:-1.6px;line-height:1.3}.hero-description{font-size:13px}.buttons{margin-top:25px}.button{padding:11px 16px;font-size:12px;gap:12px}.hero-notes{font-size:10px;gap:13px}.workspace-main{padding:13px}.window-body{grid-template-columns:34px 1fr;min-height:325px}.window-head{padding:0 11px}.window-title{font-size:7px;letter-spacing:.3px}.demo-label{font-size:8px}.workspace-topline{font-size:10px}.status-pill{font-size:7px;padding:4px 6px}.graph{height:165px}.node{font-size:7px;padding:6px 7px;gap:4px}.node.root{left:5%;top:70px}.n1{left:43%;top:20px}.n2{left:48%;top:70px}.n3{left:41%;top:122px}.node-end{right:3%;top:76px;width:15px;height:15px;line-height:13px;font-size:8px}.evidence{padding:8px;gap:6px;font-size:9px}.evidence small{font-size:7px}.evidence>span:last-child{font-size:8px}.hero-strip{grid-template-columns:1fr 1fr;gap:15px;padding:22px 0}.section{padding-top:55px}.section-head h2{font-size:26px}.section-head p{font-size:12px}.feature{display:block;padding:23px}.mini-flow,.code-preview,.tags{margin-top:21px}.mini-flow span{padding:6px 10px}.tab{flex-direction:column;gap:4px}.tab-no{font-size:9px}.tab strong{font-size:10px}.flow-panel{padding:23px;min-height:320px}.flow-panel h3{font-size:21px}.flow-panel>p{font-size:12px}.facts{gap:12px}.fact p{font-size:10px}.deploy-title{font-size:29px}.terminal-body{padding:18px}.terminal pre{font-size:10px}.terminal-action{gap:8px}.terminal-action small{font-size:9px}.bundle{padding:12px;gap:8px;font-size:9px}.guide-grid{grid-template-columns:1fr;gap:24px;margin-top:35px}.cta{margin:55px 0 35px;flex-direction:column;align-items:flex-start;padding:27px 25px;gap:22px}.cta h2{font-size:24px}.cta p{font-size:11px}.footer{gap:17px;padding-bottom:25px}.footer-note{width:100%}.footer-brand span{margin-left:6px;font-size:9px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
 
-/* nav */
-.nav{position:fixed;top:0;left:0;right:0;background:rgba(11,15,26,.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.06);z-index:99;padding:0 24px;display:flex;align-items:center;height:52px}
-.nav-brand{font-size:15px;font-weight:700;color:#e6edf3;display:flex;align-items:center;gap:8px}
-.nav-brand svg{width:22px;height:22px}
-.nav-links{margin-left:auto;display:flex;gap:24px;font-size:13px;font-weight:500}
-.nav-links a{color:#8b949e;transition:color .15s}
-.nav-links a:hover{color:#e6edf3}
+/* ===== 动态增强层（动画）· 尊重 prefers-reduced-motion ===== */
+.hero{position:relative}
+.hero::before{content:"";position:absolute;inset:-10% -10% 0 -10%;z-index:0;pointer-events:none;background:conic-gradient(from 0deg at 78% 34%,#c0f6aa00 0deg,#c0f6aa16 22deg,#c0f6aa00 55deg);animation:wt-radar 8s linear infinite;opacity:.55}
+.hero::after{content:"";position:absolute;left:0;right:0;top:0;height:60%;z-index:0;pointer-events:none;background:linear-gradient(#c0f6aa00,#c0f6aa0a,#c0f6aa00);animation:wt-scan 6.5s ease-in-out infinite;opacity:.4}
+.hero>.container{position:relative;z-index:1}
+@keyframes wt-radar{to{transform:rotate(1turn)}}
+@keyframes wt-scan{0%,100%{transform:translateY(-40%)}50%{transform:translateY(120%)}}
+.graph path{animation:wt-flow 2.6s linear infinite}
+@keyframes wt-flow{to{stroke-dashoffset:-70}}
+.graph::after{content:"";position:absolute;top:0;bottom:0;left:-80px;width:80px;background:linear-gradient(90deg,#c0f6aa00,#c0f6aa26,#c0f6aa00);animation:wt-sweep 3.8s ease-in-out infinite;pointer-events:none;z-index:1}
+@keyframes wt-sweep{0%{left:-80px}100%{left:100%}}
+.node{animation:wt-nodein .7s both}
+.node.root{animation-delay:.15s}.n1{animation-delay:.55s}.n2{animation-delay:.9s}.n3{animation-delay:1.25s}
+@keyframes wt-nodein{from{opacity:0;transform:translateY(7px) scale(.96)}}
+.node i,.status-pill .dot,.hero-chip .dot{animation:wt-blink 2s ease-in-out infinite}
+@keyframes wt-blink{50%{opacity:.35}}
+.node-end{animation:wt-pulse 2.2s ease-in-out infinite}
+@keyframes wt-pulse{0%,100%{box-shadow:0 0 15px #a2df7629}50%{box-shadow:0 0 24px #a2df76bb}}
+.evidence-check{animation:wt-ring 2.4s ease-in-out infinite}
+@keyframes wt-ring{0%,100%{box-shadow:0 0 0 0 #c0f6aa22}60%{box-shadow:0 0 0 5px #c0f6aa00}}
+.button.primary:hover{box-shadow:0 10px 34px #c0f6aa3d}
+.nav-cta{transition:border-color .2s,box-shadow .3s}.nav-cta:hover{box-shadow:0 0 22px #c0f6aa26}
+.rail .active{animation:wt-ring 2.6s ease-in-out infinite}
+.js-reveal{opacity:0;transform:translateY(22px);transition:opacity .75s cubic-bezier(.2,.7,.2,1),transform .75s cubic-bezier(.2,.7,.2,1)}
+.js-reveal.in{opacity:1;transform:none}
+.flow-panel.swap #flow-title,.flow-panel.swap #flow-description,.flow-panel.swap .facts{animation:wt-fadein .55s both}
+@keyframes wt-fadein{from{opacity:0;transform:translateY(9px)}}
+.hero-chip .lv{color:var(--accent)}
+.hero-chip .lv b{font-weight:600}
 
-/* hero */
-.hero{text-align:center;padding:48px 0 72px}
-.hero h1{font-size:2.8rem;font-weight:800;color:#e6edf3;letter-spacing:-.5px;margin-bottom:12px}
-.hero h1 span{background:linear-gradient(135deg,#58a6ff,#a371f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.hero p{font-size:1.05rem;color:#8b949e;max-width:520px;margin:0 auto 32px}
-.btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-.btn{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;transition:all .15s;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-.btn-fill{background:#238636;color:#fff}.btn-fill:hover{background:#2ea043}
-.btn-ghost{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#c9d1d9}.btn-ghost:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2)}
 
-/* features */
-.section-label{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#8b949e;text-align:center;margin-bottom:8px}
-.section-title{font-size:1.4rem;font-weight:700;text-align:center;color:#e6edf3;margin-bottom:32px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:72px}
-.feat{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:24px 20px;transition:border-color .2s}
-.feat:hover{border-color:rgba(88,166,255,.25)}
-.feat-icon{font-size:1.5rem;margin-bottom:10px}
-.feat h3{font-size:.95rem;color:#e6edf3;margin-bottom:6px;font-weight:600}
-.feat p{font-size:.82rem;color:#8b949e;line-height:1.6}
+/* ===== 交互增强层2 · 悬停/指针动效 · 尊重 reduced-motion ===== */
+.feature{position:relative;overflow:hidden;--mx:50%;--my:50%;transition:transform .22s cubic-bezier(.2,.7,.2,1),border-color .25s,box-shadow .3s}
+.feature::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(circle at var(--mx) var(--my),#c0f6aa1c,transparent 46%);opacity:0;transition:opacity .3s}
+.feature>*{position:relative;z-index:1}
+.feature:hover{transform:translateY(-6px);border-color:#6f9857;box-shadow:0 18px 50px #0007,0 0 0 1px #c0f6aa26}
+.feature:hover::after{opacity:1}
+.feature .icon{transition:transform .3s,color .3s}
+.feature:hover .icon{transform:scale(1.18) rotate(-8deg);color:var(--accent)}
+.feature:hover h3{color:#eaffdf}
+.tab{transition:transform .2s,background .2s,color .2s}
+.tab:hover{transform:translateX(4px)}.tab:hover .tab-no{color:var(--accent)}
+.terminal{transition:border-color .3s,box-shadow .3s}
+.terminal:hover{border-color:#5c7a4e;box-shadow:0 0 34px #c0f6aa14}
+.bundle{transition:border-color .25s,background .25s,transform .25s}
+.bundle:hover{border-color:#4d6944;background:#c0f6aa07;transform:translateY(-2px)}
+.env-tags span,.tags span,.mini-flow span{transition:border-color .22s,color .22s,transform .22s}
+.env-tags span:hover,.tags span:hover,.mini-flow span:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-2px)}
+.strip-item{transition:color .25s}.strip-item:hover,.strip-item:hover span{color:var(--accent)}
+.nav-links a,.footer-links a{position:relative}
+.nav-links a::after,.footer-links a::after{content:"";position:absolute;left:0;right:100%;bottom:-5px;height:1px;background:var(--accent);transition:right .28s cubic-bezier(.2,.7,.2,1)}
+.nav-links a:hover::after,.footer-links a:hover::after{right:0}
+.button .arrow,.text-link .arrow{transition:transform .25s}
+.button:hover .arrow,.text-link:hover .arrow{transform:translateX(5px)}
+.faq summary{transition:color .2s}.faq summary:hover{color:var(--accent)}
+.steps li .step-no{transition:border-color .25s,color .25s,box-shadow .25s}
+.steps li:hover .step-no{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 4px #c0f6aa14}
+.cta{transition:border-color .4s,box-shadow .4s}
+.cta:hover{border-color:#6f9857;box-shadow:0 0 55px #a4cd621f}
+.brand svg{transition:transform .3s}.brand:hover svg{transform:rotate(8deg) scale(1.06)}
+.copy{transition:background .2s,box-shadow .25s,transform .2s}.copy:hover{transform:translateY(-1px);box-shadow:0 0 18px #c0f6aa1a}
+.node{transition:transform .25s,border-color .25s,box-shadow .25s}.node:hover{transform:scale(1.08);border-color:var(--accent);box-shadow:0 0 16px #c0f6aa22;z-index:2}
+@media(min-width:801px){
+.workspace{--wx:0deg;--wy:-4deg;transform:perspective(1600px) rotateY(var(--wy)) rotateX(var(--wx));transition:transform .25s ease-out,box-shadow .5s}
+.workspace:hover{box-shadow:0 38px 95px #0009,0 0 46px #c0f6aa14}
+}
 
-/* code */
-.code-wrap{background:#161b22;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:20px 24px;margin:16px 0 0;overflow-x:auto;font-family:"JetBrains Mono","Fira Code",Consolas,monospace;font-size:.82rem;line-height:1.9;color:#c9d1d9;white-space:pre;user-select:all}
-.code-wrap .cm{color:#484f58}
-
-/* sections */
-.sec{margin-bottom:64px}
-.sec h2{font-size:1.3rem;font-weight:700;color:#e6edf3;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.06)}
-.sec h3{font-size:.95rem;color:#58a6ff;margin:20px 0 10px;font-weight:600}
-.items{list-style:none;padding:0}.items li{padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.88rem;color:#c9d1d9}
-.items li:last-child{border-bottom:none}
-.items code{background:rgba(88,166,255,.1);padding:2px 7px;border-radius:4px;font-size:.8rem;color:#79c0ff;font-family:"JetBrains Mono",monospace}
-.tag{display:inline-block;font-size:.68rem;padding:2px 7px;border-radius:4px;margin-right:6px;font-weight:700;vertical-align:middle}
-.tag-r{background:rgba(248,81,73,.15);color:#f85149}
-.tag-g{background:rgba(63,185,80,.12);color:#3fb950}
-
-/* cta */
-.cta{text-align:center;background:linear-gradient(135deg,rgba(88,166,255,.06),rgba(163,113,247,.06));border:1px solid rgba(88,166,255,.12);border-radius:14px;padding:48px 28px;margin-bottom:56px}
-.cta h2{font-size:1.5rem;color:#e6edf3;margin-bottom:6px}
-.cta .label{color:#58a6ff;font-weight:700;font-size:1.1rem;margin-bottom:8px}
-.cta p{color:#8b949e;font-size:.9rem;margin-bottom:20px}
-.cta .note{font-size:.78rem;color:#484f58;margin-top:14px}
-
-footer{text-align:center;padding:24px 0;border-top:1px solid rgba(255,255,255,.04);color:#484f58;font-size:.8rem}
-footer span{margin:0 10px}
-@media(max-width:600px){.hero h1{font-size:1.9rem}.wrap{padding:52px 14px 32px}.grid{grid-template-columns:1fr}.code-wrap{font-size:.75rem;padding:14px}}
 </style>
 </head>
 <body>
+<a class="skip" href="#main">跳转到正文</a>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><defs>
+<symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="tower" viewBox="0 0 36 40"><path d="M18 2 33 10v20l-15 8L3 30V10Z" stroke="currentColor" fill="none" stroke-width="1.3"/><path d="m10 15 8-5 8 5-8 5Z" fill="currentColor"/><path d="M13 21v8l5 3 5-3v-8l-5 3Z" fill="currentColor" opacity=".6"/><path d="M18 4v3M5 11l4 2M31 11l-4 2" stroke="currentColor"/></symbol>
+<symbol id="grid" viewBox="0 0 20 20"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="12" y="3" width="5" height="5" rx="1"/><rect x="3" y="12" width="5" height="5" rx="1"/><rect x="12" y="12" width="5" height="5" rx="1"/></symbol>
+<symbol id="target" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6"/><circle cx="10" cy="10" r="2"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></symbol>
+<symbol id="layers" viewBox="0 0 20 20"><path d="m2 7 8-4 8 4-8 4Z M2 11l8 4 8-4M2 15l8 4 8-4"/></symbol>
+<symbol id="doc" viewBox="0 0 20 20"><path d="M5 2h7l4 4v12H5ZM12 2v5h4M8 11h5M8 14h5"/></symbol>
+<symbol id="copy" viewBox="0 0 20 20"><rect x="7" y="7" width="9" height="10" rx="1"/><path d="M12 5V3H3v10h2"/></symbol>
+</defs></svg>
+<header><nav class="container nav" aria-label="主导航"><a class="brand" href="#" aria-label="瞭望塔首页"><svg aria-hidden="true"><use href="#tower"/></svg><span><strong>瞭望塔</strong><small>WATCHTOWER</small></span></a><div class="nav-links"><a href="#capabilities">产品能力</a><a href="#workflow">工作流程</a><a href="#deploy">部署指南</a></div><div class="nav-actions"><a class="nav-login" href="/mykeys">我的授权</a><a class="nav-cta" href="/register">获取授权 <svg class="arrow" aria-hidden="true"><use href="#arrow"/></svg></a><details class="mobile-menu"><summary aria-label="展开导航菜单">菜单</summary><div class="mobile-links"><a href="#capabilities">产品能力</a><a href="#workflow">工作流程</a><a href="#deploy">部署指南</a><a href="/mykeys">我的授权</a></div></details></div></nav></header>
+<main id="main">
+<section class="hero"><div class="container"><div class="hero-grid"><div><div class="eyebrow">AI-POWERED SECURITY WORKSPACE</div><div class="hero-chip"><span class="dot"></span>自主分析 · 真实验证<i></i>私有部署</div><h1>看见攻击面，<br>更看见<em>真实风险。</em></h1><p class="hero-description">从资产侦察到 AI 渗透，从验证证据到情报沉淀。<br>让分散的线索，成为可追溯、可复现的安全结论。</p><div class="buttons"><a class="button primary" href="#deploy">开始部署 <svg class="arrow" aria-hidden="true"><use href="#arrow"/></svg></a><a class="button" href="#workflow">了解工作流程 <span aria-hidden="true">↗</span></a></div><div class="hero-notes"><span><b>✓</b>数据自主掌控</span><span><b>✓</b>持续增量更新</span><span><b>✓</b>面向授权评估</span></div></div>
+<div class="workspace" role="img" aria-label="产品能力示意：资产入口关联接口与服务，经证据验证形成可复现结论。非实时监控数据。"><div class="window-head"><i class="window-dot"></i><i class="window-dot"></i><i class="window-dot"></i><span class="window-title">WATCHTOWER / ASSESSMENT</span><span class="demo-label">能力示意</span></div><div class="window-body"><div class="rail" aria-hidden="true"><svg class="icon"><use href="#grid"/></svg><svg class="icon active"><use href="#target"/></svg><svg class="icon"><use href="#layers"/></svg><svg class="icon"><use href="#doc"/></svg></div><div class="workspace-main"><div class="workspace-topline"><span>从入口，连接到证据</span><span class="status-pill"><span class="dot"></span>ASSESSMENT</span></div><div class="graph" aria-hidden="true"><svg viewBox="0 0 380 178" preserveAspectRatio="none"><path d="M85 89H133V38H218M85 89H280M85 89H130V142H217M255 38H316V89H350M291 89H350M250 142H316V89"/></svg><span class="node root"><i></i>目标资产</span><span class="node n1"><i></i>WEB / API</span><span class="node n2"><i></i>身份与权限</span><span class="node n3"><i></i>组件与服务</span><span class="node-end">✓</span></div><div class="evidence"><span class="evidence-check">✓</span><div>每个结论，都有证据路径<small>REQUEST → OBSERVATION → FINDING</small></div><span>可追溯</span></div><div class="window-footer"><span class="dot"></span>资产上下文<i></i>方法论<i></i>验证报告</div></div></div><span class="demo-caption">PRODUCT CAPABILITY VIEW · 非实时数据</span></div></div>
+<div class="hero-strip"><span class="strip-label">ONE CONNECTED WORKSPACE</span><div class="strip-item"><span>01 /</span>资产侦察</div><div class="strip-item"><span>02 /</span>AI 自主验证</div><div class="strip-item"><span>03 /</span>情报关联</div><div class="strip-item"><span>04 /</span>报告与复测</div></div></div></section>
+<section class="section container" id="capabilities"><div class="eyebrow">BUILT FOR REAL ASSESSMENTS</div><div class="section-head"><h2>不止发现更多，<br>更让每条线索有下一步。</h2><p>侦察、验证与知识复用，在同一条工作链路中衔接。减少重复分析，把精力放在真正值得验证的风险上。</p></div><div class="features">
+<article class="feature"><div class="feature-label"><span>01 / ATTACK SURFACE</span><svg class="icon" aria-hidden="true"><use href="#target"/></svg></div><h3>把资产，变成上下文</h3><p>关联域名、端口、指纹与站点信息。复用已有侦察结果，为后续验证提供清晰的目标与入口。</p><div class="mini-flow" aria-hidden="true"><span>域名 / IP</span><i></i><span>服务 / 接口</span><i></i><span>风险线索</span></div></article>
+<article class="feature"><div class="feature-label"><span>02 / AI VALIDATION</span><svg class="icon" aria-hidden="true"><use href="#grid"/></svg></div><h3>让 AI 带着证据推进</h3><p>结合目标上下文选择工具，观察真实响应、调整验证方向。将推测与已经确认的事实分开。</p><div class="code-preview" aria-hidden="true"><span>INPUT</span> 真实入口与待验证假设<br><span>CHECK</span> <b>工具回执 · 请求与响应</b><br><span>OUTPUT</span> 可复现的验证结果</div></article>
+<article class="feature"><div class="feature-label"><span>03 / CONNECTED INTELLIGENCE</span><svg class="icon" aria-hidden="true"><use href="#layers"/></svg></div><h3>让经验，进入下一次评估</h3><p>方法论按需查询，历史经验提供方向。关联资产、验证步骤与报告，沉淀可以再次使用的安全知识。</p><div class="tags" aria-hidden="true"><span>方法论</span><span>资产情报</span><span>验证记录</span><span>攻击链</span></div></article>
+</div><div class="capability-footer"><strong>适配不同评估场景</strong><span>Web 与 API</span><i></i><span>小程序与 App</span><i></i><span>云与内网评估</span><i></i><span>能力随授权范围与工具就绪状态而定</span></div></section>
+<section class="section container" id="workflow"><div class="eyebrow">FROM SIGNAL TO EVIDENCE</div><div class="section-head"><h2>让安全评估形成完整闭环。</h2><p>从第一条资产线索，到最后一份验证报告。<br>每一步有输入、有观察，也有下一步。</p></div><div class="workflow"><div class="tabs" role="tablist" aria-label="评估流程" aria-orientation="vertical">
+<button class="tab" id="tab-discover" role="tab" aria-selected="true" aria-controls="flow-panel"><span class="tab-no">01</span><span><strong>发现与梳理</strong><small>Discover the surface</small></span></button><button class="tab" id="tab-validate" role="tab" aria-selected="false" aria-controls="flow-panel" tabindex="-1"><span class="tab-no">02</span><span><strong>分析与验证</strong><small>Verify the hypothesis</small></span></button><button class="tab" id="tab-connect" role="tab" aria-selected="false" aria-controls="flow-panel" tabindex="-1"><span class="tab-no">03</span><span><strong>关联与沉淀</strong><small>Connect the evidence</small></span></button><button class="tab" id="tab-report" role="tab" aria-selected="false" aria-controls="flow-panel" tabindex="-1"><span class="tab-no">04</span><span><strong>报告与复测</strong><small>Close the loop</small></span></button></div>
+<div class="flow-panel" id="flow-panel" role="tabpanel" aria-labelledby="tab-discover" tabindex="0"><div class="flow-kicker" id="flow-kicker">01 / DISCOVER</div><h3 id="flow-title">先看清目标，再选择方向。</h3><p id="flow-description">从授权目标出发，梳理域名、服务、组件与应用入口。已有侦察结果成为会话上下文，避免重复收集，让每次验证都有明确的起点。</p><div class="facts"><div class="fact"><span>INPUT / 输入</span><p id="flow-input">授权目标 · 任务策略 · 已有资产</p></div><div class="fact"><span>OUTPUT / 产出</span><p id="flow-output">资产档案 · 真实入口 · 待验证线索</p></div></div><div class="flow-progress" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i></div></div></div></section>
+<section class="section container" id="deploy"><div class="deploy-grid"><div><div class="eyebrow">YOUR INFRASTRUCTURE. YOUR CONTROL.</div><h2 class="deploy-title">你的环境，<br>你的安全工作台。</h2><p class="deploy-copy">部署到自己的 Linux 主机，让资产、任务和报告留在自己的环境中。通过统一分发入口获取安装程序与后续更新。</p><div class="env-tags"><span>Linux x86_64</span><span>Docker Compose</span><span>私有部署</span></div><a class="text-link" href="/register">先获取授权凭证 <svg class="arrow" aria-hidden="true"><use href="#arrow"/></svg></a></div><div><div class="terminal"><div class="terminal-head"><span aria-hidden="true">&gt;_</span> QUICK START<small>BASH / LINUX</small></div><div class="terminal-body"><div class="code-label"># 下载安装脚本，然后执行</div><pre><code id="install-command">curl -fL 'https://watchtowers.info/dist/install.sh' -o install.sh
+sudo bash install.sh</code></pre><div class="terminal-action"><small>环境检测 → 获取镜像 → 启动服务</small><button class="copy" id="copy-command" type="button"><svg class="icon" aria-hidden="true"><use href="#copy"/></svg><span>复制命令</span></button></div></div></div><div class="bundle"><div><strong id="bundle-version">安装包信息加载中</strong><span id="bundle-detail">从当前分发源获取最新基板信息</span></div><a id="bundle-download" aria-disabled="true">下载部署包 ↗</a></div><p class="deploy-note">安装脚本自动获取可用镜像。安装完成后，按终端输出访问平台并完成激活。后续更新可在平台「检查更新」中管理。</p><span id="copy-status" class="sr-only" role="status" aria-live="polite"></span></div></div>
+<div class="guide-grid" id="guide"><div><h3 class="guide-title">从部署，到第一次评估</h3><ol class="steps"><li><span class="step-no">1</span><div><h3>获取凭证，完成激活</h3><p>注册或登录授权中心，在平台中填写授权凭证。</p></div></li><li><span class="step-no">2</span><div><h3>连接模型与数据源</h3><p>配置 AI 服务；按需接入资产测绘数据源与代理出口。</p></div></li><li><span class="step-no">3</span><div><h3>录入目标，启动评估</h3><p>选择授权范围与任务策略，查看侦察结果和验证会话。</p></div></li></ol></div><div><h3 class="guide-title">部署前，你可能想知道</h3><details class="faq"><summary>平台适合哪些环境？</summary><p>当前安装程序支持 Linux x86_64，通过 Docker Compose 运行。资源与网络条件由安装程序检测；实际需求取决于任务并发、浏览器使用和 AI 配置。</p></details><details class="faq"><summary>授权凭证在哪里管理？</summary><p>通过「获取授权」注册，在<a class="text-link" href="/mykeys">我的授权</a>中查看凭证及有效状态。激活时效和续期规则以授权中心的实际记录为准。</p></details><details class="faq"><summary>后续如何获取更新？</summary><p>在平台「检查更新」中查看可用版本并执行增量更新。代码与前端产物按分发清单更新，配置与业务数据独立保存；依赖或部署变更请按版本说明处理。</p></details><details class="faq"><summary>如何开始使用 AI 渗透能力？</summary><p>完成模型服务配置后，新建授权目标的评估任务或手动会话。AI 根据当前模式和工具状态进行分析与验证，发现结果仍以实际证据为准。</p></details></div></div></section>
+<div class="container"><section class="cta"><div><div class="eyebrow">READY WHEN YOU ARE</div><h2>把下一次评估，交给更完整的工作流。</h2><p>从第一条资产线索开始，逐步建立你自己的安全知识与验证体系。</p></div><a class="button primary" href="/register">获取授权，开始使用 <svg class="arrow" aria-hidden="true"><use href="#arrow"/></svg></a></section></div>
+</main><footer class="container"><div class="footer"><div class="footer-brand">瞭望塔 <span>WATCHTOWER © 2026</span></div><div class="footer-links"><a href="#deploy">部署指南</a><a href="/register">获取授权</a><a href="/mykeys">我的授权</a></div><span class="footer-note">面向授权安全评估 · 让每个结论有据可循</span></div></footer>
+<noscript><p class="container">安装命令可直接选中复制。最新安装包信息请查看 <a href="/dist/latest">分发信息</a>。</p></noscript>
+<script>
+(function(){
+'use strict';
+const steps=[
+{kicker:'01 / DISCOVER',title:'先看清目标，再选择方向。',description:'从授权目标出发，梳理域名、服务、组件与应用入口。已有侦察结果成为会话上下文，避免重复收集，让每次验证都有明确的起点。',input:'授权目标 · 任务策略 · 已有资产',output:'资产档案 · 真实入口 · 待验证线索'},
+{kicker:'02 / VALIDATE',title:'把一个假设，推进成可验证的事实。',description:'结合方法论与真实入口选择验证路径，调用当前可用工具，核对请求、响应与业务状态。根据观察调整方向，明确区分已确认问题、待验证线索和未覆盖项。',input:'资产上下文 · 方法论 · 待验证假设',output:'工具回执 · 对照证据 · 验证结论'},
+{kicker:'03 / CONNECT',title:'让独立发现，拥有共同的上下文。',description:'将验证步骤与资产、身份和已有情报关联起来。历史经验提供下一步思路，当前目标的证据决定结论，逐步沉淀可复用的方法与可追溯的路径。',input:'验证事实 · 关联资产 · 历史情报',output:'关联路径 · 情报记录 · 可复用经验'},
+{kicker:'04 / REPORT',title:'交付结论，也交付复现它的依据。',description:'把实际影响、关键证据和修复方向整理为报告。保留未覆盖范围，核对测试残留，并围绕原有触发路径与正常业务开展复测，让评估形成闭环。',input:'确认问题 · 证据记录 · 影响范围',output:'评估报告 · 修复建议 · 复测依据'}];
+const tabs=Array.from(document.querySelectorAll('.tab'));
+function selectStep(index,focus){const step=steps[index];tabs.forEach((tab,i)=>{tab.setAttribute('aria-selected',String(i===index));tab.tabIndex=i===index?0:-1;});document.getElementById('flow-panel').setAttribute('aria-labelledby',tabs[index].id);['kicker','title','description','input','output'].forEach(key=>{document.getElementById('flow-'+key).textContent=step[key];});document.querySelectorAll('.flow-progress i').forEach((item,i)=>item.classList.toggle('on',i===index));if(focus)tabs[index].focus();}
+tabs.forEach((tab,index)=>{tab.addEventListener('click',()=>selectStep(index,false));tab.addEventListener('keydown',event=>{let next=index;if(['ArrowDown','ArrowRight'].includes(event.key))next=(index+1)%tabs.length;else if(['ArrowUp','ArrowLeft'].includes(event.key))next=(index+tabs.length-1)%tabs.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=tabs.length-1;else return;event.preventDefault();selectStep(next,true);});});
+const orientation=matchMedia('(max-width:800px)');function setOrientation(){document.querySelector('.tabs').setAttribute('aria-orientation',orientation.matches?'horizontal':'vertical');}setOrientation();orientation.addEventListener('change',setOrientation);
+document.querySelectorAll('.mobile-links a').forEach(link=>link.addEventListener('click',()=>{document.querySelector('.mobile-menu').open=false;}));
+const command=document.getElementById('install-command');if(/^https?:$/.test(location.protocol)){command.textContent="curl -fL '"+location.origin+"/dist/install.sh' -o install.sh\nsudo bash install.sh";}
+const copy=document.getElementById('copy-command');let resetTimer;
+copy.addEventListener('click',async()=>{let success=false;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(command.textContent);success=true;}}catch(error){}if(!success){const field=document.createElement('textarea');field.value=command.textContent;field.style.cssText='position:fixed;left:-10000px;top:0';field.setAttribute('aria-hidden','true');document.body.appendChild(field);field.select();try{success=document.execCommand('copy');}catch(error){}field.remove();copy.focus();}clearTimeout(resetTimer);copy.querySelector('span').textContent=success?'已复制':'请选中命令复制';document.getElementById('copy-status').textContent=success?'安装命令已复制。':'自动复制不可用，请选中上方命令复制。';resetTimer=setTimeout(()=>{copy.querySelector('span').textContent='复制命令';},2500);});
+async function loadBundle(){const version=document.getElementById('bundle-version'),detail=document.getElementById('bundle-detail'),download=document.getElementById('bundle-download');const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),7000);try{const response=await fetch('/dist/latest',{signal:controller.signal,headers:{Accept:'application/json'}});if(!response.ok)throw new Error('unavailable');const data=await response.json();if(typeof data.version!=='string'||typeof data.url!=='string')throw new Error('invalid');const target=new URL(data.url,location.origin);if(target.origin!==location.origin||!/^\/dist\/sentinel-(?:image|full)-v?\d[\d.]*\.tar\.gz$/.test(target.pathname)||target.search||target.hash)throw new Error('invalid download');version.textContent=(data.kind==='image'?'镜像基板 ':'部署基板 ')+data.version;const size=Number(data.size);detail.textContent=(Number.isFinite(size)&&size>0?(size/1073741824>=1?(size/1073741824).toFixed(2)+' GB':(size/1048576).toFixed(1)+' MB')+' · ':'')+'来自当前分发源';download.href=target.pathname;download.removeAttribute('aria-disabled');download.textContent=data.kind==='image'?'下载镜像 ↗':'下载部署包 ↗';}catch(error){version.textContent='暂未获取到安装包信息';detail.textContent='可使用上方安装脚本，或稍后刷新重试';download.removeAttribute('href');download.setAttribute('aria-disabled','true');download.textContent='等待分发源';}finally{clearTimeout(timeout);}}
+loadBundle();
+})();
+</script>
 
-<nav class="nav">
-  <div class="nav-brand">
-    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z" fill="#238636"/><path d="M9 12l2 2 4-4" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    瞭望塔 Watchtower
-  </div>
-  <div class="nav-links">
-    <a href="#deploy">部署</a>
-    <a href="#guide">手册</a>
-    <a href="/register">获取 Key</a>
-    <a href="/mykeys">登录</a>
-  </div>
-</nav>
+<script>
+(function(){
+'use strict';
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+/* 1. 滚动揭示（reduce 时不隐藏，直接可见） */
+if(!reduce&&'IntersectionObserver'in window){
+  var sel='.hero-chip,.hero h1,.hero-description,.hero .buttons,.hero-notes,.hero-strip .strip-item,.section .eyebrow,.section-head,.feature,.capability-footer,.workflow,.deploy-grid>div,.guide-grid>div,.cta';
+  var els=[].slice.call(document.querySelectorAll(sel));
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:.12,rootMargin:'0px 0px -6% 0px'});
+  els.forEach(function(el,i){el.classList.add('js-reveal');el.style.transitionDelay=((i%5)*70)+'ms';io.observe(el);});
+}
+/* 2. workflow 自动轮播（用户交互后停止；programmatic 点击不触发暂停） */
+var wf=document.querySelector('.workflow'),tabs=[].slice.call(document.querySelectorAll('.tab'));
+if(wf&&tabs.length&&!reduce){
+  var idx=0,auto=false,timer=setInterval(tick,4600);
+  function tick(){var p=document.getElementById('flow-panel');idx=(idx+1)%tabs.length;if(p){p.classList.remove('swap');void p.offsetWidth;p.classList.add('swap');}auto=true;tabs[idx].click();auto=false;}
+  function stop(){clearInterval(timer);}
+  wf.addEventListener('mouseenter',stop);
+  wf.addEventListener('click',function(){if(!auto)stop();});
+  wf.addEventListener('keydown',stop);
+  tabs.forEach(function(t,i){t.addEventListener('click',function(){idx=i;});});
+}
+/* 3. hero-chip 注入实时分发版本（来自 /dist/latest） */
+(function(){var chip=document.querySelector('.hero-chip');if(!chip)return;var c=new AbortController();var to=setTimeout(function(){c.abort();},7000);
+fetch('/dist/latest',{signal:c.signal,headers:{Accept:'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d&&typeof d.version==='string'&&/^v?\d[\d.]*$/.test(d.version)){var i=document.createElement('i');var s=document.createElement('span');s.className='lv';s.innerHTML='最新 <b></b>';s.querySelector('b').textContent=d.version;chip.appendChild(i);chip.appendChild(s);}}).catch(function(){}).then(function(){clearTimeout(to);});})();
+})();
+</script>
 
-<div class="wrap">
 
-<section class="hero">
-  <h1>瞭望塔 <span>Watchtower</span></h1>
-  <p>自动化资产侦察与智能渗透测试平台，从发现到验证的完整攻击面管理。</p>
-  <div class="btn-row">
-    <a href="#deploy" class="btn btn-fill">快速部署</a>
-    <a href="#guide" class="btn btn-ghost">使用手册</a>
-    <a href="/register" class="btn btn-ghost">获取授权</a>
-  </div>
-</section>
+<script>
+(function(){'use strict';
+if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+[].forEach.call(document.querySelectorAll('.feature'),function(card){
+ card.addEventListener('mousemove',function(e){var r=card.getBoundingClientRect();card.style.setProperty('--mx',((e.clientX-r.left)/r.width*100).toFixed(1)+'%');card.style.setProperty('--my',((e.clientY-r.top)/r.height*100).toFixed(1)+'%');});
+});
+var ws=document.querySelector('.workspace');
+if(ws&&!matchMedia('(max-width:800px)').matches){var raf=0;
+ ws.addEventListener('mousemove',function(e){if(raf)return;raf=requestAnimationFrame(function(){raf=0;var r=ws.getBoundingClientRect();var px=(e.clientX-r.left)/r.width-.5,py=(e.clientY-r.top)/r.height-.5;ws.style.setProperty('--wy',(px*11).toFixed(2)+'deg');ws.style.setProperty('--wx',(-py*8).toFixed(2)+'deg');});});
+ ws.addEventListener('mouseleave',function(){ws.style.setProperty('--wy','-4deg');ws.style.setProperty('--wx','0deg');});
+}
+})();
+</script>
 
-<div class="section-label">capabilities</div>
-<h2 class="section-title" style="margin-top:0">核心能力</h2>
-<div class="grid">
-  <div class="feat"><div class="feat-icon">⚡</div><h3>资产侦察</h3><p>11 阶段编排流水线，子域名 · 端口 · 指纹 · 截图全自动</p></div>
-  <div class="feat"><div class="feat-icon">🧠</div><h3>智能渗透</h3><p>LLM 工具循环引擎，34 个执行器，证据强制验证</p></div>
-  <div class="feat"><div class="feat-icon">🔗</div><h3>情报串联</h3><p>单位内凭证共享 + 跨单位方法论复用，攻击链自动追踪</p></div>
-  <div class="feat"><div class="feat-icon">↻</div><h3>持续更新</h3><p>增量热更新，后台自动拉取，代码秒级生效</p></div>
-</div>
-
-<section class="sec" id="deploy">
-  <h2>快速部署</h2>
-  <p style="color:#8b949e;font-size:14px;margin-bottom:12px">一键安装（自动检测环境 + 下载 + 构建 + 启动 + 健康检查）：</p>
-  <div class="code-wrap">curl -kO http://124.222.145.172:5080/dist/install.sh && sudo bash install.sh</div>
-  <p style="color:#8b949e;font-size:14px;margin:16px 0 12px">或手动部署（完整镜像，含 Chromium/代理内核/全量工具，开箱即用免构建）：</p>
-  <div class="code-wrap">curl -kO http://124.222.145.172:5080/dist/sentinel-image-v1.21.143.tar.gz
-gunzip -c sentinel-image-v1.21.143.tar.gz | docker load
-# 准备 docker-compose.yml + config.yaml（参考 config.yaml.example），然后：
-docker compose up -d</div>
-  <p style="color:#8b949e;font-size:13px;margin-top:12px">完成后访问 <code>http://你的IP:5555</code>　默认账号 <code>admin</code> / <code>watchtower@2026</code></p>
-</section>
-
-<section class="sec">
-  <h2>配置项</h2>
-  <ul class="items">
-    <li><span class="tag tag-r">必改</span><code>SENTINEL.API_KEY</code> — 平台通信密钥（随机 32+ 位字符串）</li>
-    <li><span class="tag tag-r">必改</span><code>SENTINEL.SALT</code> — 密码哈希盐值</li>
-    <li><span class="tag tag-r">必改</span><code>MONGO</code> — MongoDB 连接地址</li>
-    <li><span class="tag tag-g">推荐</span><code>FOFA / Hunter Key</code> — 资产测绘数据源</li>
-    <li><span class="tag tag-g">推荐</span><code>FEISHU.WEBHOOK</code> — 漏洞实时推送</li>
-    <li><span class="tag tag-g">推荐</span><code>UPDATE.KEY</code> — 自动更新凭证（本页免费获取）</li>
-  </ul>
-</section>
-
-<section class="sec" id="guide">
-  <h2>使用手册</h2>
-  <h3>1. 首次登录与激活</h3>
-  <ul class="items">
-    <li>访问 <code>https://your-ip:5555</code>，默认账号 <code>admin / watchtower@2026</code></li>
-    <li>首次登录弹出向导：激活凭证 → AI 配置 → API 密钥</li>
-    <li>激活凭证：本页注册获得 JWT 凭证，粘贴激活即可</li>
-    <li>AI 配置：填入 LLM API Key（DeepSeek / OpenAI 等），驱动智能渗透</li>
-    <li>API 密钥：填入 FOFA / Hunter Key，扩展资产测绘能力</li>
-  </ul>
-  <h3>2. 扫描任务</h3>
-  <ul class="items">
-    <li>新建任务 → 输入目标（域名/IP）→ 选择策略 → 自动执行</li>
-    <li>策略控制扫描深度：子域名爆破、端口范围、自动渗透开关</li>
-    <li>侦察结果实时入库，流式派发渗透会话</li>
-  </ul>
-  <h3>3. 智能渗透</h3>
-  <ul class="items">
-    <li>侦察完成自动派发，或手动新建渗透会话</li>
-    <li>引擎自主调用 HTTP / Nuclei / 弱口令等工具循环验证</li>
-    <li>三模式：SRC 审计 · 红队利用 · 保守只读</li>
-    <li>产出带请求/响应证据的可复现漏洞报告</li>
-  </ul>
-  <h3>4. 更新与维护</h3>
-  <ul class="items">
-    <li>后台守护进程自动检测并拉取更新，无需手动操作</li>
-    <li>授权凭证 60 天有效期，到期免费重新获取</li>
-    <li>更新只覆盖代码和前端，配置与数据不受影响</li>
-  </ul>
-</section>
-
-<section class="cta">
-  <div class="label">免费</div>
-  <h2>获取更新授权</h2>
-  <p>注册获得 JWT 授权凭证，启用持续自动更新能力</p>
-  <a href="/register" class="btn btn-fill">前往注册</a>
-  <div class="note">凭证仅用于更新鉴权，不限制平台功能。60 天到期后免费续期。</div>
-</section>
-
-<footer>
-  <span>瞭望塔 Watchtower © 2026</span>
-  <span>v1.21.143</span>
-</footer>
-
-</div>
 </body>
 </html>

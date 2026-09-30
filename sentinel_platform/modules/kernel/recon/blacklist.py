@@ -118,3 +118,17 @@ def filter_sites(ctx) -> int:
     if dropped:
         ctx.sites[:] = kept
     return dropped
+
+
+def filter_site_batch(recs: list) -> list:
+    """过滤一批站点记录里命中黑名单的（AUD-15：**落库/派发前**先滤，不等全部探完）。
+    返回保留的记录列表（新列表，不改入参）。用于 pipeline 站点阶段每批 emit 前调用，
+    确保黑名单站点从不进入 ctx.sites、不落库、不触发情报派发。"""
+    kept = []
+    for s in (recs or []):
+        url = getattr(s, "url", "") or ""
+        host = getattr(s, "hostname", "") or ""
+        if is_black_site(url) or is_black_domain(host):
+            continue
+        kept.append(s)
+    return kept

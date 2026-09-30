@@ -3,7 +3,9 @@
 覆盖：正常发现结构化为 DomainRec(type=SUBDOMAIN,无解析)、越界子域名归属过滤丢弃、
 杂行/非法/缺 host 跳过、enumerate 去重 + scope 多主域过滤、build_argv -all 开关。
 """
+import os
 import unittest
+from unittest import mock
 
 from sentinel_platform.modules.kernel.recon.tools import Subfinder
 from sentinel_platform.modules.kernel.recon.tools.subfinder import _belongs
@@ -79,6 +81,35 @@ class TestSubfinder(unittest.TestCase):
         out = sf.enumerate(["example.com"], scope={"example.com"})
         self.assertEqual(len(out), 1)                 # 去重 + 越界过滤
         self.assertEqual(out[0].domain, "a.example.com")
+
+    def test_build_argv_selected_sources_and_provider_config(self):
+        argv = Subfinder().build_argv(
+            sources=["hunter", "securitytrails"], provider_config="/tmp/providers.yaml")
+        self.assertIn("-s", argv)
+        self.assertIn("hunter,securitytrails", argv)
+        self.assertIn("-pc", argv)
+        self.assertIn("/tmp/providers.yaml", argv)
+
+    def test_enumerate_sources_uses_temporary_secret_file_and_deletes_it(self):
+        sf = Subfinder()
+        observed = {}
+
+        def fake_run(stdin_lines=None, **kwargs):
+            path = kwargs["provider_config"]
+            observed["path"] = path
+            with open(path, "r", encoding="utf-8") as fp:
+                observed["content"] = fp.read()
+            observed["sources"] = kwargs["sources"]
+            return [DomainRec(domain="api.example.com"), DomainRec(domain="outside.test")]
+
+        with mock.patch.object(sf, "run", side_effect=fake_run):
+            out = sf.enumerate_sources(
+                ["example.com"], {"hunter": "secret:key", "chaos": "token"},
+                scope={"example.com"})
+        self.assertEqual([r.domain for r in out], ["api.example.com"])
+        self.assertEqual(observed["sources"], ["hunter", "chaos"])
+        self.assertIn('"secret:key"', observed["content"])
+        self.assertFalse(os.path.exists(observed["path"]))
 
 
 if __name__ == "__main__":

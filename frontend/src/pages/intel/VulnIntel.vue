@@ -1,34 +1,60 @@
 <template>
-  <PageContainer title="漏洞情报" kicker="Vuln Intelligence" description="监听国内外最新漏洞公开,去重入库。聚合外部 CVE 情报与本地可直接执行的验证(PoC 插件 / nuclei 模板)。AI 渗透识别出组件后直接查该组件已知漏洞与可用 PoC。">
+  <PageContainer title="漏洞情报" kicker="Vuln Intelligence" description="外部 CVE 情报由 Watchtower 云端情报库统一采集、去重后分发,本平台从云端拉取入库;并聚合本地可直接执行的验证(NPoC 插件 / nuclei 模板)。AI 渗透识别出组件后直接查该组件已知漏洞与可用 PoC。">
     <template #extra>
       <a-space>
-        <span class="feed-meta">上次拉取:{{ status.last_fetch || '尚未拉取' }}</span>
+        <span class="feed-meta">上次同步:{{ cloudSource?.last_fetch || status.last_fetch || '尚未同步' }}</span>
         <a-button @click="loadAll">刷新</a-button>
-        <a-tooltip title="常态由调度器自动拉取;刚公开的高危 CVE 可点此立即拉一次">
-          <a-button :loading="running" @click="runFeed">立即拉取</a-button>
+        <a-tooltip title="常态由调度器按间隔自动从云端同步;刚公开的高危 CVE 可点此立即同步一次">
+          <a-button type="primary" ghost :loading="running" @click="runFeed">立即同步</a-button>
         </a-tooltip>
       </a-space>
     </template>
 
-    <!-- 情报来源健康可视化 -->
-    <a-card size="small" class="page-card src-health">
+    <!-- 情报来源：云端主来源(突出) + 本地可执行源 -->
+    <a-card size="small" class="page-card src-health" :bordered="false">
       <div class="src-health-head">
         <span class="sh-title">情报来源</span>
         <span class="sh-interval">
-          自动拉取间隔
+          云端同步间隔
           <a-select v-model:value="intervalSel" size="small" style="width: 120px" :options="intervalOptions" @change="saveInterval" />
         </span>
       </div>
-      <div class="src-grid">
-        <div v-for="s in status.sources" :key="s.name" class="src-chip" :class="s.health">
-          <span class="dot" :class="s.health"></span>
-          <div class="src-info">
-            <a v-if="s.url" :href="s.url" target="_blank" rel="noreferrer" class="src-name">{{ s.label }}</a>
-            <span v-else class="src-name">{{ s.label }}</span>
-            <div class="src-sub">
-              <span>{{ healthText(s.health) }}</span>
-              <span v-if="s.fetched"> · {{ s.fetched }} 条</span>
-              <span v-if="s.error" class="src-err"> · {{ s.error.slice(0, 30) }}</span>
+
+      <!-- 云端主来源 hero -->
+      <div v-if="cloudSource" class="cloud-hero" :class="cloudSource.health">
+        <div class="cloud-glyph">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M34 40H14A10 10 0 0 1 12 20.2 13 13 0 0 1 37 22a8 8 0 0 1-3 18Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 34V22m0 0-5 5m5-5 5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="cloud-main">
+          <div class="cloud-title">
+            <span class="cloud-name">Watchtower 云端情报库</span>
+            <span class="cloud-badge" :class="cloudSource.health">{{ healthText(cloudSource.health) }}</span>
+          </div>
+          <div class="cloud-sub">
+            外部 CVE 情报统一来源 · 已同步 <b>{{ (cloudSource.remote_count || cloudSource.fetched || stat.total) || 0 }}</b> 条
+            <span v-if="cloudSource.last_fetch"> · 上次同步 {{ cloudSource.last_fetch }}</span>
+          </div>
+        </div>
+        <div class="cloud-metrics">
+          <div class="cm"><span class="cm-n">{{ stat.in_kev || 0 }}</span><span class="cm-l">在野</span></div>
+          <div class="cm"><span class="cm-n">{{ stat.by_severity && stat.by_severity.critical || 0 }}</span><span class="cm-l">严重</span></div>
+        </div>
+      </div>
+
+      <!-- 本地可执行能力源 -->
+      <div v-if="localSources.length" class="local-src-wrap">
+        <div class="local-src-label">本地可执行能力（本机 · 直接可打）</div>
+        <div class="src-grid">
+          <div v-for="s in localSources" :key="s.name" class="src-chip" :class="s.health">
+            <span class="dot" :class="s.health"></span>
+            <div class="src-info">
+              <a v-if="s.url" :href="s.url" target="_blank" rel="noreferrer" class="src-name">{{ s.label }}</a>
+              <span v-else class="src-name">{{ s.label }}</span>
+              <div class="src-sub">
+                <span>{{ healthText(s.health) }}</span>
+                <span v-if="s.fetched"> · {{ s.fetched }} 条</span>
+                <span v-if="s.error" class="src-err"> · {{ s.error.slice(0, 30) }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -42,12 +68,7 @@
       <a-col :span="4"><a-card size="small"><a-statistic title="本地可直接打" :value="stat.executable" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
       <a-col :span="4"><a-card size="small"><a-statistic title="严重" :value="stat.by_severity.critical || 0" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
       <a-col :span="4"><a-card size="small"><a-statistic title="高危" :value="stat.by_severity.high || 0" :value-style="{ color: '#fa541c' }" /></a-card></a-col>
-      <a-col :span="4">
-        <a-card size="small">
-          <div class="src-mini">来源分布</div>
-          <div v-for="(n, s) in stat.by_source" :key="s" class="src-line">{{ s }}: {{ n }}</div>
-        </a-card>
-      </a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic title="中危" :value="stat.by_severity.medium || 0" :value-style="{ color: '#faad14' }" /></a-card></a-col>
     </a-row>
 
     <!-- 按组件查(AI 同款) -->
@@ -62,9 +83,6 @@
       <a-form-item label="关键词"><a-input v-model:value="query.keyword" placeholder="CVE/标题/组件" allow-clear style="width: 200px" /></a-form-item>
       <a-form-item label="等级">
         <a-select v-model:value="query.severity" allow-clear style="width: 120px" :options="sevOptions" placeholder="全部" />
-      </a-form-item>
-      <a-form-item label="来源">
-        <a-select v-model:value="query.source" allow-clear style="width: 130px" :options="srcOptions" placeholder="全部" />
       </a-form-item>
       <a-form-item label="在野"><a-switch v-model:checked="kevOnly" @change="reload" /></a-form-item>
       <a-form-item label="可执行"><a-switch v-model:checked="execOnly" @change="reload" /></a-form-item>
@@ -96,9 +114,7 @@
           </div>
         </template>
         <template v-else-if="column.key === 'sources'">
-          <a-tooltip :title="(record.source_labels || record.sources).join(', ')">
-            <span class="muted">{{ (record.source_labels || record.sources).join(', ') }}</span>
-          </a-tooltip>
+          <span class="src-wt"><span class="src-wt-dot"></span>Watchtower 云端情报库</span>
         </template>
         <template v-else-if="column.key === 'poc'">
           <a v-for="(u, i) in record.poc_urls.slice(0, 2)" :key="i" :href="u" target="_blank" rel="noreferrer" class="poc-link">PoC{{ i + 1 }}</a>
@@ -130,6 +146,10 @@ const total = ref(0)
 const stat = reactive<VulnIntelStat>({ total: 0, in_kev: 0, executable: 0, by_severity: {}, by_source: {} })
 const status = reactive<FeedStatus>({ last_fetch: '', interval_seconds: 21600, interval_hours: 6, sources: [] })
 
+// 云端主来源(kind=cloud) 与 本地可执行源分离展示
+const cloudSource = computed<any>(() => (status.sources || []).find((s: any) => s.kind === 'cloud') || null)
+const localSources = computed(() => (status.sources || []).filter((s: any) => s.kind !== 'cloud'))
+
 const intervalSel = ref(21600)
 const intervalOptions = [
   { value: 1800, label: '30 分钟' }, { value: 3600, label: '1 小时' },
@@ -150,7 +170,6 @@ const sortByExposure = ref(true)   // 默认按最新曝光时间排序（用户
 const query = reactive({ keyword: '', severity: undefined as string | undefined, source: undefined as string | undefined, page: 1, size: 20 })
 
 const sevOptions = ['critical', 'high', 'medium', 'low'].map(v => ({ value: v, label: v }))
-const srcOptions = computed(() => Object.keys(stat.by_source).map(s => ({ value: s, label: s })))
 function sevColor(s: string) { return SEVERITY_COLOR[s] || 'default' }
 // 时间只保留到天(YYYY-MM-DD),去掉时分秒
 function toDay(v: unknown) {
@@ -233,8 +252,13 @@ onMounted(loadAll)
 
 <style scoped>
 .stat-row { margin-bottom: 16px; }
-.src-mini { font-size: 12px; color: #888; margin-bottom: 4px; }
-.src-line { font-size: 12px; line-height: 1.5; }
+/* 让概览行各卡等高对齐（来源分布内容多不再撑高整行） */
+.stat-row > .ant-col { display: flex; }
+.stat-row .ant-card { width: 100%; }
+.stat-row :deep(.ant-card) { height: 100%; }
+/* 表格「来源」列：统一 Watchtower 云端情报库标签 */
+.src-wt { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #00a7c4; white-space: nowrap; }
+.src-wt-dot { width: 6px; height: 6px; border-radius: 50%; background: #00c8e6; box-shadow: 0 0 5px rgba(0,229,255,.5); flex-shrink: 0; }
 .query-hint { margin-top: 8px; color: #888; font-size: 13px; }
 .muted { color: #aaa; }
 .poc-link { margin-right: 8px; }
@@ -246,6 +270,26 @@ onMounted(loadAll)
 .src-health-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .sh-title { font-weight: 600; }
 .sh-interval { font-size: 13px; color: var(--dt-muted); }
+/* 云端主来源 hero */
+.cloud-hero { display: flex; align-items: center; gap: 13px; padding: 10px 15px; border-radius: 9px; margin-bottom: 10px; position: relative; overflow: hidden;
+  background: linear-gradient(120deg, rgba(0,229,255,.11), rgba(24,144,255,.05)); border: 1px solid rgba(0,229,255,.30); }
+.cloud-hero::after { content: ""; position: absolute; right: -40px; top: -46px; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, rgba(0,229,255,.13), transparent 70%); pointer-events: none; }
+.cloud-hero.unknown { background: linear-gradient(120deg, rgba(150,150,150,.10), rgba(150,150,150,.03)); border-color: rgba(150,150,150,.28); }
+.cloud-glyph { width: 34px; height: 34px; color: #00c8e6; flex-shrink: 0; filter: drop-shadow(0 0 6px rgba(0,229,255,.35)); }
+.cloud-glyph svg { width: 34px; height: 34px; }
+.cloud-main { flex: 1; min-width: 0; }
+.cloud-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cloud-name { font-size: 16px; font-weight: 650; color: var(--dt-text); letter-spacing: .3px; }
+.cloud-badge { font-size: 11px; padding: 1px 9px; border-radius: 10px; }
+.cloud-badge.ok { background: rgba(82,196,26,.16); color: #52c41a; }
+.cloud-badge.unknown { background: rgba(150,150,150,.18); color: #999; }
+.cloud-sub { font-size: 12.5px; color: var(--dt-muted); margin-top: 4px; }
+.cloud-sub b { color: #00c8e6; font-weight: 600; }
+.cloud-metrics { display: flex; gap: 22px; padding-left: 10px; flex-shrink: 0; }
+.cm { display: flex; flex-direction: column; align-items: center; }
+.cm-n { font-size: 20px; font-weight: 700; color: var(--dt-text); line-height: 1.15; }
+.cm-l { font-size: 11px; color: var(--dt-muted); }
+.local-src-label { font-size: 12px; color: var(--dt-muted); margin: 2px 0 8px; }
 .src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 /* 半透明色调 + 主题文字变量：日/夜都可读（原写死浅色底在夜间字看不见） */
 .src-chip { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--dt-border); border-radius: 6px; background: var(--dt-fill, #fafafa); color: var(--dt-text); }

@@ -21,6 +21,7 @@ export interface MenuGroup {
 export const menuGroups: MenuGroup[] = [
   { key: 'workspace', title: '工作台', icon: 'DashboardOutlined', children: [
     { key: 'dashboard', title: '态势总览', icon: 'DashboardOutlined', path: '/dashboard' },
+    { key: 'attackAlert', title: '攻击告警', icon: 'AlertOutlined', path: '/attack-alert', perm: 'system:read' },
     { key: 'systemExtension', title: '系统扩展', icon: 'AppstoreAddOutlined', path: '/system-extensions', perm: 'ai_extension:read' }
   ] },
   { key: 'taskPlan', title: '任务与计划', icon: 'ProfileOutlined', children: [
@@ -33,16 +34,17 @@ export const menuGroups: MenuGroup[] = [
     { key: 'pentest', title: '渗透会话', icon: 'BugOutlined', path: '/pentest' },
     { key: 'pentestConsole', title: 'AI 控制台', icon: 'CodeOutlined', path: '/pentest/console' },
     { key: 'miniapp', title: '小程序渗透', icon: 'WechatOutlined', path: '/miniapp' },
+    { key: 'appPentest', title: 'APP 渗透', icon: 'MobileOutlined', path: '/app-pentest' },
     { key: 'probeManage', title: '免杀与探针', icon: 'ThunderboltOutlined', path: '/probe' },
     { key: 'aiConfig', title: 'AI 配置', icon: 'ApiOutlined', path: '/ai-config' }
   ] },
   { key: 'riskIntel', title: '漏洞与情报', icon: 'SecurityScanOutlined', children: [
     { key: 'vulnCenter', title: '漏洞中心', icon: 'SecurityScanOutlined', path: '/vuln-center' },
+    { key: 'reportEdit', title: '报告编辑', icon: 'FileTextOutlined', path: '/report-edit' },
     { key: 'poc', title: 'PoC 信息', icon: 'ExperimentOutlined', path: '/poc' },
     { key: 'vulnIntel', title: '漏洞情报', icon: 'BugOutlined', path: '/vuln-intel' },
     { key: 'attackChain', title: '攻击链情报', icon: 'NodeIndexOutlined', path: '/attack-chain' },
-    { key: 'unitView', title: '单位视图', icon: 'ApartmentOutlined', path: '/unit-view' },
-    { key: 'intel', title: '资产情报', icon: 'DatabaseOutlined', path: '/intel' }
+    { key: 'intel', title: '资产视图', icon: 'DatabaseOutlined', path: '/intel' }
   ] },
   { key: 'asset', title: '资产中心', icon: 'SearchOutlined', children: [
     { key: 'search', title: '资产检索', icon: 'SearchOutlined', path: '/search' },
@@ -78,6 +80,7 @@ const routes: RouteRecordRaw[] = [
     redirect: '/dashboard',
     children: [
       { path: 'dashboard', name: 'dashboard', component: () => import('../pages/dashboard/Dashboard.vue'), meta: { title: '态势总览' } },
+      { path: 'attack-alert', name: 'attackAlert', component: () => import('../pages/workspace/AttackAlert.vue'), meta: { title: '攻击告警' } },
       { path: 'tasks', name: 'tasks', component: () => import('../pages/tasks/TaskList.vue'), meta: { title: '任务列表' } },
       { path: 'tasks/create', name: 'taskCreate', component: () => import('../pages/tasks/TaskCreate.vue'), meta: { title: '新建任务' } },
       { path: 'tasks/:id', name: 'taskDetail', component: () => import('../pages/tasks/TaskDetail.vue'), meta: { title: '任务详情' } },
@@ -90,6 +93,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'fingerprint', name: 'fingerprint', component: () => import('../pages/fingerprint/FingerprintList.vue'), meta: { title: '指纹管理' } },
       { path: 'poc', name: 'poc', component: () => import('../pages/poc/PocList.vue'), meta: { title: 'PoC 信息' } },
       { path: 'vuln-center', name: 'vulnCenter', component: () => import('../pages/risk/VulnCenter.vue'), meta: { title: '漏洞中心' } },
+      { path: 'report-edit', name: 'reportEdit', component: () => import('../pages/risk/ReportEdit.vue'), meta: { title: '报告编辑' } },
       { path: 'vuln', redirect: '/vuln-center' },
       { path: 'ai-findings', redirect: '/vuln-center' },
       { path: 'task-schedule', name: 'taskSchedule', component: () => import('../pages/scheduler/TaskScheduleList.vue'), meta: { title: '计划任务' } },
@@ -101,7 +105,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'logs', name: 'logs', component: () => import('../pages/logs/LogMonitor.vue'), meta: { title: '日志监测' } },
       { path: 'access-log', name: 'accessLog', component: () => import('../pages/logs/AccessLog.vue'), meta: { title: '访问日志' } },
       { path: 'guard-log', name: 'guardLog', component: () => import('../pages/logs/GuardLog.vue'), meta: { title: '拦截日志' } },
-      { path: 'intel', name: 'intel', component: () => import('../pages/intel/IntelCenter.vue'), meta: { title: '资产情报' } },
+      { path: 'intel', name: 'intel', component: () => import('../pages/intel/IntelCenter.vue'), meta: { title: '资产视图' } },
       { path: 'vuln-intel', name: 'vulnIntel', component: () => import('../pages/intel/VulnIntel.vue'), meta: { title: '漏洞情报' } },
       { path: 'attack-chain', name: 'attackChain', component: () => import('../pages/intel/AttackChain.vue'), meta: { title: '攻击链情报' } },
       { path: 'unit-view', name: 'unitView', component: () => import('../pages/intel/UnitView.vue'), meta: { title: '单位视图' } },
@@ -110,10 +114,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'system-extensions', name: 'systemExtension', component: () => import('../pages/system/SystemExtension.vue'), meta: { title: '系统扩展' } },
       { path: 'pentest', name: 'pentest', component: () => import('../pages/pentest/PentestList.vue'), meta: { title: '渗透会话' } },
       { path: 'pentest/console', name: 'pentestConsole', component: () => import('../pages/pentest/PentestConsole.vue'), meta: { title: 'AI 控制台' } },
-      { path: 'miniapp', name: 'miniapp', component: () => import('../pages/miniapp/MiniAppPentest.vue'), meta: { title: '小程序渗透' } },
-      { path: 'probe', name: 'probeManage', component: () => import('../pages/probe/ProbeManage.vue'), meta: { title: '探针管理' } },
       { path: 'pentest/live/:id', name: 'pentestLive', component: () => import('../pages/pentest/PentestLive.vue'), meta: { title: '实时观察' } },
       { path: 'pentest/:id', name: 'pentestDetail', component: () => import('../pages/pentest/PentestDetail.vue'), meta: { title: '渗透会话详情' } },
+      { path: 'miniapp', name: 'miniapp', component: () => import('../pages/miniapp/MiniAppPentest.vue'), meta: { title: '小程序渗透' } },
+      { path: 'app-pentest', name: 'appPentest', component: () => import('../pages/pentest/AppPentest.vue'), meta: { title: 'APP 渗透' } },
+      { path: 'probe', name: 'probeManage', component: () => import('../pages/probe/ProbeManage.vue'), meta: { title: '探针管理' } },
       { path: 'user-manage', name: 'userManage', component: () => import('../pages/settings/UserManage.vue'), meta: { title: '用户管理' } },
       { path: 'about/manual', name: 'manual', component: () => import('../pages/about/Manual.vue'), meta: { title: '使用手册' } },
       { path: 'about/activation', name: 'activation', component: () => import('../pages/about/ActivationSetting.vue'), meta: { title: '激活设置' } },

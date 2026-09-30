@@ -1,5 +1,8 @@
 <template>
-  <PageContainer title="单位视图" description="按单位汇总渗透情报,点卡片看该单位的漏洞、子域名、系统、报告与攻击链">
+  <!-- #11 用户 2026-09-15：支持 embedded 嵌入资产视图 Tab——嵌入时用普通 div（不带 PageContainer 标题/边距），
+       独立路由访问时仍用 PageContainer。用 component :is 动态切根容器，内容复用不重复。 -->
+  <component :is="embedded ? 'div' : PageContainer"
+    v-bind="embedded ? {} : { title: '单位视图', description: '按单位汇总渗透情报,点卡片看该单位的漏洞、子域名、系统、报告与攻击链' }">
     <a-spin :spinning="loading">
       <div style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <a-input-search v-model:value="keyword" placeholder="搜索单位名" allow-clear style="max-width:320px" />
@@ -101,12 +104,15 @@
         </template>
       </a-spin>
     </a-drawer>
-  </PageContainer>
+  </component>
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
+
+// embedded=true 时作为资产视图页的 Tab 内嵌（不渲染外层 PageContainer，避免双标题）
+defineProps<{ embedded?: boolean }>()
 import StatusTag from '../../components/StatusTag.vue'
 import { intelApi, type UnitCard, type UnitDetail } from '../../api/intel'
 

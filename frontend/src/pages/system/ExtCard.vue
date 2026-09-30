@@ -8,6 +8,7 @@
       <a-tag color="blue" size="small">{{ ext.category }}</a-tag>
       <span class="muted">v{{ ext.version }}</span>
       <a-tag :color="ext.source === 'store' ? 'gold' : 'default'" size="small">{{ ext.source === 'store' ? '商店' : '本地' }}</a-tag>
+      <a-tag v-if="ext.ext_type === 'both'" color="purple" size="small">公共扩展</a-tag>
     </div>
     <div class="c-sum">{{ ext.summary || ext.description }}</div>
     <div v-if="params.length" class="c-params">

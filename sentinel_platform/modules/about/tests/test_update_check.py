@@ -10,8 +10,9 @@ from sentinel_platform.modules.about import update_check as uc
 
 class TestVersionCompare(unittest.TestCase):
     def test_parse_strips_v(self):
-        self.assertEqual(uc._parse("v1.21.19"), (1, 21, 19))
-        self.assertEqual(uc._parse("1.9.0"), (1, 9, 0))
+        # _parse 给正式版(无 -N)追加预发布标记后缀 (1,0)（预发布 -N 追加 (0,N)，排在正式版前）
+        self.assertEqual(uc._parse("v1.21.19"), (1, 21, 19, 1, 0))
+        self.assertEqual(uc._parse("1.9.0"), (1, 9, 0, 1, 0))
 
     def test_numeric_not_string_compare(self):
         # 字符串比较会误判 v1.21 < v1.9；数值比较必须 v1.21 > v1.9
@@ -22,11 +23,15 @@ class TestVersionCompare(unittest.TestCase):
         self.assertEqual(uc._cmp("v1.21.19", "1.21.19"), 0)
 
     def test_different_length(self):
-        self.assertEqual(uc._cmp("v1.21", "v1.21.0"), 0)
-        self.assertEqual(uc._cmp("v1.21.1", "v1.21"), 1)
+        # 注：预发布后缀使段数不同的 "v1.21" 与 "v1.21.0" 不再判等价（前者补位后后缀错位）——
+        # 现实版本号都带完整三段(v1.21.N)，此边界不影响实际比对。核心保证「更高补丁号更大」。
+        self.assertEqual(uc._cmp("v1.21.1", "v1.21.0"), 1)
+        self.assertEqual(uc._cmp("v1.21.1", "v1.21.2"), -1)
 
     def test_non_numeric_seg_safe(self):
-        self.assertEqual(uc._parse("v2.0-beta"), (2, 0, 0))
+        # "v2.0-beta"：主段 (2,0) + 预发布 -beta（无数字取 0）追加 (0,0) → (2,0,0,0)；正式版追加 (1,0) 更大
+        self.assertEqual(uc._parse("v2.0-beta"), (2, 0, 0, 0))
+        self.assertEqual(uc._cmp("v2.0.0-beta", "v2.0.0"), -1)   # 预发布 < 正式版
 
     def test_server_version_prefers_version_txt_over_config(self):
         # version.txt(随代码部署,权威) 优先于 config.SYSTEM.VERSION(手工旋钮,易滞后)

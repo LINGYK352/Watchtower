@@ -26,20 +26,31 @@ class _MemColl:
         return len(self._match(q))
 
     def _match(self, q):
-        out = []
-        for d in self.docs:
-            ok = True
-            for k, v in (q or {}).items():
-                if isinstance(v, dict):
-                    if "$regex" in v:
-                        import re
-                        if not re.search(v["$regex"], str(d.get(k, "")), re.I):
-                            ok = False
-                elif d.get(k) != v:
-                    ok = False
-            if ok:
-                out.append(d)
-        return out
+        return [d for d in self.docs if self._doc_ok(d, q or {})]
+
+    def _doc_ok(self, d, q):
+        for k, v in q.items():
+            if k == "$and":
+                if not all(self._doc_ok(d, sub) for sub in v):
+                    return False
+                continue
+            if isinstance(v, dict):
+                if "$regex" in v and not __import__("re").search(v["$regex"], str(d.get(k, "")), __import__("re").I):
+                    return False
+                if "$exists" in v:
+                    present = k in d
+                    if present != bool(v["$exists"]):
+                        return False
+                if "$nin" in v:
+                    # 缺失字段视为 None（与 Mongo 语义一致：$nin 命中不含该值/缺失）
+                    if d.get(k) in v["$nin"]:
+                        return False
+                if "$in" in v:
+                    if d.get(k) not in v["$in"]:
+                        return False
+            elif d.get(k) != v:
+                return False
+        return True
 
     def find(self, q=None, proj=None):
         return _Cursor(self._match(q))
@@ -130,6 +141,22 @@ class TaskListTest(unittest.TestCase):
         from sentinel_platform.modules.task_plan.task_list import stop_task
         self.assertIn("error", stop_task("nope"))
 
+    def test_stop_task_cascades_to_sessions(self):
+        """治 #8：停止任务连带停派发的渗透会话（否则子会话继续跑+产漏洞）。
+        注册 fake PENTEST_DISPATCH，验证 stop_task 调 stop_sessions_by_task。"""
+        from sentinel_platform.modules.task_plan.task_list import stop_task
+        from sentinel_platform.contracts import ROLE
+        calls = {"stopped_task": None}
+        class _FakeDispatch:
+            def stop_sessions_by_task(self, task_id, only_active=True):
+                calls["stopped_task"] = task_id
+                return {"stopped": 3, "task_id": task_id}
+        get_registry().register(ROLE.PENTEST_DISPATCH, _FakeDispatch())
+        tid = self._seed()
+        r = stop_task(tid)
+        self.assertEqual(calls["stopped_task"], tid, "停止任务必须连带调 stop_sessions_by_task")
+        self.assertEqual(r.get("sessions_stopped"), 3)
+
     def test_restart_clears_checkpoint(self):
         from sentinel_platform.modules.task_plan.task_list import restart_task, list_tasks
         tid = self._seed(status="done", checkpoint={"done_steps": ["x"]})
@@ -201,6 +228,94 @@ class TaskListTest(unittest.TestCase):
 
         set_repo(_BoomRepo())
         self.assertEqual(tl.list_tasks()["total"], 0)
+
+    # —— 孤儿资产清理（core 缺陷修复：区分"查库失败假空"与"任务真为0"）——
+    def test_orphan_purge_normal(self):
+        """有现存任务：只删 task_id 指向已删任务的记录，存活任务的资产 + 无 task_id 资产保留。"""
+        from sentinel_platform.modules.task_plan.task_list import purge_orphan_assets
+        from sentinel_platform.core import get_repo
+        live = self._seed(name="live")                          # 存活任务
+        get_repo().collection("site").insert_one({"task_id": live, "site": "keep"})       # 存活任务资产→保留
+        get_repo().collection("site").insert_one({"task_id": "gone999", "site": "orphan"})  # 指向已删任务→孤儿
+        get_repo().collection("site").insert_one({"site": "manual"})                       # 无 task_id→绝不删
+        get_repo().collection("site").insert_one({"task_id": "", "site": "empty"})         # 空 task_id→绝不删
+        r = purge_orphan_assets()
+        self.assertEqual(r["purged"], 1)                        # 只删了 1 条孤儿
+        sites = [d["site"] for d in get_repo().collection("site").find({})]
+        self.assertIn("keep", sites); self.assertIn("manual", sites); self.assertIn("empty", sites)
+        self.assertNotIn("orphan", sites)
+
+    def test_orphan_purge_when_no_task_still_cleans(self):
+        """**核心修复**：任务全删光时不再跳过——带 task_id 的资产按定义就是孤儿，应清理；
+        无/空 task_id 的合法资产仍保留。旧逻辑此处误跳过（用户质疑点）。"""
+        from sentinel_platform.modules.task_plan.task_list import purge_orphan_assets, scan_orphan_assets
+        from sentinel_platform.core import get_repo
+        # 不 seed 任何任务（task 集合空但可查）
+        get_repo().collection("site").insert_one({"task_id": "gone1", "site": "orphan1"})
+        get_repo().collection("domain").insert_one({"task_id": "gone2", "domain": "orphan2"})
+        get_repo().collection("site").insert_one({"site": "manual"})            # 无 task_id→保留
+        # scan 与 purge 判据一致：都能看到孤儿
+        scanned = scan_orphan_assets()
+        self.assertTrue(scanned["purgeable"])
+        self.assertEqual(scanned["total"], 2)
+        self.assertEqual(scanned["live_task_count"], 0)
+        r = purge_orphan_assets()
+        self.assertNotIn("skipped", r)                          # 不再跳过
+        self.assertEqual(r["purged"], 2)                        # 两条孤儿都清了
+        self.assertEqual(get_repo().collection("site").count_documents({"site": "manual"}), 1)  # 合法资产保留
+
+    def test_orphan_purge_skips_only_on_query_failure(self):
+        """查库失败（非任务为0）：保守跳过防误删，且 scan 也不谎报孤儿（判据统一）。"""
+        from sentinel_platform.modules.task_plan import task_list as tl
+
+        real_repo = tl.get_repo()
+        class _TaskBoomRepo(Repository):
+            def __init__(self): pass
+            def collection(self, name):
+                if name == "task":                               # 只让任务查询失败
+                    raise RuntimeError("task coll down")
+                return real_repo.collection(name)
+        # 先塞一条带 task_id 的资产（若误判成孤儿会被删）
+        real_repo.collection("site").insert_one({"task_id": "x", "site": "should_survive"})
+        set_repo(_TaskBoomRepo())
+        r = tl.purge_orphan_assets()
+        self.assertEqual(r.get("skipped"), "task_query_failed")  # 查库失败→跳过
+        self.assertEqual(r["purged"], 0)
+        scanned = tl.scan_orphan_assets()
+        self.assertFalse(scanned["purgeable"])                   # scan 不谎报
+        self.assertEqual(scanned["total"], 0)
+        # 资产未被误删
+        self.assertEqual(real_repo.collection("site").count_documents({"site": "should_survive"}), 1)
+
+    def test_list_by_id_exact(self):
+        """v1.21.157-48 item8b：详情页按 _id 取单任务（此前被忽略拿到最新任务）。"""
+        from sentinel_platform.core import get_repo, models
+        from sentinel_platform.modules.task_plan.task_list import list_tasks
+        c = get_repo().collection(models.Collections.TASK if hasattr(models, "Collections") else "task")
+        c.insert_one({"name": "老任务", "status": "done", "target": "a.com"})
+        c.insert_one({"name": "新任务", "status": "running", "target": "b.com"})
+        # 不传 _id → 最新(新任务)在前
+        first = list_tasks()["items"][0]
+        self.assertEqual(first["name"], "新任务")
+        # 传老任务 _id → 精确拿老任务（不是最新）
+        old_id = [d["_id"] for d in c.docs if d["name"] == "老任务"][0]
+        r = list_tasks(_id=str(old_id))
+        self.assertEqual(r["total"], 1)
+        self.assertEqual(r["items"][0]["name"], "老任务")
+
+    def test_compute_statistic_counts_ai_findings(self):
+        """v1.21.157-48 item8c：任务漏洞数含 AI 渗透漏洞（两跳 session→intel_finding），此前恒漏。"""
+        from sentinel_platform.core import get_repo
+        from sentinel_platform.modules.task_plan.task_list import _compute_statistic
+        repo = get_repo()
+        tid = "task_ai_1"
+        # 该任务派发的会话 + 会话下的 AI 漏洞（intel_finding 只带 session_id 无 task_id）
+        repo.collection("intel_pentest_session").insert_one({"_id": "sess_a", "source_task_id": tid})
+        repo.collection("intel_finding").insert_one({"session_id": "sess_a", "status": "finding", "source": "ai"})
+        repo.collection("intel_finding").insert_one({"session_id": "sess_a", "status": "finding", "source": "ai"})
+        repo.collection("intel_finding").insert_one({"session_id": "sess_a", "status": "lead", "source": "ai"})  # 线索不计
+        st = _compute_statistic(tid)
+        self.assertEqual(st["vuln_cnt"], 2)   # 2 个 finding（lead 不计），此前恒 0
 
 
 if __name__ == "__main__":

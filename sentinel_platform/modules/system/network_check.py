@@ -584,6 +584,11 @@ def overall_assessment(ping: Any, stability: Any, dns: Any, deps: Any, proxy: An
 
 # ======================== 体检结果持久化 + 定时跑（v1.21.148-12）========================
 _NETCHECK_COLL = "netcheck_result"   # 只存最新一条(name=latest)，定时监测/态势总览读它
+# 网络质量告警阈值（与前端 NetQualityAlertModal 弹窗阈值一致）+ 日志告警去重节流。
+# 落 log_monitor 日志检测（WARNING 经 MongoLogHandler），与资源告警对称，让"日志检测处"能查到告警留痕。
+_NETQ_ALERT_THRESHOLD = 40
+_NETQ_ALERT_TTL = 600                # 秒：同一低分状态 10min 内只记一次日志（防定时/手动体检刷屏）
+_netq_alert_last = {"low": False, "ts": 0.0}
 
 
 def run_and_save_quality(ping_host: str = "scanme.nmap.org") -> Dict[str, Any]:
@@ -616,7 +621,41 @@ def save_quality_result(ping: Any, stability: Any, dns: Any, deps: Any, proxy: A
             {"name": "latest"}, {"$set": doc}, upsert=True)
     except Exception as exc:
         logger.debug("save netcheck result degraded: %s", exc)
+    _alert_network_quality(assess)
     return doc
+
+
+def _alert_network_quality(assess: Dict[str, Any]) -> None:
+    """网络质量低于阈值时记 WARNING 日志（落 log_monitor 日志检测，与资源告警对称）+ 经 notify 推送。
+    去重节流：同一低分状态 _NETQ_ALERT_TTL 内只记一次；恢复到阈值以上时清除标记（下次转差能再记）。
+    纯记录副作用，绝不因告警失败影响落库主流程（异常吞掉）。"""
+    try:
+        score = assess.get("score")
+        if not isinstance(score, (int, float)):
+            return
+        now = time.time()
+        if score >= _NETQ_ALERT_THRESHOLD:
+            # 恢复：清除去重标记，让下次转差能立即再记
+            if _netq_alert_last["low"]:
+                _netq_alert_last["low"] = False
+                _netq_alert_last["ts"] = 0.0
+            return
+        # 低分：同状态 TTL 内只记一次（防定时/手动体检刷屏）
+        if _netq_alert_last["low"] and (now - _netq_alert_last["ts"]) < _NETQ_ALERT_TTL:
+            return
+        _netq_alert_last["low"] = True
+        _netq_alert_last["ts"] = now
+        text = assess.get("level_text", "差")
+        summary = assess.get("summary", "网络质量偏低")
+        msg = "网络质量告警：综合评分 {} 分（{}），{}".format(score, text, summary)
+        try:
+            from sentinel_platform.modules.kernel import notify
+            notify.notify_critical_log("网络监控", msg)
+        except Exception as exc:
+            logger.debug("network quality notify degraded: %s", exc)
+        logger.warning("网络告警[%s]: %s", "critical" if score < 30 else "poor", msg)
+    except Exception as exc:
+        logger.debug("_alert_network_quality degraded: %s", exc)
 
 
 def get_latest_quality() -> Dict[str, Any]:

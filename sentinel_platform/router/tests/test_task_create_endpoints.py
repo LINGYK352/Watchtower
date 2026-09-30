@@ -42,8 +42,17 @@ class _FakePolicy:
 class TaskCreateEndpointE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # 本组验证任务端点，不验证激活门控；显式提供已激活状态，避免新增的全局 402 门控遮蔽端点断言。
+        cls._activation = mock.patch(
+            "sentinel_platform.modules.system.activation.local_status",
+            return_value={"activated": True, "expired": False})
+        cls._activation.start()
         cls.app = create_app()
         cls.client = cls.app.test_client()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._activation.stop()
 
     def setUp(self):
         reset_repo()
@@ -73,7 +82,9 @@ class TaskCreateEndpointE2E(unittest.TestCase):
         d = self._data(self.client.post("/api/task/policy/",
                                         json={"name": "扫描A", "policy_id": "p1",
                                               "target": "a.com, b.com, 8.8.8.8", "task_tag": "task"}))
-        self.assertEqual(d["created"], 3)
+        # v1.21.157-48：多目标（多域名或 IP+域名混合）合并成一篇聚合任务（真实目标在 options.multi_targets）。
+        # 原断言 created==3 是 -48 前"每目标一篇"的旧行为，-48 后应为 1（本测试文件停留在 v1.21.148 未同步）。
+        self.assertEqual(d["created"], 1)
         self.assertTrue(all(t["status"] == "waiting" for t in self._tasks()))
 
     def test_policy_missing_400(self):
@@ -87,8 +98,8 @@ class TaskCreateEndpointE2E(unittest.TestCase):
 
     # —— /api/task_fofa/test 预览 ——
     def test_fofa_test(self):
-        with mock.patch("sentinel_platform.modules.kernel.ext_source.fofa_query",
-                        return_value=[["a.com", "1.1.1.1", "80"], ["b.com", "2.2.2.2", "443"]]):
+        with mock.patch("sentinel_platform.modules.kernel.ext_source.fofa_count",
+                        return_value={"ok": True, "size": 2, "error": False, "errmsg": ""}):
             d = self._data(self.client.post("/api/task_fofa/test", json={"query": 'domain="x.com"'}))
         self.assertEqual(d["size"], 2)
 
@@ -98,11 +109,14 @@ class TaskCreateEndpointE2E(unittest.TestCase):
 
     # —— /api/task_fofa/submit 解析建任务（同步可用）——
     def test_fofa_submit(self):
+        # 用 title 查询（无 domain= 子句）：按 v1.21.157-42「查询无 domain 子句时不做归属过滤」，
+        # 三行全保留。原测试用 domain="x" 但 host 是 a.com/b.com → 会被 -42 的仿冒域归属过滤滤掉
+        # （root "x" 不匹配 a.com/b.com），只剩纯 IP 行，故旧断言 fofa_size==3 在 -42 后已失效。
         with mock.patch("sentinel_platform.modules.kernel.ext_source.fofa_query",
                         return_value=[["a.com", "1.1.1.1", "80"], ["b.com", "2.2.2.2", "443"], ["", "9.9.9.9", "80"]]):
             d = self._data(self.client.post("/api/task_fofa/submit",
-                                            json={"query": 'domain="x"', "name": "FOFA导入", "policy_id": "p1"}))
-        self.assertEqual(d["fofa_size"], 3)          # a.com/b.com/9.9.9.9
+                                            json={"query": 'title="后台"', "name": "FOFA导入", "policy_id": "p1"}))
+        self.assertEqual(d["fofa_size"], 3)          # a.com/b.com/9.9.9.9（无 domain 子句不过滤）
         self.assertEqual(d["created"], 1)            # FOFA 结果聚合成一个任务，真实目标在 options.fofa_ip
 
     def test_fofa_submit_zero_hit_400(self):

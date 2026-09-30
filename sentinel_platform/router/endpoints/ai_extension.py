@@ -42,6 +42,17 @@ class BuiltinList(Resource):
         return ok(method())
 
 
+@ns.route("/builtin_kernel")
+class BuiltinKernelList(Resource):
+    @ns.doc(security="token", description="需权限 ai_extension:read；内核内置工具（内核扫描用，全局禁用于 AI）")
+    def get(self):
+        tools = get_registry().get("ai_tools_service")
+        if not tools: return err(CODE_ERROR, "AI 工具目录未就绪")
+        method = getattr(tools, "list_kernel_builtin", None)
+        if not method: return ok({"tools": [], "total": 0, "implemented": 0})
+        return ok(method())
+
+
 @ns.route("/categories")
 class Categories(Resource):
     @ns.doc(security="token", description="需权限 ai_extension:read")

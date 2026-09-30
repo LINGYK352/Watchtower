@@ -104,6 +104,26 @@ class ApiKeysTest(unittest.TestCase):
         save_keys({"feishu": {"enabled": False}})
         self.assertEqual(get_key("feishu")["webhook"], "")
 
+    def test_bool_switch_fields_roundtrip_false(self):
+        """需求3 关联修复：bool 开关字段（vuln_feed_notify/proxy_down_notify）存 False 后
+        list_keys 必须原样返 False，绝不被 `or ""` 成空串（否则前端按默认 true 回显→关了又变开）。"""
+        set_repo(_MemRepo())
+        from sentinel_platform.modules.system.api_keys import save_keys, list_keys, get_key
+        save_keys({"feishu": {"webhook": "https://feishu/hook", "enabled": True,
+                              "proxy_down_notify": False, "vuln_feed_notify": False}})
+        feishu = next(i for i in list_keys()["items"] if i["id"] == "feishu")
+        self.assertIs(feishu["proxy_down_notify"], False)
+        self.assertIs(feishu["vuln_feed_notify"], False)
+        # 存 True 也如实返回
+        save_keys({"feishu": {"proxy_down_notify": True, "enabled": True, "webhook": "https://feishu/hook"}})
+        self.assertIs(get_key("feishu")["proxy_down_notify"], True)
+
+    def test_proxy_down_notify_default_true(self):
+        """默认文档 proxy_down_notify 应为 True（默认开启）。"""
+        set_repo(_MemRepo())
+        from sentinel_platform.modules.system.api_keys import _default_doc
+        self.assertIs(_default_doc()["feishu"]["proxy_down_notify"], True)
+
     def test_get_key_unknown(self):
         set_repo(_MemRepo())
         from sentinel_platform.modules.system.api_keys import get_key

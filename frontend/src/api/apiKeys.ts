@@ -20,6 +20,7 @@ export interface ApiKeysResult {
 const base = '/api/api_keys'
 
 export const apiKeysApi = {
+  options: () => request<Pick<ApiKeysResult, 'items'>>(`${base}/options`),
   list: () => request<ApiKeysResult>(`${base}/`),
   save: (data: Record<string, Record<string, unknown>>) =>
     request<ApiKeysResult>(`${base}/`, { method: 'POST', body: JSON.stringify(data) })

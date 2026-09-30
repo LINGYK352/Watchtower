@@ -63,7 +63,8 @@ class TaskList(Resource):
         a = request.args
         r = svc.list_tasks(page=_int(a.get("page"), 1), size=_int(a.get("size"), 10),
                            name=a.get("name") or "", target=a.get("target") or "",
-                           status=a.get("status") or "", task_tag=a.get("task_tag") or "")
+                           status=a.get("status") or "", task_tag=a.get("task_tag") or "",
+                           _id=a.get("_id") or "")   # 详情页按 _id 取单任务（此前被忽略 → 详情拿错任务）
         return env_page(r["items"], r["total"], r["page"], r["size"])
 
 
@@ -78,6 +79,9 @@ class TaskStop(Resource):
         r = svc.stop_task(task_id)
         return err(CODE_BAD_REQUEST, r["error"]) if r.get("error") else ok(r)
 
+    def post(self, task_id):
+        return self.get(task_id)
+
 
 @ns.route("/resume/<string:task_id>")
 class TaskResume(Resource):
@@ -89,6 +93,9 @@ class TaskResume(Resource):
             return err(CODE_ERROR, "任务服务未就绪")
         r = svc.resume_task(task_id)
         return err(CODE_BAD_REQUEST, r["error"]) if r.get("error") else ok(r)
+
+    def post(self, task_id):
+        return self.get(task_id)
 
 
 @ns.route("/restart/")
@@ -126,10 +133,10 @@ class TaskBatchStop(Resource):
 
 @ns.route("/delete/")
 class TaskDelete(Resource):
-    @ns.doc(security="token", description="需权限 task:write（del_task_data=true 级联清结果）")
+    @ns.doc(security="token", description="需权限 task:write（del_task_data=true 级联清结果；del_sessions=true 级联停+删 AI 渗透会话）")
     @ns.expect(_delete_req)
     def post(self):
-        """删除任务（可选级联清结果集合）"""
+        """删除任务（可选级联清结果集合 / 停+删 AI 渗透会话）"""
         svc = _svc()
         if not svc:
             return err(CODE_ERROR, "任务服务未就绪")
@@ -137,7 +144,8 @@ class TaskDelete(Resource):
         ids = body.get("task_id") or []
         if isinstance(ids, str):
             ids = [ids]
-        return ok(svc.delete_tasks(ids, bool(body.get("del_task_data", False))))
+        return ok(svc.delete_tasks(ids, bool(body.get("del_task_data", False)),
+                                   bool(body.get("del_sessions", False))))
 
 
 @ns.route("/orphan_assets")

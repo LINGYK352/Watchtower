@@ -155,16 +155,28 @@ def delete_unit(unit: str) -> Dict[str, Any]:
     deleted: Dict[str, int] = {}
     try:
         repo = get_repo()
-        # session 修 P2-a：原只查 source.unit，但资产 source dict 未必含 unit 键 → 漏删会话孤儿。
-        # 会话顶层 unit 字段可靠(session.py 写入必设)，故 $or 兼顾顶层 unit 与 source.unit。
-        for coll, q in ((C_ASSET, {"unit": unit}), (C_FINDING, {"unit": unit}),
-                        (C_REPORT, {"unit": unit}),
-                        (C_SESSION, {"$or": [{"unit": unit}, {"source.unit": unit}]}),
-                        (C_CLUE, {"unit": unit}), (C_CHAIN, {"unit": unit})):
+        # 删除过滤器必须与列表分桶/详情查询对齐（BUG：幽灵「未知单位」删不掉）：
+        # 列表把 unit 为空/None/缺失的记录分桶成哨兵值「未知单位」(_u)，详情已用 _unit_filter 反解为
+        # 空-unit $or 查询；delete 原来用字面 {"unit":"未知单位"} → 匹配 0 文档 → 幽灵永远删不掉。
+        # 改为一律经 _unit_filter：普通单位=等值，「未知单位」=空-unit $or，三处口径统一。
+        uf = _unit_filter(unit)
+        # session 修 P2-a：资产 source dict 未必含 unit 键 → 漏删会话孤儿。会话顶层 unit 字段可靠
+        # (session.py 写入必设)，故并入 source.unit；未知单位时 source.unit 也要匹配空-unit。
+        if unit == _UNKNOWN:
+            session_q = {"$or": [
+                {"unit": ""}, {"unit": {"$exists": False}}, {"unit": None},
+                {"source.unit": ""}, {"source.unit": {"$exists": False}}, {"source.unit": None},
+            ]}
+        else:
+            session_q = {"$or": [{"unit": unit}, {"source.unit": unit}]}
+        for coll, q in ((C_ASSET, uf), (C_FINDING, uf), (C_REPORT, uf),
+                        (C_SESSION, session_q), (C_CLUE, uf), (C_CHAIN, uf)):
             r = repo.collection(coll).delete_many(q)
             deleted[coll] = getattr(r, "deleted_count", 0)
-        # intel_system.units 移除该单位（系统可能被多单位共享，不删系统本身）
-        repo.collection(C_SYSTEM).update_many({"units": unit}, {"$pull": {"units": unit}})
+        # intel_system.units 移除该单位（系统可能被多单位共享，不删系统本身）；
+        # 未知单位=空-unit 不是 units 数组里的真实成员，无需 $pull（跳过避免误操作）。
+        if unit != _UNKNOWN:
+            repo.collection(C_SYSTEM).update_many({"units": unit}, {"$pull": {"units": unit}})
         logger.info("unit cascade delete: %s -> %s", unit, deleted)
         return {"unit": unit, "deleted": deleted}
     except Exception as e:

@@ -13,35 +13,77 @@ models/context + stdlib。每阶段：工具 `available()` 否则跳过（降级
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict
+import time
+from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from .base import ToolCancelled
 from .context import ReconContext, StageResult, StoppedException, CancelCheck, OnStage
 from .models import DomainRec, IPRec, SiteRec, PortInfo
 from .tools import Subfinder, Massdns, Dnsx, Naabu, NmapService, Httpx, Nuclei, WeakBrute
 from .tools.katana import Katana
 from .native.certfetch import CertFetcher
 from .native.fileleak import FileLeakScanner
+from .native.icmp import IcmpPing
 from .native.vhost import VhostFinder
 from .webinfo import WebInfoHunter
 from .native.screenshot import Screenshot
+from .native.chromium_shot import ChromiumShot
 from .enrich import build_enricher
+
+
+def _pick_screenshotter():
+    """截图引擎选择（问题11）：chromium-first（能渲染 ES6 SPA，phantomjs 老 WebKit 对 SPA 黑屏）→
+    phantomjs 兜底 → 都不可用则各自 available() 返 False，阶段 skip（诚实降级）。
+    构造轻量（不启动浏览器），available() 才做真探测。"""
+    try:
+        cs = ChromiumShot()
+        if cs.available():
+            return cs
+    except Exception:
+        pass
+    return Screenshot()
 
 
 class Tools:
     """工具持有器（懒实例化 + 可注入替身供测试）。每工具一实例，pipeline 各阶段共享。
     `io_concurrency`（>0）随资源水位注入 native IO 工具（fileleak/vhost/certfetch）的并发度，缺省用各自默认。"""
 
-    def __init__(self, io_concurrency: int = 0, **overrides):
+    def __init__(self, io_concurrency: int = 0, cancel_check: "CancelCheck" = None,
+                 resource_gate=None, **overrides):
         self._o = overrides
         self._io = max(0, int(io_concurrency or 0))
+        #: 取消回调：注入每个工具实例，使外部工具（subfinder 等）的阻塞执行能被协作式取消穿透中断
+        #: （根治「工具卡网络→取消到不了阶段边界→任务停不掉」）。None 时工具走原阻塞执行。
+        self._cancel_check = cancel_check
+        #: 资源门（recon_bridge 注入的纯 callable）：内存重工具(截图/nuclei/service)执行前经它申请内存额度、
+        #: 让位 AI（问题11）。注入每个有 resource_gate 属性的工具实例。None 时工具走原无门控执行。
+        self._resource_gate = resource_gate
+
+    def _inject_cancel(self, inst):
+        """给外部工具实例挂 cancel_check（有该属性才挂；native/替身无则跳过）。"""
+        if self._cancel_check is not None and hasattr(inst, "cancel_check"):
+            try:
+                inst.cancel_check = self._cancel_check
+            except Exception:
+                pass
+        return inst
+
+    def _inject_gate(self, inst):
+        """给工具实例挂 resource_gate（有该属性才挂；无则跳过——只有内存重工具声明该属性）。"""
+        if self._resource_gate is not None and hasattr(inst, "resource_gate"):
+            try:
+                inst.resource_gate = self._resource_gate
+            except Exception:
+                pass
+        return inst
 
     def _get(self, key, factory):
         if key in self._o:
             return self._o[key]
         inst = factory()
         self._o[key] = inst
-        return inst
+        return self._inject_gate(self._inject_cancel(inst))
 
     def _get_io(self, key, cls):
         """native IO 工具：水位 >0 则用它作 concurrency，否则用类默认（不注入 = 保持默认）。"""
@@ -49,7 +91,7 @@ class Tools:
             return self._o[key]
         inst = cls(concurrency=self._io) if self._io > 0 else cls()
         self._o[key] = inst
-        return inst
+        return self._inject_gate(self._inject_cancel(inst))
 
     @property
     def subfinder(self): return self._get("subfinder", Subfinder)
@@ -72,13 +114,15 @@ class Tools:
     @property
     def vhost(self): return self._get_io("vhost", VhostFinder)
     @property
+    def icmp(self): return self._get_io("icmp", IcmpPing)
+    @property
     def nuclei(self): return self._get("nuclei", Nuclei)
     @property
     def weakbrute(self): return self._get("weakbrute", WeakBrute)
     @property
     def webinfo(self): return self._get("webinfo", WebInfoHunter)
     @property
-    def screenshot(self): return self._get("screenshot", Screenshot)
+    def screenshot(self): return self._get("screenshot", _pick_screenshotter)
     @property
     def enricher(self): return self._get("enricher", build_enricher)
 
@@ -92,35 +136,78 @@ def _avail(tool) -> bool:
 
 # —— 各阶段（签名统一 (ctx, tools)->StageResult；工具缺失/无输入 skipped）——
 
+def _stage_seed_intake(ctx: ReconContext, t: Tools) -> StageResult:
+    """种子入线（铜钱 gate=always，所有 collect_mode 都跑）：下发目标/反查种子/已知资产无条件入
+    ctx.hosts+domains——它们本身就是确定要处理的资产，绝不能因"跳枚举"被一起丢掉。
+    **根治 single 卡死**：旧 _stage_subdomain 在 collect_mode=single 时直接 return，把这段种子入线也跳了
+    → ctx.hosts 空 → site 阶段 fallback 到 ctx.targets 全量 httpx 探 → 卡死。拆成独立铜钱后 single 也入线。
+    与"枚举扩散"(subfinder/massdns，见 _stage_subdomain)正交：入线是确定资产，枚举是扩散发现。"""
+    roots = ctx.targets
+    if not roots:
+        return StageResult("seed_intake", skipped=True)
+    from .models import DomainRec as _DR
+    added = 0
+    existing = {d.domain for d in ctx.domains}
+    for _root in roots:
+        _r = (_root or "").strip().lower().rstrip(".")
+        if _r and _r not in existing:
+            ctx.domains.append(_DR(domain=_r, record=[], type="SEED", ips=[], source="seed"))
+            existing.add(_r)
+            if _r not in ctx.hosts:
+                ctx.hosts.append(_r)
+            added += 1
+    return StageResult("seed_intake", count=added, skipped=not added)
+
+
 def _stage_subdomain(ctx: ReconContext, t: Tools) -> StageResult:
-    """子域名发现：按 collect_mode 三档分流（对齐策略 policy.collect_mode / 记忆 dengta-v2758 语义）——
-      single       = 只打下发目标，不做子域名枚举（不 subfinder 不 massdns）；
+    """子域名**枚举扩散**（铜钱 gate=collect_mode∈{multi_passive,multi_brute}；single 不串本铜钱）——
       multi_passive= 多源被动枚举（subfinder），不爆破（跳 massdns，省资源/不惊动目标）；
       multi_brute  = 被动枚举 + 字典爆破（subfinder + massdns），默认档，覆盖最全。
-    净室迁移曾丢此分流：collect_mode 存在 policy 却无人消费，三档执行完全一样（single 不跳枚举、
-    passive 照样爆破）。缺省 multi_brute 兼容存量/内部调用。"""
-    collect_mode = (ctx.options.get("collect_mode") or "multi_brute").lower()
-    if collect_mode == "single":
-        return StageResult("subdomain", skipped=True, status="disabled",
-                           reason="collect_mode=single 只打下发目标，不枚举子域名")
+    种子入线已由 _stage_seed_intake（gate=always）负责，本铜钱只做"在种子之上扩散发现新子域名"。
+    net：single→只有种子(seed_intake)；passive→种子+subfinder；brute→种子+subfinder+massdns。"""
     roots = ctx.targets
     scope = set(roots)
     found = {}
-    # **种子域名（下发目标/单位反查种子）无条件先入 found —— 它们本身就是确定要扫的资产，绝不能只留
-    # subfinder 枚举结果而丢掉种子本身**（负优化根因：原来只 found=subfinder结果，种子若没被被动源枚举到
-    # 就整个丢失。实测单位反查 34 域名里 .cn 系列 subfinder 没返回→全丢，只剩 subfinder 枚举到的 12 个 .com。
-    # 种子能解析的后续 resolve 出 IP/建站，解析不出的至少保留 domain 记录，不静默蒸发）。
-    from .models import DomainRec as _DR
-    for _root in roots:
-        _r = (_root or "").strip().lower().rstrip(".")
-        if _r:
-            found[_r] = _DR(domain=_r, record=[], type="SEED", ips=[], source="unit_seed")
+    # 第三方收集源有效判据（FOFA 原生采集 或 subfinder API 增强源有凭据）：非空即有效。
+    # 用户规则：第三方源有效时**不启用 subfinder 公共被动枚举**（跑全部内置默认源，逐域名串行、
+    # 慢且与已知资产重复——卡死元凶，见 §卡死诊断）。第三方源已把资产捞回，只用它们即可；
+    # 只有无任何第三方源时才退回公共枚举兜底（不丢子域发现能力）。
+    _has_third_party = bool(ctx.options.get("_collection_source_credentials")) \
+        or callable(ctx.options.get("_fofa_collector"))
     if _avail(t.subfinder):
-        for r in t.subfinder.enumerate(roots, scope=scope):
-            found[r.domain] = r   # subfinder 枚举结果覆盖/追加（种子若被枚举到则用更全的记录）
-    # 爆破门控（2026-08 两档简化后）：domain_brute=False（前端「不爆破」下拉，policy 归一落盘）时绝不跑 massdns，
-    # 保证"前端选不爆破=后台真不跑"。domain_brute 缺失=兼容旧任务默认爆破。广域目标默认爆破+被动都做。
-    if ctx.options.get("domain_brute", True):
+        if not _has_third_party:
+            # 无第三方源 → subfinder 公共被动枚举兜底
+            for r in t.subfinder.enumerate(roots, scope=scope):
+                found[r.domain] = r
+        else:
+            logging.getLogger(__name__).info(
+                "子域枚举：检测到第三方收集源有效（FOFA/API 源），跳过 subfinder 公共被动枚举"
+                "（省时/避免多域名串行卡死），仅用第三方源")
+        # 策略页勾选的 API 增强源：凭据由 bridge fresh 读后仅在内存注入；subfinder 用临时 0600
+        # provider-config 精确运行这些来源（Hunter 走此路，精准快）。失败只降级增强源。
+        credentials = ctx.options.get("_collection_source_credentials") or {}
+        if credentials and hasattr(t.subfinder, "enumerate_sources"):
+            try:
+                for r in t.subfinder.enumerate_sources(roots, credentials, scope=scope):
+                    found.setdefault(r.domain, r)
+            except ToolCancelled:
+                raise
+            except Exception as exc:
+                logging.getLogger(__name__).warning("配置 API 子域来源降级: %s", exc)
+    # FOFA 使用平台原生 key-only API 客户端（subfinder 的 FOFA 要 email:key，不能破坏存量配置）。
+    fofa_collector = ctx.options.get("_fofa_collector")
+    if callable(fofa_collector):
+        try:
+            for domain in fofa_collector(roots) or []:
+                found.setdefault(domain, DomainRec(domain=domain, record=[], type="SUBDOMAIN",
+                                                     ips=[], source="fofa"))
+        except Exception as exc:
+            logging.getLogger(__name__).warning("FOFA 广域子域来源降级: %s", exc)
+    # 爆破门控（两重）：① collect_mode=multi_passive 明确「只被动不爆破」→ 绝不跑 massdns（不管
+    # domain_brute，语义优先）；② multi_brute 下再看 domain_brute（前端「不爆破」下拉，缺失=兼容旧默认爆破）。
+    _mode = (ctx.options.get("collect_mode") or "multi_brute").lower()
+    _brute_on = (_mode == "multi_brute") and ctx.options.get("domain_brute", True)
+    if _brute_on:
         words = ctx.options.get("brute_words") or []
         resolvers = ctx.options.get("resolvers", "")
         if words and resolvers and _avail(t.massdns):
@@ -129,12 +216,16 @@ def _stage_subdomain(ctx: ReconContext, t: Tools) -> StageResult:
                     found.setdefault(r.domain, r)
     if not found:
         return StageResult("subdomain", skipped=True)
+    existing = {d.domain for d in ctx.domains}
     for d, rec in found.items():
-        ctx.domains.append(rec)
+        if d in existing:                       # 种子已入线的用枚举到的更全记录覆盖
+            ctx.domains = [rec if x.domain == d else x for x in ctx.domains]
+        else:
+            ctx.domains.append(rec)
         if d not in ctx.hosts:
             ctx.hosts.append(d)
     dropped = _apply_blacklist_domains(ctx)   # 数据卫生：滤 WAF/CDN 泛域名/黑产（默认开可关）
-    return StageResult("subdomain", count=len(ctx.hosts),
+    return StageResult("subdomain", count=len(found),
                        reason=("黑名单滤除 {} 域名".format(dropped) if dropped else ""))
 
 
@@ -153,6 +244,32 @@ def _stage_resolve(ctx: ReconContext, t: Tools) -> StageResult:
         byd[r.domain] = r                       # 解析结果覆盖被动枚举的空壳
     ctx.domains = list(byd.values())
     return StageResult("resolve", count=len(recs))
+
+
+def _stage_resolve_ip_seed(ctx: ReconContext, t: Tools) -> StageResult:
+    """域名任务：把 resolve 解析出的公网 IP 保底灌进 ctx.ips（问题5 修复，不受 port_scan 门控）。
+    **负优化根因**：_stage_resolve 只把 IP 存进 ctx.domains[].ips（域名档），从不进 ctx.ips；而 ctx.ips
+    才是落 ip 集合/算 ip_cnt 的来源。port_scan=false 时 portscan disabled → 域名解析出的 IP 蒸发
+    （domain.ips 有值但 ip_cnt=0）。此阶段无条件把解析 IP 入 ctx.ips（公网+去重），不扫端口也显示 IP。"""
+    if ctx.task_type != "domain":
+        return StageResult("resolve_ip_seed", skipped=True)
+    import ipaddress
+    existing = {getattr(r, "ip", "") for r in ctx.ips}
+    added = 0
+    for d in (ctx.domains or []):
+        for ip in (getattr(d, "ips", None) or []):
+            ip = (ip or "").strip()
+            try:
+                v = ipaddress.ip_address(ip)
+                if v.is_private or v.is_loopback or v.is_reserved or v.is_link_local or v.is_multicast:
+                    continue
+            except (ValueError, TypeError):
+                continue
+            if ip and ip not in existing:
+                ctx.ips.append(IPRec(ip=ip))
+                existing.add(ip)
+                added += 1
+    return StageResult("resolve_ip_seed", count=added, skipped=not added)
 
 
 def _stage_ip_seed(ctx: ReconContext, t: Tools) -> StageResult:
@@ -213,8 +330,29 @@ def _stage_cert(ctx: ReconContext, t: Tools) -> StageResult:
     return StageResult("cert", count=len(recs), skipped=not recs)
 
 
+def _stage_icmp(ctx: ReconContext, t: Tools) -> StageResult:
+    """主机存活探测（native ICMP echo + TCP 降级）：对 hosts + ips 探活，产 AliveRec 存 ctx.alives。
+    低危读探测（不改目标）；worker 有 NET_RAW 走 ICMP，无则降级 TCP。供主机/混合入口任务补充存活事实。"""
+    targets = list(ctx.hosts)
+    for ipr in ctx.ips:
+        ip = getattr(ipr, "ip", "")
+        if ip:
+            targets.append(ip)
+    if not targets:
+        targets = list(ctx.targets)
+    if not targets or not _avail(t.icmp):
+        return StageResult("icmp", skipped=True)
+    recs = t.icmp.ping(targets)
+    ctx.alives.extend(recs)
+    alive_n = sum(1 for r in recs if getattr(r, "alive", False))
+    return StageResult("icmp", count=alive_n, skipped=not recs,
+                       reason="探活 {} 台存活/{} 台".format(alive_n, len(recs)) if recs else "")
+
+
 def _stage_site(ctx: ReconContext, t: Tools) -> StageResult:
-    """站点探测 + 指纹：httpx 对 hosts + ip:port 探测存活站点。"""
+    """站点探测 + 指纹：httpx 对 hosts + ip:port 探测存活站点。
+    **分批探测**（防批量卡死）：目标切块逐批 probe，一批卡在慢目标不拖垮全部；配合 base.run 的
+    cancel_check 穿透（httpx 子进程收到停止即被杀）。批大小随 io_concurrency，单批内 httpx 自身并发。"""
     targets = list(ctx.hosts)
     for ipr in ctx.ips:
         ip = getattr(ipr, "ip", "")
@@ -226,11 +364,70 @@ def _stage_site(ctx: ReconContext, t: Tools) -> StageResult:
         targets = list(ctx.targets)
     if not targets or not _avail(t.httpx):
         return StageResult("site", skipped=True)
-    recs = t.httpx.probe(targets, concurrency=ctx.io_concurrency(100))
-    ctx.sites.extend(recs)
-    dropped = _apply_blacklist_sites(ctx)     # 数据卫生：滤黑名单站点（默认开可关）
-    return StageResult("site", count=len(ctx.sites), skipped=not ctx.sites,
-                       reason=("黑名单滤除 {} 站点".format(dropped) if dropped else ""))
+    conc = ctx.io_concurrency(100)
+    # 批大小 = 并发的若干倍（给 httpx 一批内充分并发），且设下限防批太小、不设死上限（禁硬 cap）。
+    batch = max(conc * 2, 50)
+    total_new = 0
+    dropped = 0
+    bl_on = ctx.options.get("blacklist_filter", True)
+    seen_sites = {site.url for site in ctx.sites}
+
+    def _accept_site(record):
+        nonlocal total_new, dropped
+        kept = _filter_site_batch([record]) if bl_on else [record]
+        if not kept:
+            dropped += 1
+            return
+        if record.url in seen_sites:
+            return
+        seen_sites.add(record.url)
+        ctx.sites.append(record)
+        total_new += 1
+        ctx.emit_batch("site")
+
+    probe_failed = 0
+    for i in range(0, len(targets), batch):
+        chunk = targets[i:i + batch]
+        # 网络瞬时失败(ToolFailed)不该中止整个 site 阶段丢掉剩余目标(源查询在网络不稳时"只派发部分"的根因)：
+        # 本批最多重试 3 次(退避)，全失败才计数、跳过本批、继续后续批——剩余目标仍能探通→落库→派发。
+        recs = None
+        for attempt in range(3):
+            try:
+                if callable(getattr(t.httpx, "probe_stream", None)):
+                    t.httpx.probe_stream(chunk, on_record=_accept_site, concurrency=conc)
+                    recs = []            # 流式经 _accept_site 已入列(seen_sites 去重)，无返回列表
+                else:
+                    recs = t.httpx.probe(chunk, concurrency=conc)
+                break
+            except Exception as exc:
+                if attempt < 2:
+                    logging.getLogger(__name__).warning(
+                        "site 探测批次失败(第 %d/3 次，%ds 后重试): %s", attempt + 1, 2 * (attempt + 1), str(exc)[:150])
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                probe_failed += len(chunk)
+                logging.getLogger(__name__).warning(
+                    "site 探测批次重试 3 次仍失败，跳过本批 %d 目标(继续后续批): %s", len(chunk), str(exc)[:150])
+        if recs is None:                 # 3 次全失败 → 跳过本批
+            continue
+        if not recs:                     # 流式路径(recs=[]) 或本批无结果
+            continue
+        # AUD-15：黑名单在**本批 emit 前**过滤——黑名单站点从不进 ctx.sites、不落库、不派发。
+        # 修复前是全部批次探完+落库+派发后才 _apply_blacklist_sites(只改内存列表，已落库/已派发的收不回)。
+        if bl_on:
+            before = len(recs)
+            recs = _filter_site_batch(recs)
+            dropped += before - len(recs)
+            if not recs:
+                continue
+        ctx.sites.extend(recs)
+        total_new += len(recs)
+        # 目标级流式：本批（已过滤）站点探通即触发增量落库+归集派发（不等全探完；幂等不重派）。
+        ctx.emit_batch("site")
+    reason = "黑名单滤除 {} 站点".format(dropped) if dropped else ""
+    if probe_failed:
+        reason = (reason + "；" if reason else "") + "网络失败跳过 {} 目标(未探测)".format(probe_failed)
+    return StageResult("site", count=len(ctx.sites), skipped=not ctx.sites, reason=reason)
 
 
 def _stage_enrich(ctx: ReconContext, t: Tools) -> StageResult:
@@ -327,6 +524,11 @@ def _stage_service(ctx: ReconContext, t: Tools) -> StageResult:
         if not ip or not pids:
             continue
         detected = t.nmap.detect(ip, pids)
+        # AUD-11：资源门超时降级 → 本阶段"根本没执行"，返回非终态 deferred_resource（不进 done_steps），
+        # 恢复资源后重投会重跑，不把资源不足误报成"执行了无发现"（completed_empty 终态跳过续扫）。
+        if isinstance(detected, dict) and detected.get("__degraded__"):
+            return StageResult("service", count=0, ok=True, status="deferred_resource",
+                               reason="资源门超时，服务识别未执行，待资源恢复后重扫")
         for p in pinfos:
             pid = p.get("port_id") if isinstance(p, dict) else getattr(p, "port_id", None)
             d = detected.get(pid)
@@ -373,33 +575,126 @@ def _stage_poc(ctx: ReconContext, t: Tools) -> StageResult:
     return StageResult("poc", count=len(recs), skipped=not recs)
 
 
-def _domain_stages() -> List:
-    """域名任务阶段列表（子域名→解析→端口→证书→站点→爬取→泄漏→vhost→服务→弱口令→漏扫）。"""
-    return [_stage_subdomain, _stage_resolve, _stage_portscan, _stage_cert, _stage_site,
-            _stage_enrich, _stage_screenshot, _stage_webinfo, _stage_crawl, _stage_fileleak,
-            _stage_vhost, _stage_service, _stage_weakbrute, _stage_poc]
+# ══════════════════════════════════════════════════════════════════════════════
+# 铜钱串线（§十二）：每个能力=一枚铜钱 StageSpec，策略勾选→gate 决定串不串。
+# 组装器 assemble_stages 按 gate 过滤 + 按 requires 拓扑排序，替代固定 _domain_stages/_ip_stages
+# 与散落门控 _STAGE_OPTION/_stage_policy。加能力=加一枚 StageSpec，不动组装器/别的铜钱。
+# ══════════════════════════════════════════════════════════════════════════════
+
+# gate 辅助：策略开关型（缺失=默认跑，兼容旧任务；显式 False 才 off——对齐旧 _STAGE_OPTION 语义）
+def _opt_on(key: str):
+    def g(ctx: "ReconContext"):
+        v = ctx.options.get(key, True)          # 缺失默认 True（旧任务/内部调用兼容）
+        return (True, "") if bool(v) else (False, "policy {} disabled".format(key))
+    return g
 
 
-def _ip_stages() -> List:
-    """IP 任务阶段列表（省"子域名/解析",IP种子保底入库→端口→…）。
-    _stage_ip_seed 打头：IP 种子无条件入 ctx.ips(内置必跑,不受 port_scan 门控)，防 portscan 关时 IP 全丢。"""
-    return [_stage_ip_seed, _stage_portscan, _stage_cert, _stage_site, _stage_enrich, _stage_screenshot,
-            _stage_webinfo, _stage_crawl, _stage_fileleak, _stage_vhost, _stage_service,
-            _stage_weakbrute, _stage_poc]
+def _collect_enum_on(ctx: "ReconContext"):
+    """子域名枚举扩散：collect_mode∈{multi_passive,multi_brute} 才串；single 不串（只入种子）。"""
+    mode = (ctx.options.get("collect_mode") or "multi_brute").lower()
+    return (True, "") if mode in ("multi_passive", "multi_brute") else (False, "collect_mode=single 不枚举子域名")
 
 
-# 策略展开后为扁平 options。字段缺失表示旧任务/内部调用，保持兼容执行；显式 False 才关闭。
-# 策略开关 → 阶段门控映射。**site 站点探测阶段刻意不在此**：站点探测(httpx 探活+基础指纹)是
-# 内置必跑能力（对齐 ARL 原版 run()：fetch_site 无条件调用，只有 site_identify 指纹层受开关控）。
-# 净室曾误把 site 探测绑死在 site_identify 上 → 关掉"站点识别"连站点都不发现 → site 集合空 →
-# 归集 0 资产 → AI 渗透无目标（实测单位名任务 domain=12/resolve=11 却 site=0 asset=0 的直接原因）。
-# httpx 已带 -tech-detect 一次性出指纹随 site 落库给 AI，ARL 的 web_analyze 额外指纹层净室未迁移，
-# 故 site_identify 当前无独立执行体（保留字段兼容前端/schema，未来迁 web_analyze 补充指纹层再挂）。
-_STAGE_OPTION = {
-    "portscan": "port_scan", "cert": "ssl_cert",
-    "screenshot": "site_capture", "webinfo": "web_info_hunter", "crawl": "site_spider",
-    "fileleak": "file_leak", "service": "service_detection", "poc": "nuclei_scan",
-}
+def _weakbrute_on(ctx: "ReconContext"):
+    if "brute_config" in ctx.options and not (ctx.options.get("brute_config") or []):
+        return (False, "brute_config empty")
+    return (True, "")
+
+
+def _disabled_active_scan(ctx: "ReconContext"):
+    """全局禁用主动扫描（用户明令 2026-08-28）：poc(nuclei)/weakbrute 铜钱无论策略是否勾选都不串。
+    nuclei 类主动漏扫/弱口令爆破极易触发目标防火墙记录、IP 封禁，全局禁绝。AI 工具层同步全局禁
+    （_tools._ACTIVE_SCAN_TOOLS），底层 recon_bridge 三方法加硬保险。将来恢复：把下方 STAGE_SPECS
+    里 poc/weakbrute 的 gate 换回 _opt_on("nuclei_scan")/_weakbrute_on 即可（原 gate 函数保留未删）。"""
+    return (False, "主动扫描已全局禁用（易触发防火墙/封IP，用户明令）")
+
+
+def _always(ctx: "ReconContext"):
+    return (True, "")
+
+
+def _icmp_on(ctx: "ReconContext"):
+    """ICMP 主机存活探测串线条件：仅按显式策略开关 icmp_ping 判（勾了才探）；缺省不探（保守，不改旧任务行为）。"""
+    v = ctx.options.get("icmp_ping")
+    return (True, "") if bool(v) else (False, "policy icmp_ping disabled")
+
+
+@dataclass
+class StageSpec:
+    """一枚铜钱：name 唯一名、run 执行体(签名不变 (ctx,t)->StageResult)、requires 依赖前序铜钱、
+    gate 串线条件(返回 (on:bool, reason))、applies 适用任务类型(domain/ip/both)。"""
+    name: str
+    run: Callable[["ReconContext", "Tools"], StageResult]
+    requires: tuple = ()
+    gate: Callable[["ReconContext"], tuple] = _always
+    applies: str = "both"          # domain / ip / both
+
+
+# 铜钱注册表（声明顺序 = 同依赖层的稳定序，与旧固定列表一致）。gate 默认态精确对齐旧 _STAGE_OPTION：
+# portscan/cert/... 缺失开关=跑（兼容旧任务），显式 false 才 off。唯一行为变更=single 修正(种子入线)。
+STAGE_SPECS: List[StageSpec] = [
+    StageSpec("seed_intake", _stage_seed_intake, (), _always, "domain"),          # 域名种子入线(single也跑)
+    StageSpec("subdomain", _stage_subdomain, ("seed_intake",), _collect_enum_on, "domain"),
+    StageSpec("resolve", _stage_resolve, ("seed_intake",), _always, "domain"),     # 有域名才有产出(自然skip)
+    StageSpec("resolve_ip_seed", _stage_resolve_ip_seed, ("resolve",), _always, "domain"),  # 解析IP保底入线(问题5:不扫端口也显示IP)
+    StageSpec("ip_seed", _stage_ip_seed, (), _always, "ip"),                       # IP种子入线
+    StageSpec("icmp", _stage_icmp, ("seed_intake", "ip_seed"), _icmp_on),           # 主机存活探测(host/hybrid入口)
+    StageSpec("portscan", _stage_portscan, (), _opt_on("port_scan")),
+    StageSpec("cert", _stage_cert, ("portscan",), _opt_on("ssl_cert")),
+    StageSpec("site", _stage_site, ("resolve", "resolve_ip_seed", "portscan", "ip_seed", "seed_intake"), _always),  # 默认串(归集入口)
+    StageSpec("enrich", _stage_enrich, ("site",), _always),                        # 零外呼富化
+    StageSpec("screenshot", _stage_screenshot, ("site",), _opt_on("site_capture")),
+    StageSpec("webinfo", _stage_webinfo, ("site",), _opt_on("web_info_hunter")),
+    StageSpec("crawl", _stage_crawl, ("site",), _opt_on("site_spider")),
+    StageSpec("fileleak", _stage_fileleak, ("site",), _opt_on("file_leak")),
+    StageSpec("vhost", _stage_vhost, ("site",), _opt_on("findvhost")),
+    StageSpec("service", _stage_service, ("portscan",), _opt_on("service_detection")),
+    StageSpec("weakbrute", _stage_weakbrute, ("service",), _disabled_active_scan),  # 全局禁(原 _weakbrute_on)
+    StageSpec("poc", _stage_poc, ("site",), _disabled_active_scan),                 # 全局禁(原 _opt_on("nuclei_scan"))
+]
+
+_SPEC_BY_NAME = {s.name: s for s in STAGE_SPECS}
+
+
+def assemble_stages(ctx: "ReconContext") -> tuple:
+    """按 task_type 适用性 + gate 过滤出「串上的铜钱」，再按 requires 稳定拓扑排序。
+    返回 (selected_specs, disabled)：selected 进执行链；disabled=[(name,reason)] 供 summary 记 disabled
+    （前端可见性：gate=off 的阶段仍显示"跳过"，不静默消失）。"""
+    ttype = ctx.task_type or "domain"
+    all_names = [spec.name for spec in STAGE_SPECS]
+    if len(set(all_names)) != len(all_names):
+        raise ValueError("铜钱注册表存在重复阶段名")
+    for spec in STAGE_SPECS:
+        if any(name not in all_names for name in spec.requires):
+            raise ValueError("铜钱 {} 声明了不存在的依赖".format(spec.name))
+    selected, disabled = [], []
+    for spec in STAGE_SPECS:
+        if spec.applies not in ("both", ttype):
+            continue                              # 不适用当前任务类型（如 ip 任务不串 subdomain）
+        on, reason = spec.gate(ctx)
+        if on:
+            selected.append(spec)
+        else:
+            disabled.append((spec.name, reason))
+    # 稳定拓扑排序：按声明顺序遍历，依赖未满足的往后推（依赖已被 gate 滤掉的忽略——不阻塞）
+    ordered, placed = [], set()
+    pool = list(selected)
+    sel_names = {s.name for s in selected}
+    guard = 0
+    while pool and guard <= len(selected):
+        guard += 1
+        progressed = False
+        rest = []
+        for spec in pool:
+            deps = [d for d in spec.requires if d in sel_names]   # 只等仍在选中集里的依赖
+            if all(d in placed for d in deps):
+                ordered.append(spec); placed.add(spec.name); progressed = True
+            else:
+                rest.append(spec)
+        pool = rest
+        if not progressed:
+            raise ValueError("铜钱依赖存在环：{}".format(", ".join(spec.name for spec in pool)))
+    return ordered, disabled
 
 
 def _apply_blacklist_domains(ctx: ReconContext) -> int:
@@ -413,27 +708,16 @@ def _apply_blacklist_domains(ctx: ReconContext) -> int:
         return 0
 
 
-def _apply_blacklist_sites(ctx: ReconContext) -> int:
-    """滤黑名单站点（策略 blacklist_filter 默认开；关则跳过）。缺模块/异常降级不阻断。"""
-    if not ctx.options.get("blacklist_filter", True):
-        return 0
+def _filter_site_batch(recs: list) -> list:
+    """滤本批黑名单站点（AUD-15：落库/派发前过滤）。缺模块/异常降级=不过滤（返回原批，不阻断探测）。"""
     try:
         from . import blacklist
-        return blacklist.filter_sites(ctx)
+        return blacklist.filter_site_batch(recs)
     except Exception:
-        return 0
+        return recs
 
 
-def _stage_policy(ctx: ReconContext, stage_name: str) -> Optional[StageResult]:
-    """策略已关闭时返回终态，确保对应目标请求不会发生。"""
-    key = _STAGE_OPTION.get(stage_name)
-    if key and key in ctx.options and not bool(ctx.options.get(key)):
-        return StageResult(stage_name, skipped=True, status="disabled",
-                           reason="policy option {} disabled".format(key))
-    if stage_name == "weakbrute" and "brute_config" in ctx.options and not (ctx.options.get("brute_config") or []):
-        return StageResult(stage_name, skipped=True, status="disabled",
-                           reason="policy brute_config empty")
-    return None
+# _stage_policy 已被铜钱 gate 取代（组装期决定串不串，见 assemble_stages/STAGE_SPECS）。
 
 
 class Pipeline:
@@ -444,11 +728,13 @@ class Pipeline:
     **流式回调**：每阶段完成后调 on_stage(ctx, stage_name)——供 bridge 增量落库 + 边探边派渗透。"""
 
     def __init__(self, stages: List, cancel_check: CancelCheck = None, on_stage: OnStage = None,
-                 budget_provider: Optional[Callable[[], Dict[str, Any]]] = None):
+                 budget_provider: Optional[Callable[[], Dict[str, Any]]] = None,
+                 resource_gate=None):
         self.stages = stages
         self.cancel_check = cancel_check
         self.on_stage = on_stage
         self.budget_provider = budget_provider
+        self.resource_gate = resource_gate
 
     def _check_cancel(self, stage_name: str) -> None:
         if self.cancel_check:
@@ -460,20 +746,20 @@ class Pipeline:
                 raise StoppedException("pipeline stopped before stage {}".format(stage_name))
 
     def run(self, ctx: ReconContext, tools: Tools) -> ReconContext:
+        # 批级流式：把 on_stage 注入 ctx.on_batch，供 site 阶段每批探通即触发增量落库+派发
+        # （目标级流式——一批站点探通就派 AI，不等整阶段所有目标探完；幂等派发保证不重派）。
+        if self.on_stage:
+            ctx.on_batch = self.on_stage
+        if self.resource_gate is not None:      # 资源门也暴露到 ctx，供阶段函数直接取用（问题11）
+            ctx.resource_gate = self.resource_gate
+        # self.stages 现为已组装的 StageSpec 列表（gate 已在组装期过滤，进这里的都是该串的铜钱）。
+        # 兼容：也接受裸函数（旧调用/测试），此时用函数名。
         for stage in self.stages:
-            name = getattr(stage, "__name__", "stage").replace("_stage_", "")
+            run_fn = getattr(stage, "run", stage)
+            name = getattr(stage, "name", None) or getattr(stage, "__name__", "stage").replace("_stage_", "")
             if ctx.is_done(name):                    # 断点续扫：已完成阶段跳过不重扫
                 continue
             self._check_cancel(name)                # 阶段边界协作式取消
-            policy_result = _stage_policy(ctx, name)
-            if policy_result is not None:
-                ctx.add_result(policy_result)
-                if self.on_stage:
-                    try:
-                        self.on_stage(ctx, name)
-                    except Exception as exc:
-                        logging.getLogger(__name__).warning("on_stage callback failed [%s]: %s", name, exc)
-                continue
             if self.budget_provider:
                 try:
                     budget = self.budget_provider() or {}
@@ -485,9 +771,12 @@ class Pipeline:
                 except Exception:
                     pass
             try:
-                r = stage(ctx, tools)
+                r = run_fn(ctx, tools)
             except StoppedException:
                 raise                                # 取消直接上抛，不当失败
+            except ToolCancelled as exc:
+                # 外部工具执行中被协作式取消穿透中断（子进程已杀）→ 转停止上抛，不当 stage 失败
+                raise StoppedException("pipeline stopped in stage {} ({})".format(name, exc)) from exc
             except Exception as exc:
                 r = StageResult(name, ok=False, error=str(exc)[:300])
             ctx.add_result(r)
@@ -549,7 +838,8 @@ def run_pipeline(task_id: str, task_type: str, target: Any, options: Optional[Di
                  tools: Optional[Tools] = None, cancel_check: CancelCheck = None,
                  on_stage: OnStage = None, done_steps: Optional[List[str]] = None,
                  budget_provider: Optional[Callable[[], Dict[str, Any]]] = None,
-                 initial_records: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                 initial_records: Optional[Dict[str, Any]] = None,
+                 resource_gate=None) -> Dict[str, Any]:
     """侦察入口：建 ReconContext → 选 domain/ip 阶段列表 → Pipeline.run → 返回摘要 dict。
 
     返回 {result: done|stopped|error, task_id, task_type, stages, skipped, counts, records, error}。
@@ -563,14 +853,21 @@ def run_pipeline(task_id: str, task_type: str, target: Any, options: Optional[Di
                        done_steps=list(done_steps or []))
     if initial_records:
         _restore_context(ctx, initial_records)
-    stages = _ip_stages() if ctx.task_type == "ip" else _domain_stages()
+    # 铜钱串线：按策略 gate 组装出本次要串的铜钱（+ 拓扑排序），替代固定 _domain_stages/_ip_stages。
+    stages, disabled = assemble_stages(ctx)
+    # gate=off 的铜钱记进 ctx（前端可见性：策略未勾的阶段显示"跳过"，不静默消失）。
+    for _name, _reason in disabled:
+        ctx.add_result(StageResult(_name, skipped=True, status="disabled", reason=_reason))
     pl = Pipeline(stages, cancel_check=cancel_check, on_stage=on_stage,
-                  budget_provider=budget_provider)
+                  budget_provider=budget_provider, resource_gate=resource_gate)
     out: Dict[str, Any] = {"result": "done", "task_id": task_id, "task_type": ctx.task_type,
                            "stages": [], "skipped": [], "counts": {}, "stage_status": {},
                            "records": {}, "error": None}
     try:
-        pl.run(ctx, tools or Tools(io_concurrency=ctx.io_concurrency(0)))
+        # 建默认 Tools 时注入 cancel_check：使外部工具阻塞执行能被协作式取消穿透中断
+        # （传入的 tools 若已构造则沿用其自身 cancel_check 配置，不覆盖）。
+        pl.run(ctx, tools or Tools(io_concurrency=ctx.io_concurrency(0),
+                                   cancel_check=cancel_check, resource_gate=resource_gate))
     except StoppedException as e:
         out["result"] = "stopped"
         out["error"] = str(e)

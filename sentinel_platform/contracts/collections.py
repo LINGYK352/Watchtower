@@ -29,7 +29,9 @@ class Collections:
     INTEL_ASSET = "intel_asset"
     INTEL_SYSTEM = "intel_system"
     INTEL_CODE = "intel_code"
-    INTEL_REPORT = "intel_report"
+    INTEL_REPORT = "intel_report"          # AI 情报报告（会话收尾自动产，供 AI「往期借鉴」，勿当人看成品）
+    PENTEST_REPORT = "pentest_report"      # 人看成品报告（报告编辑处人工生成/编辑，与 intel_report 物理隔离）
+    REPORT_TEMPLATE = "report_template"    # 报告模板学习：原 docx 注入占位符后的可复用模板 + AI 学出的 schema
     INTEL_FINDING = "intel_finding"
     INTEL_ATTACK_CHAIN = "intel_attack_chain"
     INTEL_EXPLOIT_CLUE = "intel_exploit_clue"
@@ -44,6 +46,14 @@ class Collections:
     AI_EXTENSION_LOG = "ai_extension_log"
     PENTEST_SESSION = "intel_pentest_session"
     PENTEST_WHITELIST = "pentest_whitelist"
+    TASK_DEDUP = "task_dedup"              # 任务级派发去重表（每任务独立，(source_task_id,dedup_key) 唯一，
+                                          # 持久增量去重替代临时 seen；跨任务隔离防误去重，删任务连带清）
+    FINDING_IDENTITY = "finding_identity"  # vuln_center owns: 漏洞点首次观察锚，_id=point_key 原子唯一
+    # 蜜罐防御
+    ATTACK_ALERT = "attack_alert"          # 攻击告警（防御型蜜罐检测到的攻击记录，v1.21.160 新增）
+    ATTACKER_PROFILE = "attacker_profile"  # 攻击者画像（按 IP 聚合的攻击者信息，v1.21.160 新增）
+    ATTACK_BANLIST = "attack_alert_banlist"      # IP 封禁名单（auto/manual，带 expire_at）
+    ATTACK_WHITELIST = "attack_alert_whitelist"  # IP 白名单（用户维护，白名单内不检测/不封禁）
     # 代理
     PROXY_CONFIG = "proxy_config"          # 代理中心配置(mihomo 端口/模式/健康检测阈值等)——2026-07-05 追加(system/proxy 迁移补齐)
     PROXY_PROFILES = "proxy_profiles"      # 订阅/上传的机场配置档——2026-07-05 追加
@@ -80,8 +90,15 @@ class Collections:
     POLICY = "policy"
     SCHEDULER = "scheduler"
     ICP_CACHE = "icp_cache"
+    BROKER_HEALTH = "broker_health"         # celery broker 降级状态单文档(name=default)：mode=celery/thread + 失败计数 + 切换时间
     # 探针管理
     PROBE_CONFIG = "probe_config"
     AGENT_CONFIG = "agent_config"
     # 小程序渗透（解包记录：wxid/name/接口/密钥/解包时间/结果摘要）
     MINIAPP = "miniapp"
+    # APP 动态渗透（移动 DAST，见 云端/docs/App渗透子系统设计.md）
+    APP_DEVICE = "app_device"      # 光纤/设备注册（device_id/在线心跳/握手态/能力清单，共用平台 platform_key）
+    APP_CMD = "app_cmd"            # 光纤命令队列（含结果内联：op/args/status pending→dispatched→done/result）
+    APP_TRAFFIC = "app_traffic"    # App 抓包 flow（P2 抓包层用，capped/TTL 防膨胀）
+    # 工具资源管理（L3 令牌层：浏览器等有限资源的会话级占用）
+    TOOL_RESOURCES = "tool_resources"

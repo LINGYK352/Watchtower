@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 平台安全问题
+    url: https://github.com/LINGYK352/Watchtower/blob/main/SECURITY.md
+    about: 涉及漏洞或敏感信息时，请使用私下报告渠道
+  - name: 官方网站
+    url: https://watchtowers.info/
+    about: 查看产品介绍和部署入口

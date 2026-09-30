@@ -26,6 +26,10 @@ class NmapService:
         self.timeout = timeout
         # 0-9，越低越快；默认 2（够识别常见服务，省时）。可配非硬上限。
         self.version_intensity = version_intensity
+        #: 资源门（pipeline 经 Tools 注入 / None）：nmap -sV 吃内存 → 执行前申请、让位 AI（问题11）。
+        self.resource_gate = None
+        #: 取消回调（Tools 注入 / None）。
+        self.cancel_check = None
 
     def locate(self) -> str:
         if self._path:
@@ -46,12 +50,25 @@ class NmapService:
         argv = [binary, "-sV", "-Pn", "-T4",
                 "--version-intensity", str(self.version_intensity),
                 "-p", port_arg, "-oG", "-", str(ip)]
-        try:
-            proc = subprocess.run(argv, capture_output=True, text=True,
-                                  timeout=self.timeout, encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            return {}
-        return self.parse(proc.stdout or "")
+
+        def _run():
+            try:
+                proc = subprocess.run(argv, capture_output=True, text=True,
+                                      timeout=self.timeout, encoding="utf-8", errors="replace")
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                return {}
+            return self.parse(proc.stdout or "")
+
+        # 资源门（问题11）：注入了 gate 则申请内存、让位 AI；超时诚实降级。
+        # AUD-11：降级时返回带 __degraded__ 标记的 dict（而非空 {}），让 _stage_service 能区分
+        # "资源不足未执行"(应 deferred_resource 重投) 与 "执行了无发现"(completed_empty 终态)。
+        gate = getattr(self, "resource_gate", None)
+        if gate is not None:
+            with gate("recon_nmap_service") as h:
+                if getattr(h, "degraded", False):
+                    return {"__degraded__": True}
+                return _run()
+        return _run()
 
     @staticmethod
     def parse(output: str) -> Dict[int, PortInfo]:

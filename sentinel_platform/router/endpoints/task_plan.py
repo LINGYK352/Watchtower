@@ -43,6 +43,7 @@ def _ts_svc():
 
 _list_parser = ns.parser()
 _list_parser.add_argument("name", type=str, location="args", help="策略名(模糊)")
+_list_parser.add_argument("_id", type=str, location="args", help="策略 _id(精确，编辑页加载用)")
 _list_parser.add_argument("page", type=int, location="args", help="页码, 默认1")
 _list_parser.add_argument("size", type=int, location="args", help="每页条数, 默认10（无硬上限，传多大返多少）")
 
@@ -66,7 +67,8 @@ class PolicyList(Resource):
             size = int(a.get("size") or 10)
         except (TypeError, ValueError):
             page, size = 1, 10
-        return ok(svc.list_policies(name=a.get("name") or None, page=page, size=size))
+        return ok(svc.list_policies(name=a.get("name") or None, page=page, size=size,
+                                    _id=a.get("_id") or None))
 
 
 @ns.route("/add/")

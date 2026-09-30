@@ -1,0 +1,48 @@
+name: 问题反馈
+description: 提交可复现的程序问题
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        平台漏洞、密钥泄露或敏感数据问题请按 SECURITY.md 私下联系。
+        请勿上传真实目标资料、Cookie、密码或激活凭证。
+  - type: input
+    id: version
+    attributes:
+      label: 软件版本
+      placeholder: 例如 v1.21.xxx 或具体提交编号
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      description: 系统、部署方式、浏览器及与问题有关的组件版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 最小复现步骤
+      description: 使用自建示例数据描述操作过程
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 预期结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏日志或截图
+      description: 仅提供定位所需的内容，不要上传完整运行目录
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已检查内容，不含密码、密钥、个人信息或无权公开的目标数据
+          required: true

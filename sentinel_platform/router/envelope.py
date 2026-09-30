@@ -14,6 +14,7 @@ from typing import Any, Dict, Tuple
 CODE_OK = 200
 CODE_BAD_REQUEST = 400
 CODE_UNAUTHORIZED = 401
+CODE_ACTIVATION_REQUIRED = 402   # 系统未激活/激活已过期：核心业务端点被网关硬拦（区别于 401 登录失效）
 CODE_FORBIDDEN = 403
 CODE_NOT_FOUND = 404
 CODE_ERROR = 500
@@ -22,6 +23,7 @@ _DEFAULT_MSG = {
     CODE_OK: "ok",
     CODE_BAD_REQUEST: "请求参数错误",
     CODE_UNAUTHORIZED: "未认证或登录失效",
+    CODE_ACTIVATION_REQUIRED: "系统未激活或激活已过期，请先激活后再使用该功能",
     CODE_FORBIDDEN: "无权限执行此操作",
     CODE_NOT_FOUND: "资源不存在",
     CODE_ERROR: "服务端异常",

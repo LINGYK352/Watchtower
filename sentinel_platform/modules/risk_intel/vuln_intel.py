@@ -26,37 +26,8 @@ logger = get_logger()
 SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0, "unknown": 0}
 
 # 组件中英别名表：解决 AI 中文组件名 ↔ CVE/nuclei 英文产品名命名鸿沟。
-# 每组互为别名，查任一个自动扩展到全组。常见国产 OA/中间件/厂商优先。
-COMPONENT_ALIASES = [
-    ["致远", "致远oa", "seeyon"],
-    ["泛微", "泛微oa", "weaver", "ecology", "e-cology", "eoffice", "e-office"],
-    ["通达", "通达oa", "tongda"],
-    ["用友", "用友nc", "yonyou", "yonyounc", "nc-cloud", "u8"],
-    ["金蝶", "kingdee", "eas"],
-    ["蓝凌", "蓝凌oa", "landray"],
-    ["金和", "金和oa", "jinher", "c6"],
-    ["红帆", "红帆oa", "ioffice"],
-    ["万户", "万户oa", "wanhu", "whir"],
-    ["weblogic", "oracle weblogic", "wls"],
-    ["struts", "struts2", "apache struts"],
-    ["fastjson"],
-    ["shiro", "apache shiro"],
-    ["log4j", "log4j2", "log4shell"],
-    ["spring", "springboot", "spring boot", "spring framework"],
-    ["jenkins"],
-    ["confluence", "atlassian confluence"],
-    ["nacos"],
-    ["thinkphp", "tp"],
-    ["nginx"],
-    ["tomcat", "apache tomcat"],
-    ["jboss"],
-    ["coremail"],
-    ["奇安信", "qianxin"],
-    ["深信服", "sangfor"],
-    ["华为", "huawei"],
-    ["h3c", "新华三"],
-    ["锐捷", "ruijie"],
-]
+# 已下沉到 core.components（权威单一事实源），本处 re-export 保持兼容 + 单一维护点。
+from sentinel_platform.core.components import COMPONENT_ALIASES  # noqa: F401
 
 
 def _now() -> str:
@@ -68,14 +39,10 @@ def _coll():
 
 
 def _expand_aliases(component: str) -> List[str]:
-    """把组件名扩展到所有别名（含自身），用于匹配。小写比对。"""
-    comp = (component or "").strip().lower()
-    expanded = {comp}
-    for group in COMPONENT_ALIASES:
-        low = [g.lower() for g in group]
-        if any(comp == g or comp in g or g in comp for g in low):
-            expanded.update(low)
-    return [e for e in expanded if e]
+    """把组件名扩展到所有别名（含自身），用于匹配。缺陷3 修复：改用共享归一器 core.expand_aliases，
+    杜绝原双向子串 `comp in g or g in comp` 对短别名(tp/u8/c6/nc)的误命中（"tp" in "http"）。"""
+    from sentinel_platform.core import expand_aliases as _core_expand
+    return _core_expand(component)
 
 
 # 漏洞类型关键词：中文标题里产品名在这些词之前（用于截取产品段）
@@ -257,11 +224,16 @@ def query_by_component(component: str, limit: int = 20) -> Dict[str, Any]:
             safe = re.escape(a)
             or_conds.append({"products": {"$regex": safe, "$options": "i"}})
             or_conds.append({"title": {"$regex": safe, "$options": "i"}})
+        # 复核过滤：DB 侧 regex 是宽松召回，这里按「词边界」精确复核，防短别名子串误命中。
+        def _boundary_hit(alias: str, text: str) -> bool:
+            if not alias or not text:
+                return False
+            return re.search(r"(?<![a-z0-9])" + re.escape(alias) + r"(?![a-z0-9])", text) is not None
         hits = []
         for d in _coll().find({"$or": or_conds}):
             prods = [p.lower() for p in d.get("products", [])]
             title = (d.get("title", "") or "").lower()
-            if any(a in title or any(a in p or p in a for p in prods) for a in aliases):
+            if any(_boundary_hit(a, title) or any(_boundary_hit(a, p) for p in prods) for a in aliases):
                 hits.append(d)
         hits.sort(key=lambda d: (d.get("executable", False), d.get("in_kev", False),
                                  SEVERITY_RANK.get(d.get("severity", "unknown"), 0)), reverse=True)
@@ -363,8 +335,22 @@ class VulnIntelServiceImpl:
         return stat()
 
     def run_feed(self, sources=None) -> Dict[str, Any]:
+        """手动/调度触发情报刷新。外部 CVE 情报从云端 Watchtower 拉取（intel_pull），
+        本地可执行源(arl_npoc/nuclei)本地跑。不再本地爬任何外部开源源。"""
         from ._feed import run_feed as _run
-        return _run(sources)
+        report: Dict[str, Any] = {}
+        if sources is None:   # 未指定 → 先从云端拉外部情报
+            try:
+                from sentinel_platform.core import get_config
+                from sentinel_platform.modules.system import activation
+                if (bool(get_config().section("UPDATE", "INTEL_PULL", default=True))
+                        and activation.source_url() and activation.read_key()):
+                    from . import intel_pull
+                    report["central"] = intel_pull.pull_and_upsert()
+            except Exception as exc:
+                report["central"] = {"ok": False, "reason": str(exc)[:100]}
+        report.update(_run(sources))   # 本地可执行源
+        return report
 
     def feed_status(self) -> Dict[str, Any]:
         from ._feed import feed_status as _status

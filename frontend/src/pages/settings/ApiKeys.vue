@@ -2,6 +2,7 @@
   <PageContainer title="API 密钥" kicker="API Keys" description="全系统统一的情报 API 密钥配置(FOFA / 鹰图 / Quake 等)。一处配置,子域名收集、ICP 备案、GitHub 监控全通用。">
     <template #extra>
       <a-space>
+        <span v-if="dirty" class="dirty-flag">● 有未保存修改</span>
         <a-button @click="load">刷新</a-button>
         <a-button type="primary" :loading="loading" @click="saveAll">保存全部</a-button>
       </a-space>
@@ -40,6 +41,16 @@
                 <a-switch v-model:checked="(forms[item.id].vuln_feed_notify as boolean)" size="small" checked-children="开" un-checked-children="关" />
                 <span style="color:#aaa;font-size:11px">开启后漏洞情报库新增高危漏洞将自动推送</span>
               </div>
+              <div v-if="item.fields.includes('proxy_down_notify')" style="margin-top:8px;display:flex;align-items:center;gap:8px">
+                <span style="color:#888;font-size:12px">代理告警推送</span>
+                <a-switch v-model:checked="(forms[item.id].proxy_down_notify as boolean)" size="small" checked-children="开" un-checked-children="关" />
+                <span style="color:#aaa;font-size:11px">开启后代理连续失活/全部节点不可达将自动推送</span>
+              </div>
+              <div v-if="item.fields.includes('attack_alert_notify')" style="margin-top:8px;display:flex;align-items:center;gap:8px">
+                <span style="color:#888;font-size:12px">攻击告警推送</span>
+                <a-switch v-model:checked="(forms[item.id].attack_alert_notify as boolean)" size="small" checked-children="开" un-checked-children="关" />
+                <span style="color:#aaa;font-size:11px">开启后检测到攻击将推送攻击者 IP 等详情（同 IP 5 分钟内不重复推）</span>
+              </div>
             </div>
           </a-col>
         </a-row>
@@ -55,11 +66,16 @@ import { onMounted, reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import { apiKeysApi, type ApiKeyItem } from '../../api/apiKeys'
+import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 
 const loading = ref(false)
 const items = ref<ApiKeyItem[]>([])
 const updatedAt = ref('')
 const forms = reactive<Record<string, Record<string, unknown>>>({})
+
+// 未保存提示（问题4）：编辑后未点「保存全部」就切走会静默丢失设置。
+const { dirty, markSaved } = useUnsavedGuard(() => JSON.stringify(forms),
+  { content: '当前 API 密钥配置尚未保存，直接离开将丢失这些修改。确定要离开吗？' })
 
 const groups = computed(() => {
   const seen: string[] = []
@@ -77,7 +93,7 @@ function syncForms(list: ApiKeyItem[]) {
   for (const it of list) {
     const f: Record<string, unknown> = { enabled: it.enabled }
     for (const fld of it.fields) {
-      if (fld === 'vuln_feed_notify') {
+      if (fld === 'vuln_feed_notify' || fld === 'proxy_down_notify' || fld === 'attack_alert_notify') {
         f[fld] = it[fld] !== false && it[fld] !== 'false'  // 默认 true
       } else {
         f[fld] = (it[fld] as string) || ''
@@ -94,6 +110,7 @@ async function load() {
     items.value = res.items
     updatedAt.value = res.updated_at
     syncForms(res.items)
+    markSaved()                           // 载入即为已保存基线
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }
 
@@ -106,6 +123,7 @@ async function saveAll() {
     items.value = res.items
     updatedAt.value = res.updated_at
     syncForms(res.items)
+    markSaved()                           // 保存成功后更新基线，脏标记归零
     message.success('已保存,各服务 30s 内自动生效')
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }
@@ -120,4 +138,5 @@ onMounted(load)
 .key-label { font-weight: 600; }
 .key-site { font-size: 12px; color: #1677ff; margin-left: auto; }
 .updated { color: #999; font-size: 12px; }
+.dirty-flag { color: #d48806; font-size: 12px; font-weight: 600; }
 </style>

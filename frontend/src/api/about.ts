@@ -89,6 +89,25 @@ export function reportError(payload: { description: string; log_content: string;
     '/api/about/report_error', { method: 'POST', body: JSON.stringify(payload) })
 }
 
+export interface MyReport {
+  id: number
+  ts: string
+  version: string
+  description: string
+  log_preview: string
+  log_len: number
+  handled: boolean
+  reply: string           // 开发者回复（空=未回复）
+  fix_version: string     // 已修复版本（空=未标注）
+  replied_by: string
+  replied_at: string
+}
+
+/** 我的上报：本用户上传过的报错 + 开发者回复（转发分发系统，未激活/失败降级空列表） */
+export function getMyReports() {
+  return request<{ reports: MyReport[] }>('/api/about/my_reports')
+}
+
 export interface Announcement {
   id: number
   ts: string

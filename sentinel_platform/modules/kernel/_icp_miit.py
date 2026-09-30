@@ -243,23 +243,25 @@ def _solve_captcha(tok: str, cookie: str) -> Tuple[str, str]:
     return "", ""
 
 
-def _query_condition(tok: str, cookie: str, sign: str, img_uuid: str, unit_name: str) -> List[Dict[str, Any]]:
+def _query_condition(tok: str, cookie: str, sign: str, img_uuid: str, unit_name: str) -> Optional[List[Dict[str, Any]]]:
     """带 token+sign+图片uuid 查备案。**末尾斜杠绕创宇盾 WAF**（无斜杠恒 403）。
-    uuid 必须是验证码图片 uuid（与 sign 配对，缺/错则 code:500）。返回 list（原始条目）。"""
+    uuid 必须是验证码图片 uuid（与 sign 配对，缺/错则 code:500）。
+    **返回三态（问题9）**：查询成功返 list（原始条目，**可能为空=该单位真无备案**）；
+    WAF 拦截/网络失败/解析失败返 **None（工具失效，≠无备案）**——上层据此区分 empty vs unavailable。"""
     info = {"pageNum": "", "pageSize": "", "unitName": unit_name, "serviceType": _SERVICE_WEB}
     # 末尾斜杠是绕 WAF 的关键（实测无斜杠 → 创宇盾 403 拦截页）
     txt = _post("/icpAbbreviateInfo/queryByCondition/",
                 raw=json.dumps(info, ensure_ascii=False),
                 headers={"token": tok, "sign": sign, "uuid": img_uuid, "Content-Type": "application/json"})
-    if not txt or txt.lstrip().startswith("<"):   # HTML=WAF 拦截页
-        if "疑似黑客" in txt or "cresc" in txt.lower() or "365cyd" in txt:
+    if not txt or txt.lstrip().startswith("<"):   # HTML=WAF 拦截页 / 空响应 → 工具失效（非无备案）
+        if txt and ("疑似黑客" in txt or "cresc" in txt.lower() or "365cyd" in txt):
             logger.warning("icp_miit 查询被创宇盾 WAF 拦截（出口 IP 可能被风控）")
-        return []
+        return None
     try:
         j = json.loads(txt)
     except Exception:
-        return []
-    return (j.get("params") or {}).get("list") or []
+        return None
+    return (j.get("params") or {}).get("list") or []   # 解析成功：有则原样、空 list=真无备案
 
 
 def query_icp(domain_or_unit: str) -> Dict[str, str]:
@@ -276,10 +278,77 @@ def query_icp(domain_or_unit: str) -> Dict[str, str]:
         logger.debug("icp_miit 验证码未通过（%d 次重试用尽）", _CAPTCHA_RETRY)
         return {"unit": "", "icp_no": "", "source": ""}
     rows = _query_condition(tok, cookie, sign, img_uuid, domain_or_unit)
-    for it in rows:
+    for it in (rows or []):        # rows 可能为 None（查询失败，问题9 契约变更）→ 视同查不到返空
         unit = (it.get("unitName") or "").strip()
         icp_no = (it.get("serviceLicence") or it.get("mainLicence") or "").strip()
         if unit or icp_no:
             return {"unit": unit, "icp_no": icp_no, "source": "miit"}
     return {"unit": "", "icp_no": "", "source": ""}
+
+
+# 工信部备案记录里"网站域名"可能的字段名（官方响应字段名随接口版本变动，全兜底提取）。
+_DOMAIN_FIELDS = ("domain", "serviceName", "serviceNameStr", "mainDomain", "homeUrl", "webName")
+# "IP"可能的字段名（工信部备案通常不含 IP，作兜底；有则一并收）。
+_IP_FIELDS = ("ip", "serverIp", "webIp")
+
+
+def _extract_domains_from_row(it: Dict[str, Any]) -> set:
+    """从工信部单条备案记录里尽量提取网站域名（兼容多字段名 + 逗号/分号/空格分隔多域名）。
+    **绝不上溯根域**：abc.gov.cn 原样返回，不削成 gov.cn（防打歪整个政府网段，见 6a）。"""
+    import re as _re
+    out: set = set()
+    for f in _DOMAIN_FIELDS:
+        raw = it.get(f)
+        if not raw or not isinstance(raw, str):
+            continue
+        for part in _re.split(r"[,;\s]+", raw.strip()):
+            d = part.strip().lower()
+            if not d:
+                continue
+            # 去协议头/路径/端口/前导 www.，只留主机名，原样保留层级
+            d = _re.sub(r"^https?://", "", d)
+            d = d.split("/")[0].split(":")[0].strip()
+            if d.startswith("www."):
+                d = d[4:]
+            # 基本域名合法性：含点、只含域名合法字符
+            if d and "." in d and _re.match(r"^[a-z0-9.\-]+$", d):
+                out.add(d)
+    return out
+
+
+def reverse_by_unit_miit(unit: str) -> Dict[str, Any]:
+    """**按单位名反查该单位备案的网站域名/IP（工信部官方一手）**。
+    返回 {"status": ok|empty|unavailable, "domains": set, "ips": set}（问题9 三态，用户 2026-09-12 定调）：
+      • ok          查询成功且有备案 → domains/ips 非空（状态①，权威种子，第三方越权资产该丢）
+      • empty        查询成功但无备案 → 该单位判「无资产」（状态②，上层不得降级第三方扩范围）
+      • unavailable  auth/验证码/查询失败（出口 IP 风控等）→ 工具失效（状态③，上层降级第三方）
+    **区分 empty(权威说没有) vs unavailable(权威没答上) 是关键**——语义相反，决定上层是「无资产结束」
+    还是「降级第三方」。域名原样保留不上溯根域（6a 防打歪）。翻遍全部备案记录（不像 query_icp 命中首条即返）。"""
+    if not unit:
+        return {"status": "empty", "domains": set(), "ips": set()}
+    tok, cookie = _auth()
+    if not tok:
+        logger.debug("icp_miit reverse auth 失败（出口 IP 可能被限流/风控）→ unavailable")
+        return {"status": "unavailable", "domains": set(), "ips": set(), "reason": "auth_failed"}
+    sign, img_uuid = _solve_captcha(tok, cookie)
+    if not sign:
+        logger.debug("icp_miit reverse 验证码未通过 → unavailable")
+        return {"status": "unavailable", "domains": set(), "ips": set(), "reason": "captcha_failed"}
+    rows = _query_condition(tok, cookie, sign, img_uuid, unit)
+    if rows is None:                    # 查询步骤本身失败（网络/风控/接口异常）≠ 无备案 → 工具失效
+        logger.debug("icp_miit reverse 查询失败 → unavailable")
+        return {"status": "unavailable", "domains": set(), "ips": set(), "reason": "query_failed"}
+    domains: set = set()
+    ips: set = set()
+    for it in rows:
+        domains |= _extract_domains_from_row(it)
+        for f in _IP_FIELDS:
+            v = (it.get(f) or "").strip() if isinstance(it.get(f), str) else ""
+            if v:
+                ips.add(v)
+    # 查询成功：有备案=ok，无备案=empty（权威判定该单位无资产，非工具失效）
+    status = "ok" if (domains or ips) else "empty"
+    logger.info("icp_miit reverse unit=%s status=%s domains=%d ips=%d rows=%d",
+                unit, status, len(domains), len(ips), len(rows))
+    return {"status": status, "domains": domains, "ips": ips}
 

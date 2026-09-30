@@ -25,7 +25,9 @@ export interface ModulesResult {
 export interface ActivationResult {
   activated: boolean
   expired?: boolean
+  revoked?: boolean
   expires_at?: string
+  activated_at?: string
   source_url: string
   remaining_days?: number
   tz_label?: string       // 激活到期/剩余天数所用的服务器时区中文名（协调世界时/北京时间…）
@@ -59,6 +61,8 @@ export function submitActivation(key: string) {
 
 export interface ActivationInfoResult {
   activated: boolean
+  expired: boolean
+  revoked: boolean
   key_masked: string
   activated_at: string
   expires_at: string

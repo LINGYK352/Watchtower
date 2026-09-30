@@ -101,6 +101,54 @@ class ActivationTest(unittest.TestCase):
         r = activation.validate_remote("/version")
         self.assertFalse(r["ok"]); self.assertEqual(r["reason"], "no_key")
 
+    # —— 激活时钟：remaining_days 用 ceil（v1.21.157-15）——
+    def test_remaining_days_ceil_under_one_day(self):
+        """剩不到 24h 但未过期 → remaining_days 应为 1（ceil），不再是 0（治假过期）。"""
+        self._write_key(_jwt(23 * 3600))   # 剩 23 小时
+        st = activation.local_status()
+        self.assertTrue(st["activated"])
+        self.assertFalse(st["expired"])
+        self.assertEqual(st["remaining_days"], 1)
+
+    # —— 云端一票否决：吊销标记（隔离到本用例 tempdir）——
+    def _isolate_revoke_paths(self):
+        """把吊销标记候选路径限定到本用例 tempdir，避免污染真实 /tmp 或读到残留。"""
+        p = os.path.join(self.dir, ".activation_revoked")
+        return mock.patch.object(activation, "_revoked_file_candidates", return_value=[p])
+
+    def test_revoke_terminates_clock(self):
+        """云端否决：mark_revoked 后即便 JWT 未到期也判 expired（吊销即时生效）。"""
+        self._write_key(_jwt(30 * 86400))   # JWT 还剩 30 天
+        with self._isolate_revoke_paths():
+            self.assertFalse(activation.is_revoked())
+            self.assertTrue(activation.local_status()["activated"])
+            activation.mark_revoked("remote_unauthorized")
+            self.assertTrue(activation.is_revoked())
+            st = activation.local_status()
+            self.assertFalse(st["activated"])
+            self.assertTrue(st["expired"])
+            self.assertTrue(st["revoked"])
+            self.assertEqual(st["remaining_days"], 0)
+
+    def test_clear_revoked_restores(self):
+        self._write_key(_jwt(30 * 86400))
+        with self._isolate_revoke_paths():
+            activation.mark_revoked()
+            activation.clear_revoked()
+            self.assertFalse(activation.is_revoked())
+            self.assertTrue(activation.local_status()["activated"])
+
+    def test_note_remote_result_semantics(self):
+        """unauthorized→落否决；成功('')→清否决；network→不动。"""
+        self._write_key(_jwt(30 * 86400))
+        with self._isolate_revoke_paths():
+            activation.note_remote_result("unauthorized")
+            self.assertTrue(activation.is_revoked())
+            activation.note_remote_result("network")     # 网络问题不动
+            self.assertTrue(activation.is_revoked())
+            activation.note_remote_result("")             # 云端重新认可 → 解除
+            self.assertFalse(activation.is_revoked())
+
 
 if __name__ == "__main__":
     unittest.main()

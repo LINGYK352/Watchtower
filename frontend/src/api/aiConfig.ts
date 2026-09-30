@@ -7,8 +7,6 @@ export interface AIConfig {
   max_concurrent_sessions: number
   timeout: number
   source_code_dir: string
-  use_proxy: boolean
-  proxy_mode?: string
   updated_at?: string
   recommend_concurrency?: number
   effective_concurrency?: number
@@ -24,7 +22,7 @@ export interface AIProvider {
   model: string
   reasoning_effort?: string
   enabled: boolean
-  use_proxy: boolean
+  proxy_id?: string   // 问题18：入口代理=某条自定义代理_id，空/缺=直连（替代旧 use_proxy）
   save_date?: string
   update_date?: string
 }
@@ -52,6 +50,9 @@ export interface AIPrompt {
   update_date?: string
 }
 
+export type AIProviderOption = Pick<AIProvider, '_id' | 'name' | 'type' | 'protocol' | 'model' | 'enabled'>
+interface AIOptions { items: AIProviderOption[]; config: Pick<AIConfig, 'active_provider_id' | 'max_context_tokens'>; prompts: AIPrompt[] }
+
 const base = '/api/ai_config'
 
 export interface UsageStat {
@@ -61,6 +62,9 @@ export interface UsageStat {
 }
 
 export const aiConfigApi = {
+  providerOptions: async () => ({ items: (await request<AIOptions>(`${base}/options`)).items }),
+  runtimeConfig: async () => (await request<AIOptions>(`${base}/options`)).config,
+  promptOptions: async () => ({ items: (await request<AIOptions>(`${base}/options`)).prompts }),
   getConfig: () => request<AIConfig>(`${base}/config`),
   usageStat: () => request<UsageStat>(`${base}/usage_stat`),
   saveConfig: (data: Partial<AIConfig>) => request<AIConfig>(`${base}/config`, { method: 'POST', body: JSON.stringify(data) }),
@@ -74,7 +78,9 @@ export const aiConfigApi = {
   // 校验未落库配置（新增模型保存前校验，通过才存档）
   testProviderConfig: (config: string, type: string) => request<{ ok: boolean; content: string; model: string; total_tokens: number; proxy_enabled: boolean; error: string }>(`${base}/provider/test`, { method: 'POST', body: JSON.stringify({ config, type }) }),
 
-  prompts: () => request<{ items: AIPrompt[] }>(`${base}/prompt`),
+  // includeBuiltin=false：不返回内置 scene 提示词（控制台等非管理场景用，防内置提示词外泄）；
+  // AI 配置页(管理员编辑)默认 true 返回全部。
+  prompts: (includeBuiltin = true) => request<{ items: AIPrompt[] }>(`${base}/prompt${includeBuiltin ? '' : '?include_builtin=false'}`),
   addPrompt: (data: Partial<AIPrompt>) => request<{ _id: string }>(`${base}/prompt`, { method: 'POST', body: JSON.stringify(data) }),
   updatePrompt: (id: string, data: Partial<AIPrompt>) => request<{ _id: string }>(`${base}/prompt/${id}`, { method: 'POST', body: JSON.stringify(data) }),
   deletePrompt: (id: string) => request<{ _id: string }>(`${base}/prompt/${id}/delete`, { method: 'POST' }),

@@ -22,6 +22,14 @@ certifi==2026.5.20
 charset-normalizer==2.0.12
 idna==3.15
 
+# —— TLS 指纹绕过（ai_pentest/_tls_fetch，惰性 import 降级）——
+# curl_cffi 冒充 Chrome 的 TLS/JA3 指纹，绕 WAF 在握手层按指纹拦截 requests（OpenSSL 指纹）的场景。
+# Python 3.8 只能用到 curl_cffi 0.9.0（0.10+ 要求 ≥3.10）；cffi/pycparser 为其运行期依赖。
+# 缺失时 _tls_fetch.available() 返 False，全链路优雅降级（不影响其余功能）。
+curl_cffi==0.9.0
+cffi==1.16.0
+pycparser==2.21
+
 # —— YAML 解析（risk_intel/vuln_intel 的 nuclei 模板抓取器，惰性 import）——
 PyYAML==5.4.1
 
@@ -42,8 +50,29 @@ tld==0.12.6
 pyquery==1.4.3
 dnspython==2.2.1
 
-# —— 报告导出（xlsx）——
+# —— 报告导出（xlsx / docx）——
+# python-docx：渗透报告 docx 导出（risk_intel/asset_intel.export_report_docx，惰性 import 降级）。
+# 纯 Python 无系统依赖，rebuild 镜像干净；1.1.2 兼容 Python 3.8。
 openpyxl==3.0.0
+python-docx==1.1.2
+
+# —— 报告模板学习 + 图表（risk_intel/report_template，需 rebuild 镜像）——
+# docxtpl：docx 模板填充（jinja2 语法，保留原模板样式/排版，只换占位符→防变形）；
+#   依赖 python-docx/jinja2/lxml（均已 vendored）+ docxcompose + babel（下方补齐）。
+# matplotlib：报告图表渲染（严重度分布/攻击链图，Agg headless 无系统图形库依赖）；3.7.5 为 py3.8 上限。
+# Pillow：matplotlib + docxtpl InlineImage 图片处理；10.4.0 为 py3.8 上限。
+# 离线 wheel（cp38 manylinux，已 vendor 到 vendor/wheels）：
+#   pip download docxtpl==0.16.7 docxcompose==1.4.1 matplotlib==3.7.5 Pillow==10.4.0 \
+#     "importlib-resources>=3.2.0" zipp \
+#     --platform manylinux2014_x86_64 --python-version 38 --only-binary=:all: --implementation cp \
+#     --index-url https://pypi.org/simple/ -d vendor/wheels
+#   （连带拉 numpy==1.24.4/contourpy/kiwisolver/fonttools/cycler/pyparsing/packaging/babel）。
+#   注：importlib-resources+zipp 是 matplotlib3.7 在 py3.8 的条件依赖，--platform 解析器会漏，需显式补。
+#   开发机 Windows 直接 download 会拉 win_amd64 wheel，Linux 镜像装不上——务必带 --platform/--python-version。
+docxtpl==0.16.7
+docxcompose==1.4.1
+matplotlib==3.7.5
+Pillow==10.4.0
 
 # —— TLS/证书处理（native certfetch / pyOpenSSL）——
 pyOpenSSL==22.1.0

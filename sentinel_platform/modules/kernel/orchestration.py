@@ -7,8 +7,10 @@
 净室重写 celerytask.run_task 的 handler 分发 + 生命周期：
 - handler 注册表：按 task_type 注册处理函数（可插，加任务类型不改 run_task）。
 - 生命周期：waiting→running→done/stop/error/preempted，每步写 task 集合 status。
-- **协作式取消（铁律，见记忆 dengta-stop-cooperative-cancellation）**：revoke 在 acks_late 下不可靠，
-  故执行体在阶段边界主动查 DB status，见 stop/preempted 即抛 Stopped 自停——不依赖 revoke。
+- **协作式取消（铁律，见记忆 dengta-stop-cooperative-cancellation）**：revoke 不可靠（celery_id 在
+  worker 重启/重投后漂移、任务可能已在执行），故执行体在阶段边界主动查 DB status，见 stop/preempted
+  即抛 Stopped 自停——不依赖 revoke，也不依赖 ack 语义（问题14 起 worker 改早 ack，崩溃恢复统一由
+  scheduler 从 DB 真相源 reclaim，与 ack 无关）。
 
 只依赖 core + contracts(registry 取 RECON/INTEL/PENTEST_DISPATCH，缺失降级) + stdlib，无第三方库。
 禁硬限制参数（无轮数/条数上限，编排只按客观 status 与 handler 返回推进）。
@@ -82,12 +84,36 @@ def _read_status(task_id: str) -> str:
         return ""
 
 
+def _claim_run(task_id: str) -> bool:
+    """原子认领执行权（幂等去重，防重复 run_task 占满 worker 池）。
+    仅当任务处于 queued/waiting 时切 running；同时刷 update_date 心跳。
+    背景：崩溃恢复靠 scheduler DB-reclaim（running→waiting 重投）+ queued 孤儿回收，重投时会累积
+    多份 run_task 消息（worker 停摆/重启期尤甚）。原 run_task 用普通 _set_status(running)，N 份消息
+    全部置 running 并各跑一遍 handler → 池被同一任务的重复实例占死，真正的会话饿死。
+    改原子认领后：第一份认领成功跑，其余看到 running/done/stopped → 认领失败 → 调用方跳过不重复跑。
+    DB 故障返回 True（放行，宁可偶发重复也不漏跑，与 _claim_session 异常放行同口径）。"""
+    import time
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        r = get_repo().collection(TASK_COLL).update_one(
+            {"_id": _oid(task_id), "status": {"$in": [S_QUEUED, S_WAITING]}},
+            {"$set": {"status": S_RUNNING, "start_time": now, "update_date": now}})
+        return bool(getattr(r, "modified_count", 0))
+    except Exception as e:
+        logger.warning("claim_run %s error: %s", task_id, e)
+        return True
+
+
 def _set_status(task_id: str, status: str, extra: Optional[Dict[str, Any]] = None) -> None:
     upd = {"status": status}
     if extra:
         upd.update(extra)
+    op = {"$set": upd}
+    # 终态防死徽标（问题11）：任务进终态时清 resource_wait，避免 worker 中途死留下"资源等待"徽标。
+    if status in (S_DONE, S_ERROR, S_STOP, S_PREEMPTED):
+        op["$unset"] = {"resource_wait": ""}
     try:
-        get_repo().collection(TASK_COLL).update_one(_task_query(task_id), {"$set": upd})
+        get_repo().collection(TASK_COLL).update_one(_task_query(task_id), op)
     except Exception as e:
         logger.warning("set_status %s=%s error: %s", task_id, status, e)
 
@@ -155,19 +181,37 @@ def run_task(task_id: str, task_type: str = "", options: Optional[Dict[str, Any]
         return result
 
     ctx = TaskContext(task_id, options)
-    _set_status(task_id, S_RUNNING, {"start_time": time.strftime("%Y-%m-%d %H:%M:%S")})
+    # 原子认领执行权（幂等去重）：认领不到 = 已被另一实例跑着/或已终态 = 这是重复投递的多余消息，跳过。
+    if not _claim_run(task_id):
+        cur = _read_status(task_id)
+        logger.info("run_task 跳过重复投递 task=%s（当前 status=%s，已被认领或已终态）", task_id, cur)
+        result["result"] = "skipped_duplicate"
+        return result
     try:
         handler_result = handler(task_id, ctx)          # handler 内部按 ctx.checkpoint() 自检
+        partial_err = ""
         if isinstance(handler_result, dict):
-            handler_state = handler_result.get("result") or handler_result.get("recon")
+            # 各类 handler 状态键统一识别：_recon_handler=recon、_fofa_handler=fofa、_unit_handler=unit/result。
+            # 原 bug：只读 result/recon → _fofa_handler 的 fofa=partial_error（网络不稳致部分站点漏派）被吞 → 落 S_DONE 假性完成。
+            handler_state = (handler_result.get("result") or handler_result.get("recon")
+                             or handler_result.get("fofa") or handler_result.get("unit"))
             if handler_state == "stopped":
                 raise StoppedException(handler_result.get("error") or "recon pipeline stopped")
             if handler_state == "error":
                 raise RuntimeError(handler_result.get("error") or "recon pipeline failed")
+            if handler_state == "partial_error":
+                # 部分目标未派发：仍先 _post_scan 派发已形成的站点，再标 error（不标 done）——使不完整可见、可重投补派。
+                partial_err = handler_result.get("error") or "部分目标未派发（网络不稳），可重投补派"
         ctx.checkpoint()                                 # handler 返回后再次确认，停止态不得归集/写 done
-        _post_scan(ctx)                                  # 扫完归集 + 按 options.auto_pentest 派发
+        _post_scan(ctx)                                  # 扫完归集 + 按 options.auto_pentest 派发（partial 也派已成站点）
         ctx.checkpoint()
-        _set_status(task_id, S_DONE, {"end_time": time.strftime("%Y-%m-%d %H:%M:%S")})
+        if partial_err:
+            _set_status(task_id, S_ERROR, {"error": partial_err[:500],
+                                           "end_time": time.strftime("%Y-%m-%d %H:%M:%S")})
+            result["result"] = "partial_error"
+            result["error"] = partial_err
+        else:
+            _set_status(task_id, S_DONE, {"end_time": time.strftime("%Y-%m-%d %H:%M:%S")})
     except StoppedException as e:
         logger.info("run_task stopped: %s", e)
         result["result"] = "stopped"
@@ -241,6 +285,24 @@ def reset_executor() -> None:
     _EXECUTOR = _thread_executor
 
 
+def _broker_fail(context: str = "") -> None:
+    """celery 投递失败上报 broker 健康（60s内3次自动降级线程模式）。延迟 import 防循环依赖；失败静默。"""
+    try:
+        from sentinel_platform.modules.kernel import _broker_health
+        _broker_health.record_delivery_failure(context)
+    except Exception:
+        pass
+
+
+def _broker_ok() -> None:
+    """celery 投递成功 → 清失败窗（健康信号）。延迟 import 防循环依赖；失败静默。"""
+    try:
+        from sentinel_platform.modules.kernel import _broker_health
+        _broker_health.record_delivery_success()
+    except Exception:
+        pass
+
+
 def _read_target(task_id: str) -> str:
     try:
         doc = get_repo().collection(TASK_COLL).find_one(_task_query(task_id), {"target": 1}) or {}
@@ -287,16 +349,27 @@ def submit_task(task_id: str, task_doc: Optional[Dict[str, Any]] = None) -> Dict
     if isinstance(task_doc, dict):
         task_type = task_doc.get("task_type", "") or task_doc.get("type", "")
         options = task_doc.get("options")
+    delay = globals().get("_celery_delay")
+    if callable(delay):
+        try:
+            res = delay(task_id, task_type, options)
+            cid = getattr(res, "id", "") or ""   # 记 celery_id：可观测 + 可 revoke（原来恒空，无法追踪/撤销重复投递）
+            if cid:
+                try:
+                    get_repo().collection(TASK_COLL).update_one(_task_query(task_id), {"$set": {"celery_id": cid}})
+                except Exception:
+                    pass
+            _broker_ok()
+            return {"ok": True, "task_id": task_id, "submitted": True, "claimed": True, "celery_id": cid}
+        except Exception as e:
+            _broker_fail("task 投递失败: {}".format(str(e)[:80]))
+            logger.warning("submit_task %s celery err, fallback thread: %s", task_id, e)
     try:
-        delay = globals().get("_celery_delay")
-        if callable(delay):
-            delay(task_id, task_type, options)
-        else:
-            _EXECUTOR(lambda: run_task(task_id, task_type, options))
-        return {"ok": True, "task_id": task_id, "submitted": True, "claimed": True}
+        _EXECUTOR(lambda: run_task(task_id, task_type, options))
+        return {"ok": True, "task_id": task_id, "submitted": True, "claimed": True, "via": "thread"}
     except Exception as e:
         _rollback_task_claim(task_id, str(e))
-        logger.warning("submit_task %s error: %s", task_id, e)
+        logger.warning("submit_task %s thread error: %s", task_id, e)
         return {"ok": False, "task_id": task_id, "submitted": False, "claimed": True, "error": str(e)}
 
 
@@ -306,7 +379,12 @@ def _claim_session(session_id: str, from_status: str) -> bool:
     paused_transient），调度器绝不恢复；停止意图是终态优先。原子 update 的 filter 里带该条件，
     有停止标记则 modified_count=0 认领失败，会话保持不被拉回 running。"""
     try:
-        update: Dict[str, Any] = {"$set": {"status": "dispatching"}}
+        import time as _t
+        # 进 dispatching 时盖 update_date 心跳：给 dispatch 窗口一个可测起点。
+        # 原来只 set status 不刷心跳 → 会话保留上一次 running 的旧 update_date，
+        # scheduler 的 dispatching 停滞回收无法区分「刚派发」与「派发后卡死」，会误回收/抖动。
+        update: Dict[str, Any] = {"$set": {"status": "dispatching",
+                                           "update_date": _t.strftime("%Y-%m-%d %H:%M:%S")}}
         if from_status == "paused_transient":
             update["$inc"] = {"retry_count": 1}
         r = get_repo().collection("intel_pentest_session").update_one(
@@ -334,13 +412,18 @@ def submit_session(session_id: str, from_status: str = "queued") -> Dict[str, An
                 svc.run_session(session_id)
         except Exception as e:
             logger.debug("submit_session run %s degraded: %s", session_id, e)
-    try:
-        delay = globals().get("_celery_session_delay")
-        if callable(delay):
+    delay = globals().get("_celery_session_delay")
+    if callable(delay):
+        try:
             delay(session_id)
-        else:
-            _EXECUTOR(_run)
-        return {"ok": True, "session_id": session_id, "submitted": True, "claimed": True}
+            _broker_ok()
+            return {"ok": True, "session_id": session_id, "submitted": True, "claimed": True}
+        except Exception as e:
+            _broker_fail("session 投递失败: {}".format(str(e)[:80]))
+            logger.warning("submit_session %s celery err, fallback thread: %s", session_id, e)
+    try:
+        _EXECUTOR(_run)
+        return {"ok": True, "session_id": session_id, "submitted": True, "claimed": True, "via": "thread"}
     except Exception as e:
         try:
             get_repo().collection("intel_pentest_session").update_one(
@@ -348,8 +431,64 @@ def submit_session(session_id: str, from_status: str = "queued") -> Dict[str, An
                 {"$set": {"status": from_status, "dispatch_error": str(e)[:500]}})
         except Exception:
             pass
-        logger.warning("submit_session %s error: %s", session_id, e)
+        logger.warning("submit_session %s thread error: %s", session_id, e)
         return {"ok": False, "session_id": session_id, "submitted": False, "claimed": True, "error": str(e)}
+
+
+# —— 会话台后台回合投递（v1.21.157-62，与自动会话 submit_session 解耦；绝不走 run_agent）——
+# _celery_console_delay：celery adapter 装载时赋值（lambda sid: _RUN_CONSOLE.delay(sid)）；无 celery 走线程执行器。
+_celery_console_delay = None
+
+
+def _claim_console_session(session_id: str) -> bool:
+    """CAS 认领会话台后台回合：console_running != True → 置 True。已 True 返 False（防重复投——消息已入队，
+    在跑的循环下轮消费）。paused_manual 会话不进 scheduler 自动认领，故用独立 console_running 锁，与 auto 零交叉。"""
+    try:
+        import time
+        r = get_repo().collection("intel_pentest_session").update_one(
+            {"_id": _oid(session_id), "console_running": {"$ne": True}},
+            {"$set": {"console_running": True, "console_dispatch_at": int(time.time())}})
+        return bool(getattr(r, "modified_count", 0))
+    except Exception:
+        return False
+
+
+def submit_console_turn(session_id: str) -> Dict[str, Any]:
+    """认领并投一个会话台后台回合（run_console_agent）。已在跑→already_running（不重复投，消息已入队待消费）。
+    投递失败回滚 console_running 锁。console 会话执行独立于自动会话（不改 status、不走 run_agent）。"""
+    if not session_id:
+        return {"ok": False, "submitted": False, "reason": "no session_id"}
+    if not _claim_console_session(session_id):
+        return {"ok": True, "session_id": session_id, "submitted": False, "already_running": True}
+
+    def _run():
+        try:
+            svc = get_registry().get(ROLE.PENTEST_DISPATCH)
+            if svc and hasattr(svc, "run_console_session"):
+                svc.run_console_session(session_id)
+        except Exception as e:
+            logger.debug("submit_console_turn run %s degraded: %s", session_id, e)
+    delay = globals().get("_celery_console_delay")
+    if callable(delay):
+        try:
+            delay(session_id)
+            _broker_ok()
+            return {"ok": True, "session_id": session_id, "submitted": True}
+        except Exception as e:
+            # celery 投递失败：记录（60s内3次触发降级）+ 本次立即回退线程执行，消息不丢、会话不卡
+            _broker_fail("console 投递失败: {}".format(str(e)[:80]))
+            logger.warning("submit_console_turn %s celery err, fallback thread: %s", session_id, e)
+    try:
+        _EXECUTOR(_run)
+        return {"ok": True, "session_id": session_id, "submitted": True, "via": "thread"}
+    except Exception as e:
+        try:
+            get_repo().collection("intel_pentest_session").update_one(
+                {"_id": _oid(session_id)}, {"$set": {"console_running": False}})   # 回滚锁
+        except Exception:
+            pass
+        logger.warning("submit_console_turn %s thread error: %s", session_id, e)
+        return {"ok": False, "session_id": session_id, "submitted": False, "error": str(e)}
 
 
 def _task_budget() -> Dict[str, Any]:
@@ -412,6 +551,23 @@ def _recon_handler(task_id: str, ctx: "TaskContext") -> Dict[str, Any]:
         return {"recon": "skipped_no_service"}
     task_type = ctx.options.get("_task_type", "") or _read_task_type(task_id)
     target = _read_target(task_id)
+    # 多目标聚合任务（v1.21.157-48）：options.multi_targets={ip:[...],domain:[...]}，分批侦察
+    # （域名批保留子域枚举，与单域名任务同待遇；不同于 FOFA 已知资产强制关爆破）。target 是展示串，不用它。
+    mt = (ctx.options or {}).get("multi_targets") or {}
+    if mt and (mt.get("ip") or mt.get("domain")):
+        base = dict(ctx.options or {}); base["cancel_check"] = ctx.is_stopped
+        merged = {"recon": "done", "batches": []}
+        for ttype, tlist in (("domain", mt.get("domain") or []), ("ip", mt.get("ip") or [])):
+            if not tlist:
+                continue
+            ctx.checkpoint()
+            try:
+                r = recon.run_recon(ttype, task_id, list(tlist), **dict(base)) or {}
+                merged["batches"].append({"type": ttype, "count": len(tlist), "result": r.get("result")})
+            except Exception as e:
+                logger.warning("orchestration: multi-target run_recon task %s (%s) error: %s", task_id, ttype, e)
+                merged["batches"].append({"type": ttype, "count": len(tlist), "error": str(e)})
+        return merged
     try:
         opts = dict(ctx.options or {})
         opts["cancel_check"] = ctx.is_stopped
@@ -422,59 +578,150 @@ def _recon_handler(task_id: str, ctx: "TaskContext") -> Dict[str, Any]:
 
 
 def _unit_handler(task_id: str, ctx: "TaskContext") -> Dict[str, Any]:
-    """单位名任务（补净室迁移丢失的执行闭环）：单位→资产反查（ext_source.reverse_lookup_units，
-    Hunter icp.name 备案维度）→ 拿种子域名 → 经 RECON 跑侦察（流式归集/派发自然触发，单位归属走 icp_query）。
-    反查不到种子/服务缺失 → honest degrade（不伪造资产，记日志返回，任务正常收尾）。"""
+    """反查生产种子，单一侦察消费者逐目标推进；不等待种子阈值或全部单位结束。"""
+    import inspect
+    import queue
+    import threading
+
     ctx.checkpoint()
-    units = (ctx.options or {}).get("unit_names", [])
+    units = [u for u in (ctx.options or {}).get("unit_names", []) if str(u or "").strip()]
     if not units:
         return {"unit": "no_units", "unit_count": 0}
     ext = ctx._reg.get("ext_source_service")
     if not (ext and hasattr(ext, "reverse_lookup_units")):
-        logger.info("orchestration: unit 任务 %s 反查服务未就绪，降级（不伪造资产）", task_id)
         return {"unit": "ext_source_unavailable", "unit_count": len(units)}
-    try:
-        res = ext.reverse_lookup_units(units) or {}
-    except Exception as e:
-        logger.warning("orchestration: unit %s 反查失败: %s", task_id, e)
-        return {"unit": "reverse_lookup_error", "error": str(e)}
-    seeds = res.get("seeds") or []
-    ip_seeds = res.get("ip_seeds") or []
-    if not seeds and not ip_seeds:
-        logger.info("orchestration: unit 任务 %s 反查 %d 单位无种子（无备案资产/无 Hunter key）", task_id, len(units))
-        return {"unit": "no_seeds", "unit_count": len(units), "seed_count": 0}
-    ctx.checkpoint()
     recon = ctx.recon
-    if not (recon and hasattr(recon, "run_recon")):
-        logger.info("orchestration: unit %s 反查得 %d 域名/%d IP 种子但 RECON 未就绪，降级",
-                    task_id, len(seeds), len(ip_seeds))
-        return {"unit": "recon_unavailable", "seed_count": len(seeds), "ip_seed_count": len(ip_seeds)}
-    opts = dict(ctx.options or {})
-    opts["cancel_check"] = ctx.is_stopped
-    opts["unit_map"] = res.get("unit_map", {})   # fld→单位 归属（供归集参考）
-    logger.info("orchestration: unit 任务 %s 反查 %d 单位得 %d 域名 + %d IP 种子，转侦察（域名/IP 两路互补）",
-                task_id, len(units), len(seeds), len(ip_seeds))
-    # 域名种子走 domain pipeline（子域名/解析/建站）；IP 种子走 ip pipeline（省 subdomain/resolve，
-    # 直接 portscan/site，绕开 DNS 瓶颈——治主域无 A 记录时反查资产被丢）。两路都幂等落库+流式派发。
-    result: Dict[str, Any] = {"unit": "reverse_lookup_done", "seed_count": len(seeds),
-                              "ip_seed_count": len(ip_seeds)}
-    errs = []
-    if seeds:
-        try:
-            rd = recon.run_recon("domain", task_id, seeds, **opts) or {}
-            result["domain_result"] = rd.get("result")
-        except Exception as e:
-            logger.warning("orchestration: unit %s 域名侦察失败: %s", task_id, e)
-            errs.append("domain: {}".format(e))
-    if ip_seeds and not ctx.is_stopped():
-        try:
-            ri = recon.run_recon("ip", task_id, ip_seeds, **opts) or {}
-            result["ip_result"] = ri.get("result")
-        except Exception as e:
-            logger.warning("orchestration: unit %s IP 侦察失败: %s", task_id, e)
-            errs.append("ip: {}".format(e))
-    if errs:
-        result["error"] = "; ".join(errs)
+    enabled = bool(recon and hasattr(recon, "run_recon"))
+    # 有界队列只做背压，不截断目标。消费者保持单个，避免同进程扫描代理环境并发串线。
+    window = max(1, int((ctx.options or {}).get("scan_parallelism") or 4))
+    jobs = queue.Queue(maxsize=window)
+    abort = threading.Event()
+    seen = {"domain": set(), "ip": set()}
+    errors = []
+    completed = []
+    merged_map = {}
+    res = {}
+    worker = None
+
+    def stopped():
+        return abort.is_set() or ctx.is_stopped()
+
+    def merge_map(values):
+        if not values:
+            return
+        # 域名含点，不能用 unit_map.example.com 的更新路径；$literal 保留整个键。
+        # incoming 在前、existing 在后：已有归属优先，原子合并避免多 worker 覆盖。
+        result = get_repo().collection(TASK_COLL).update_one(_task_query(task_id), [{"$set": {
+            "unit_map": {"$mergeObjects": [{"$literal": values}, {"$ifNull": ["$unit_map", {}]}]}}}])
+        if getattr(result, "matched_count", 1) == 0:
+            raise RuntimeError("任务不存在，不能写回单位归属")
+        for key, value in values.items():
+            merged_map.setdefault(key, value)
+
+    def consume():
+        while True:
+            job = jobs.get()
+            try:
+                if job is None:
+                    return
+                if stopped():
+                    continue
+                kind, target = job
+                options = dict(ctx.options or {})
+                options.update(cancel_check=stopped, use_checkpoint=False)
+                output = recon.run_recon(kind, task_id, [target], **options) or {}
+                state = output.get("result") or output.get("recon")
+                if state == "stopped":
+                    abort.set()
+                elif state == "error":
+                    errors.append("{} {}: {}".format(kind, target, output.get("error") or "recon failed"))
+                else:
+                    completed.append((kind, target))
+            except Exception as exc:
+                errors.append("recon: {}".format(exc))
+            finally:
+                jobs.task_done()
+
+    def enqueue(kind, target):
+        if target in seen[kind]:
+            return
+        if not enabled:
+            seen[kind].add(target)
+            return
+        while not stopped():
+            if not worker.is_alive():
+                raise RuntimeError("侦察消费者已退出")
+            try:
+                jobs.put((kind, target), timeout=0.1)
+                seen[kind].add(target)
+                return
+            except queue.Full:
+                pass
+
+    def on_unit(unit, domains, ips, fld_map):
+        if stopped():
+            return
+        merge_map(fld_map)
+        for kind, targets in (("domain", domains), ("ip", ips)):
+            for target in sorted(targets or []):
+                if stopped():
+                    return
+                enqueue(kind, target)
+
+    if enabled:
+        worker = threading.Thread(target=consume, name="unit-recon-" + str(task_id), daemon=True)
+        worker.start()
+    try:
+        fn = ext.reverse_lookup_units
+        parameters = inspect.signature(fn).parameters
+        variadic = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values())
+        supports_callback = "on_unit" in parameters or variadic
+        supports_cancel = "cancel_check" in parameters or variadic
+        if supports_callback and supports_cancel:
+            res = fn(units, on_unit=on_unit, cancel_check=stopped) or {}
+        else:
+            # 旧扩展按单位调用，仍不攒全部单位；不捕获函数内部 TypeError 后重跑全部查询。
+            combined = {"seeds": set(), "ip_seeds": set(), "unit_map": {}, "unit_status": {}}
+            for unit in units:
+                if stopped():
+                    break
+                item = fn([unit]) or {}
+                on_unit(unit, item.get("seeds"), item.get("ip_seeds"), item.get("unit_map"))
+                combined["seeds"].update(item.get("seeds") or [])
+                combined["ip_seeds"].update(item.get("ip_seeds") or [])
+                combined["unit_status"].update(item.get("unit_status") or {})
+                for key, value in (item.get("unit_map") or {}).items():
+                    combined["unit_map"].setdefault(key, value)
+            res = combined
+        # 回调偶发失败或旧扩展忽略回调时，补交最终结果中尚未入队的种子，不重复侦察已入队项。
+        if not stopped():
+            on_unit("", res.get("seeds"), res.get("ip_seeds"), res.get("unit_map"))
+    except Exception as exc:
+        errors.append("reverse_lookup: {}".format(exc))
+    finally:
+        if enabled:
+            while worker.is_alive():
+                try:
+                    jobs.put(None, timeout=0.1)
+                    break
+                except queue.Full:
+                    pass
+            worker.join()
+    result = {"unit": "reverse_lookup_done", "unit_count": len(units),
+              "seed_count": len(seen["domain"]), "ip_seed_count": len(seen["ip"]),
+              "chunks": len(completed), "streamed": enabled}
+    if stopped() or res.get("cancelled"):
+        result["result"] = "stopped"
+        return result
+    if errors:
+        result.update(result="error", error="; ".join(errors))
+        return result
+    if not seen["domain"] and not seen["ip"]:
+        statuses = res.get("unit_status") or {}
+        result["unit"] = "no_asset" if statuses and all(v == "no_asset" for v in statuses.values()) else "no_seeds"
+        result["unit_status"] = statuses
+    elif not enabled:
+        result["unit"] = "recon_unavailable"
     return result
 
 

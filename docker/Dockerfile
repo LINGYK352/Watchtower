@@ -12,14 +12,17 @@ FROM python:3.8-slim
 # 系统工具：侦察外部工具在 external/ 走 PATH 调用；build-essential 供 C 扩展编译
 # （psutil/cryptography 等，仅 gcc 缺 libc6-dev 头文件会编译失败 limits.h not found）。
 # **先把 Debian apt 源换国内镜像**（容器内默认 deb.debian.org 国内慢/超时→卡构建；
-# python:3.8-slim=bookworm，新格式源在 sources.list.d/debian.sources，换清华源）。pip 配阿里源避免 PyPI 慢。
-RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g; s|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
+# python:3.8-slim=bookworm，新格式源在 sources.list.d/debian.sources）。换阿里源（tuna 曾 403，
+# aliyun/deb.debian.org 实测可达；与下方 pip 阿里源同源）。pip 配阿里源避免 PyPI 慢。
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' \
         /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
     apt-get update && apt-get install -y --no-install-recommends \
         nmap proxychains4 curl ca-certificates build-essential docker.io \
         fontconfig libfreetype6 fonts-liberation \
+        fonts-noto-cjk fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/*
 # fontconfig/libfreetype6/fonts-liberation = PhantomJS 运行时依赖（SPA 渲染截图 + collect_js 抓活接口 apis）；
+# fonts-noto-cjk/fonts-wqy-zenhei = 报告模板学习的 matplotlib 图表中文字体（缺则饼图/柱状图/攻击链图中文变豆腐块方块）；
 # 缺则 phantomjs exec 失败 → DynamicResources.available()=False → apis 恒空 → AI 抓不到接口挖不到洞。
 # sentinel-ext 低权限用户（AI扩展沙盒执行）：slim 镜像自带 useradd，无需额外装包
 RUN useradd --system --create-home --home-dir /var/lib/sentinel-ext --shell /usr/sbin/nologin sentinel-ext 2>/dev/null || true

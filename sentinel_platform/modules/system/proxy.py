@@ -91,8 +91,85 @@ def get_config() -> Dict[str, Any]:
         return default_config()
 
 
+def _validate_source_bound(source: Optional[Dict[str, Any]], label: str) -> str:
+    """校验一个代理源「结构性是否为空」——只查源有没有内容可用，**绝不探可达性**（守 proxy.py:274 设计边界：
+    内网无公网出口，探可达会误判所有源不可用）。返回错误信息串（空串=校验通过）。
+      - custom：必须选了具体条目(ref_id)，且该条目存在且启用(能取到 url)——否则=没绑有效自定义代理。
+      - pool：公共代理池必须有「启用且可用(delay≥0)」的代理——池空/全失效=选了个空源，此时保存等于配了个永远出不去的出口。
+      - subscription：内核代理必须已导入并激活订阅(active_profile_id 非空)——无订阅=没内容可走。
+    区别于「配了但此刻连不通」（如节点超时）——那类由 smart 自动降级 / global 保存后探测提示，不在此拦。"""
+    if not isinstance(source, dict):
+        return ""
+    t = source.get("type", "")
+    if t == "custom":
+        if not source.get("ref_id"):
+            return "{}选了「自定义代理」但未选择具体条目，请先选一条自定义代理再保存。".format(label)
+        if not custom_proxy_url(source.get("ref_id", "")):
+            return "{}绑定的自定义代理不存在或已禁用，请重新选择一条可用的自定义代理。".format(label)
+        return ""
+    if t == "pool":
+        try:
+            pool = get_registry().get("proxy_pool_service")
+            st = pool.stats() if (pool and hasattr(pool, "stats")) else {}
+        except Exception as exc:
+            logger.debug("validate pool source degraded: %s", exc)
+            st = {}
+        # 池内既要有启用的、又要有可用(存活)的，否则选「公共代理」等于配了空出口
+        if not (int(st.get("enabled", 0) or 0) > 0 and int(st.get("alive", 0) or 0) > 0):
+            return ("{}选了「公共代理」但代理池当前无可用代理（启用 {} / 可用 {}）。"
+                    "请先到「公共代理」抓取并验活，或改选其它代理源。").format(
+                        label, st.get("enabled", 0), st.get("alive", 0))
+        return ""
+    if t == "subscription":
+        if not (get_config().get("active_profile_id") or ""):
+            return "{}选了「内核代理」但尚未导入并激活任何机场订阅，请先在「内核代理」导入订阅并激活。".format(label)
+        return ""
+    return ""
+
+
+def _validate_sources(update: Dict[str, Any]) -> str:
+    """保存前校验代理源绑定是否有效（只在真正启用对应模式时校验，避免误伤直连占位）。
+    返回错误信息串（空串=通过）。全局：仅当 global_mode_enabled=True 时校验 global_source；
+    智能：仅当 smart_source 已配置(非订阅空占位)时校验（未配置=直连，不拦）。"""
+    if update.get("global_mode_enabled"):
+        err = _validate_source_bound(update.get("global_source"), "全局代理")
+        if err:
+            return err
+    smart = update.get("smart_source")
+    if _source_configured(smart):   # 智能源真被绑定了才校验；默认订阅空占位=直连，放行
+        err = _validate_source_bound(smart, "智能代理")
+        if err:
+            return err
+    return ""
+
+
+def _reachability_check_on_save(update: Dict[str, Any]) -> str:
+    """保存时对「启用了代理」的配置真探一次可达性（需求1）。返回错误串（空=通过/无需探）。
+
+    只探 **强制走代理** 的场景（前端「启用代理」= global_mode_enabled=True）——这类保存后流量必走该出口，
+    源结构上配了但节点全挂时应当拦下并提示「代理失效」，而不是显示保存成功。
+    smart 模式设计上不可达会自动降级直连，不因探测失败拦保存（保持原有直连兜底语义）。
+
+    探测目标 = 本次保存后**实际生效的出口 URL**（用 update 覆盖当前 config 计算，subscription 走
+    mihomo runtime，host/端口按实际生效地址——即用户指出的 host/端口可能不同的场景）。
+    """
+    if not update.get("global_mode_enabled"):
+        return ""
+    # 用本次 update 覆盖当前配置，算出保存后生效的 global 出口 URL（未落库前的前瞻判定）。
+    merged = dict(get_config())
+    merged.update(update)
+    src = merged.get("global_source") or {}
+    proxy_url = _source_url(src)
+    if not proxy_url:
+        return ""   # 源结构性校验已在前面拦过；这里取不到 URL 不重复报错
+    if not _proxy_reachable(proxy_url):
+        return ("代理失效（全部节点不可达），未保存。请检查内核代理订阅节点是否可用、"
+                "或更换代理源后重试。")
+    return ""
+
+
 def save_config(data: Dict[str, Any]) -> Dict[str, Any]:
-    """更新代理配置（白名单字段，类型规整，mode 校验）。返回更新后的完整配置。"""
+    """更新代理配置（白名单字段，类型规整，mode 校验，代理源结构性校验，启用代理时探可达性）。返回更新后的完整配置。"""
     update: Dict[str, Any] = {}
     for key in _ALLOWED_CFG_KEYS:
         if key in data:
@@ -107,6 +184,16 @@ def save_config(data: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": "{} 必须为整数".format(key)}
     if "mode" in update and update["mode"] not in _ALLOWED_MODES:
         return {"error": "mode 必须为 rule/global/direct"}
+    # 代理源结构性校验（只查源是否为空，不探可达性——守内网无出口不误判的设计边界）。
+    # 只在提交里带了源字段时校验（改端口/DoH 等不带源的保存不受影响）。
+    if "global_source" in update or "smart_source" in update or "global_mode_enabled" in update:
+        src_err = _validate_sources(update)
+        if src_err:
+            return {"error": src_err}
+        # 需求1：结构性校验通过后，对「启用代理（强制走代理）」的保存真探一次可达性，节点全挂则拦下。
+        reach_err = _reachability_check_on_save(update)
+        if reach_err:
+            return {"error": reach_err}
     update["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     try:
         get_repo().collection(Collections.PROXY_CONFIG).update_one(
@@ -595,7 +682,7 @@ def detect_exit_ip(use_cache: bool = True, cache_ttl: int = _EXIT_IP_CACHE_TTL) 
                     p_ip, err = f_proxy.result(timeout=6)
                 except Exception:
                     p_ip, err = "", "探测超时（可能无外网出口/DNS 解析不通）"
-                p_err = err or ("" if p_ip else "经代理探出口 IP 失败（可能无外网出口/节点不通）")
+                p_err = _friendly_proxy_error(err) or ("" if p_ip else "经代理探出口 IP 失败（可能无外网出口/节点不通）")
         finally:
             ex.shutdown(wait=False)   # 不阻塞等待悬挂的 DNS 线程回收，立即返回
         return d_ip, p_ip, p_err
@@ -632,13 +719,51 @@ def detect_exit_ip(use_cache: bool = True, cache_ttl: int = _EXIT_IP_CACHE_TTL) 
     return result
 
 
+_PROXY_FAIL_SIGNS = (
+    "proxyerror", "cannot connect to proxy", "max retries exceeded",
+    "handshake operation timed out", "connection refused", "connection aborted",
+    "connectionpool", "failed to establish a new connection", "tunnel connection failed",
+)
+
+
+def _friendly_proxy_error(raw: str) -> str:
+    """归一代理探测异常文案（需求2）：底层 requests/urllib3 抛出的
+    `HTTPSConnectionPool(...ProxyError('Cannot connect to proxy'...))` 等原文对用户无意义，
+    命中「连不上代理/全部节点不可达」特征时统一显示「代理失效（全部节点不可达）」；
+    非代理连通类错误（如 proxy not enabled、无外网出口提示）保持原样透出，不误伤。"""
+    s = (raw or "").strip()
+    if not s:
+        return s
+    low = s.lower()
+    if any(sign in low for sign in _PROXY_FAIL_SIGNS):
+        return "代理失效（全部节点不可达）"
+    return s
+
+
+def _proxy_alert_enabled() -> bool:
+    """代理告警推送开关（需求3，默认开启）：复用 api_keys 飞书渠道下 proxy_down_notify 字段。
+    **只有显式 False 才算关闭**——存量安装未存过该字段时 get_key 返回 ""（或飞书未启用时字段被清空），
+    不能被误判为关闭，故用 `is not False` 而非 bool()（bool("")=False 会把默认开误关，坑）。
+    取不到配置一律按开启处理（默认 True）。"""
+    try:
+        keys = get_registry().get("api_keys_service")
+        if keys and hasattr(keys, "get_key"):
+            cfg = keys.get_key("feishu") or {}
+            return cfg.get("proxy_down_notify", True) is not False
+    except Exception as exc:
+        logger.debug("proxy alert switch degraded: %s", exc)
+    return True
+
+
 def _notify_down(fail_streak: int, err: str) -> None:
-    """代理连续失活告警，经 ROLE.NOTIFY（缺失降级不崩）。"""
+    """代理连续失活告警，经 ROLE.NOTIFY（缺失降级不崩）。默认开启，可在「API 密钥 > 告警推送」关闭。"""
+    if not _proxy_alert_enabled():
+        return
     svc = get_registry().get(ROLE.NOTIFY)
     if not svc:
         return
     try:
-        svc.notify("代理健康检测连续失败 {} 次: {}".format(fail_streak, err or "unknown"),
+        svc.notify("代理健康检测连续失败 {} 次: {}".format(fail_streak, _friendly_proxy_error(err) or "unknown"),
                    title="代理告警", level="error")
     except Exception as exc:
         logger.debug("proxy notify failed: %s", exc)
@@ -669,6 +794,7 @@ def check_health(use_cache: bool = True, cache_ttl: int = 15, **kwargs: Any) -> 
         finally:
             _ex.shutdown(wait=False)
         ok = bool(exit_ip)
+        err = _friendly_proxy_error(err)   # 需求2：代理连不通类原文归一为「代理失效」
     _HEALTH_CACHE["ok"] = ok
     _HEALTH_CACHE["ts"] = now
     try:
@@ -874,6 +1000,11 @@ class ProxyServiceImpl:
         return out
 
     # —— 4模式重构：自定义代理 / 规则代理 CRUD + 探测（router endpoints 经 ROLE.PROXY 调）——
+    def custom_proxy_url(self, ref_id: str) -> str:
+        """按 proxy_custom._id 取该自定义代理 URL（enabled 才返回，缺失/禁用返 ""）。
+        供 AI 配置的「入口代理」（provider.proxy_id）经 registry 取代理 URL 用（问题18）。"""
+        return custom_proxy_url(ref_id)
+
     def list_custom(self) -> List[Dict[str, Any]]:
         return list_custom()
 

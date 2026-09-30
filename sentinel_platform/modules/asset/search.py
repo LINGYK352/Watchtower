@@ -98,6 +98,34 @@ def _stringify(docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return docs
 
 
+def _annotate_shot_policy(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """给**无截图**的站点行标注其所属任务是否开了截图策略（options.site_capture）。
+
+    治"资产检索无截图反复被误判为截图坏了"（真相多是策略默认未勾"站点截图"→截图阶段被门控跳过）：
+    `_shot_off=True` → 该行任务**策略未开截图**，前端显"策略未截图"，与"截图失败/空白"区分开。
+    只处理无 screenshot 的行；distinct task_id 一次 $in 批量查，避免逐行查库。任务查不到→不标注
+    （保守退化为通用"无截图"）。"""
+    pending = {str(it.get("task_id")) for it in items
+               if not it.get("screenshot") and it.get("task_id")}
+    if not pending:
+        return items
+    cap: Dict[str, bool] = {}
+    try:
+        oids = [_to_oid(t) for t in pending]
+        for doc in get_repo().collection(Collections.TASK).find(
+                {"_id": {"$in": oids}}, {"options.site_capture": 1}):
+            cap[str(doc.get("_id"))] = bool((doc.get("options") or {}).get("site_capture"))
+    except Exception as exc:
+        logger.debug("annotate shot policy failed: %s", exc)
+        return items
+    for it in items:
+        if it.get("screenshot"):
+            continue
+        if cap.get(str(it.get("task_id") or "")) is False:
+            it["_shot_off"] = True   # 任务策略未开截图（非截图失败）
+    return items
+
+
 def list_records(namespace: str, args: Dict[str, Any]) -> Dict[str, Any]:
     """集合分页查询。返回 {page,size,total,items}；非法集合返回 error。size 不设上限。"""
     coll_name = _coll_name(namespace)
@@ -113,6 +141,8 @@ def list_records(namespace: str, args: Dict[str, Any]) -> Dict[str, Any]:
         field = order.lstrip("+-") or "_id"
         cur = coll.find(query).sort(field, direction).skip((page - 1) * size).limit(size)
         items = _stringify(list(cur))
+        if namespace in SITE_LIKE:
+            items = _annotate_shot_policy(items)   # 无截图行标注"策略未截图" vs 截图失败
         return {"page": page, "size": size, "total": total, "items": items}
     except Exception as exc:
         logger.debug("asset list %s failed: %s", namespace, exc)
@@ -165,7 +195,7 @@ def list_dedup(namespace: str, args: Dict[str, Any]) -> Dict[str, Any]:
     reps = [_pick(v) for v in groups.values()]
     reps.sort(key=lambda x: x.get("_id", ""), reverse=True)
     total = len(reps)
-    items = _stringify(reps[(page - 1) * size: page * size])
+    items = _annotate_shot_policy(_stringify(reps[(page - 1) * size: page * size]))
     return {"page": page, "size": size, "total": total, "items": items}
 
 

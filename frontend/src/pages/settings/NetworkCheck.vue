@@ -1,7 +1,12 @@
 <template>
   <PageContainer title="网络检测" kicker="Network" description="检测服务器网络连通性，配置 DNS 服务器。">
     <a-card title="DNS 服务器" :bordered="false" style="margin-bottom: 16px">
-      <template #extra><a-button type="primary" size="small" :loading="dnsSaving" @click="saveDns">保存自定义</a-button></template>
+      <template #extra>
+        <a-space>
+          <span v-if="dirty" style="color:#d48806;font-size:12px;font-weight:600">● 有未保存修改</span>
+          <a-button type="primary" size="small" :loading="dnsSaving" @click="saveDns">保存自定义</a-button>
+        </a-space>
+      </template>
       <!-- 自定义 DNS：用户可加/改/删（平台自身 Ping/解析优先用）——列表式 -->
       <div class="dns-block">
         <div class="dns-h">自定义 DNS <span class="muted">（可增删改，平台 Ping/域名解析优先使用）</span></div>
@@ -52,8 +57,8 @@
           <div class="ov-summary">{{ assess.summary }}</div>
         </div>
       </div>
-      <!-- 5项详情默认折叠：进页看总评卡即可，要细节再展开（对齐态势总览"卡片+详情折叠"体验） -->
-      <a-collapse v-if="q" ghost>
+      <!-- 5项详情默认展开：网络体检是"专程来看细节"的页面，进页即见全部（链路/出网/DNS/依赖/代理出口）；保留可折叠壳，想收起仍可点。 -->
+      <a-collapse v-if="q" ghost :default-active-key="['detail']">
         <a-collapse-panel key="detail">
           <template #header><span style="font-weight:600">体检详情（链路 / 出网 / DNS / 依赖 / 代理出口）</span></template>
       <div class="q-wrap">
@@ -121,6 +126,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 import PageContainer from '../../layouts/PageContainer.vue'
 import { request } from '../../api/request'
 
@@ -129,10 +135,15 @@ const customDns = ref<string[]>([])
 const builtinDns = ref<string[]>([])
 const dnsSaving = ref(false)
 
+// 未保存提示（问题4）：自定义 DNS 改了没点保存就切走会丢失（只跟踪 customDns，builtinDns 只读）。
+const { dirty, markSaved } = useUnsavedGuard(() => JSON.stringify(customDns.value),
+  { content: '自定义 DNS 尚未保存，直接离开将丢失这些修改。确定要离开吗？' })
+
 async function loadDns() {
   try {
     const res = await request<{ servers: string[] }>('/api/network/dns')
     customDns.value = (res.servers || []).slice()
+    markSaved()   // 载入后设为基线
   } catch { /* ignore */ }
   try {
     const b = await request<{ servers: string[] }>('/api/network/dns/builtin')
@@ -146,6 +157,7 @@ async function saveDns() {
     const servers = customDns.value.map(s => s.trim()).filter(Boolean)
     await request('/api/network/dns', { method: 'POST', body: JSON.stringify({ servers }) })
     customDns.value = servers   // 回填去空后的
+    markSaved()                 // 保存成功后重置基线
     message.success('自定义 DNS 已保存')
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))

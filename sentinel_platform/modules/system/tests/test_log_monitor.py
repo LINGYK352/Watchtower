@@ -7,7 +7,7 @@ import logging
 import unittest
 from unittest import mock
 
-from sentinel_platform.core.db import Repository, set_repo, reset_repo
+from sentinel_platform.core.db import Repository, set_repo, reset_repo, get_repo
 from sentinel_platform.contracts import get_registry
 from sentinel_platform.contracts.registry import reset_registry
 
@@ -54,8 +54,11 @@ class _MemColl:
         n = len(self.docs); self.docs = []
         return type("R", (), {"deleted_count": n})()
 
-    def find_one(self, q):
-        for d in self.docs:
+    def find_one(self, q, sort=None):
+        docs = list(self.docs)
+        for field, direction in (sort or []):
+            docs.sort(key=lambda d: d.get(field, 0), reverse=direction < 0)
+        for d in docs:
             if all(d.get(k) == v for k, v in (q or {}).items()):
                 return dict(d)
         return None
@@ -178,13 +181,76 @@ class LogMonitorTest(unittest.TestCase):
 
     # —— 资源监控（mock psutil）——
     def test_resource_level(self):
+        """内存维度分级（隔离 CPU/磁盘：置低值不干扰，验证内存单维语义不变）。"""
         from sentinel_platform.modules.system import log_monitor as lm
-        with mock.patch.object(lm, "get_memory_percent", return_value=95):
+        with mock.patch.object(lm, "get_cpu_percent", return_value=10), \
+             mock.patch.object(lm, "get_disk_percent", return_value=10):
+            with mock.patch.object(lm, "get_memory_percent", return_value=95):
+                self.assertEqual(lm.get_resource_level(), "critical")
+            with mock.patch.object(lm, "get_memory_percent", return_value=50):
+                self.assertEqual(lm.get_resource_level(), "relaxed")
+            with mock.patch.object(lm, "get_memory_percent", return_value=70):
+                self.assertEqual(lm.get_resource_level(), "normal")
+
+    def test_resource_level_multidim_worst(self):
+        """综合水位取内存/CPU/磁盘最严重维度：内存空闲但 CPU/磁盘高 → 综合被拉高。"""
+        from sentinel_platform.modules.system import log_monitor as lm
+        # 内存 relaxed(50)，但 CPU critical(97) → 综合 critical
+        with mock.patch.object(lm, "get_memory_percent", return_value=50), \
+             mock.patch.object(lm, "get_cpu_percent", return_value=97), \
+             mock.patch.object(lm, "get_disk_percent", return_value=10):
             self.assertEqual(lm.get_resource_level(), "critical")
-        with mock.patch.object(lm, "get_memory_percent", return_value=50):
+        # 内存 relaxed(50)，磁盘 tight(88) → 综合 tight
+        with mock.patch.object(lm, "get_memory_percent", return_value=50), \
+             mock.patch.object(lm, "get_cpu_percent", return_value=10), \
+             mock.patch.object(lm, "get_disk_percent", return_value=88):
+            self.assertEqual(lm.get_resource_level(), "tight")
+        # 三维皆空闲 → relaxed（保留向上调度语义）
+        with mock.patch.object(lm, "get_memory_percent", return_value=40), \
+             mock.patch.object(lm, "get_cpu_percent", return_value=20), \
+             mock.patch.object(lm, "get_disk_percent", return_value=30):
             self.assertEqual(lm.get_resource_level(), "relaxed")
-        with mock.patch.object(lm, "get_memory_percent", return_value=70):
-            self.assertEqual(lm.get_resource_level(), "normal")
+
+    def test_get_resource_alert_dims(self):
+        """resource_alert 列出超标维度（tight/critical），normal 维度不进 dims。"""
+        from sentinel_platform.modules.system import log_monitor as lm
+        with mock.patch.object(lm, "get_memory_percent", return_value=92), \
+             mock.patch.object(lm, "get_cpu_percent", return_value=30), \
+             mock.patch.object(lm, "get_disk_percent", return_value=88):
+            info = lm.get_resource_alert()
+        self.assertEqual(info["level"], "critical")   # 内存 92 ≥ 90
+        keys = {d["key"]: d["level"] for d in info["dims"]}
+        self.assertEqual(keys.get("memory"), "critical")
+        self.assertEqual(keys.get("disk"), "tight")   # 磁盘 88 ≥ 85 高
+        self.assertNotIn("cpu", keys)                 # CPU 30 正常，不进 dims
+
+    def test_check_and_alert_pushes_and_throttles(self):
+        """tight+ 触发推送；同级别 TTL 内去重不重推；回落后清标记能再推。"""
+        from sentinel_platform.modules.system import log_monitor as lm
+        lm._ALERT_DEDUP["level"] = ""; lm._ALERT_DEDUP["ts"] = 0.0   # 复位
+        calls = []
+        # 直接 patch 真实 notify 模块的函数——不能用 patch.dict(sys.modules) 换整个 notify：
+        # check_and_alert_resource 内 `from ...kernel import notify` 一旦父包 kernel 已导入，
+        # 会从 kernel 的属性拿到真实 notify（不查 sys.modules），patch.dict 便失效（跨文件跑时暴露）。
+        def _rec(module, msg):
+            calls.append((module, msg))
+        with mock.patch("sentinel_platform.modules.kernel.notify.notify_critical_log", _rec):
+            with mock.patch.object(lm, "get_memory_percent", return_value=97), \
+                 mock.patch.object(lm, "get_cpu_percent", return_value=10), \
+                 mock.patch.object(lm, "get_disk_percent", return_value=10):
+                r1 = lm.check_and_alert_resource()
+                self.assertTrue(r1["alerted"])            # 首次 critical → 推送
+                r2 = lm.check_and_alert_resource()
+                self.assertFalse(r2["alerted"])           # TTL 内同级别 → 去重不推
+            self.assertEqual(len(calls), 1)
+            # 回落 normal → 清标记
+            with mock.patch.object(lm, "get_memory_percent", return_value=50), \
+                 mock.patch.object(lm, "get_cpu_percent", return_value=10), \
+                 mock.patch.object(lm, "get_disk_percent", return_value=10):
+                r3 = lm.check_and_alert_resource()
+                self.assertFalse(r3["alerted"])
+                self.assertEqual(r3["level"], "relaxed")
+            self.assertEqual(lm._ALERT_DEDUP["level"], "")   # 标记已清
 
     def test_task_slots_resource_aware(self):
         """task_slots 按可用内存×水位系数动态算（废写死档位魔数）；critical恒0；psutil缺失回退。"""
@@ -230,6 +296,42 @@ class LogMonitorTest(unittest.TestCase):
         pts = lm.query_resource_history(days=1)
         self.assertEqual(len(pts), 1)
         self.assertEqual(pts[0]["disk"], 55.0)
+
+    def test_cpu_percent_prefers_fresh_sample_no_probe(self):
+        """新鲜 resource_history 采样存在 → 直接返回它，绝不做本地 psutil 探测（多 worker 一致 + 无阻塞）。"""
+        import time
+        from sentinel_platform.modules.system import log_monitor as lm
+        set_repo(_MemRepo())
+        get_repo().collection(lm.RESOURCE_HISTORY).insert_one(
+            {"ts": int(time.time()), "cpu": 12.0, "memory": 40.0, "disk": 55.0})
+        boom = mock.MagicMock()
+        boom.cpu_percent.side_effect = AssertionError("有新鲜采样时不应调用 psutil.cpu_percent")
+        with mock.patch.dict("sys.modules", {"psutil": boom}):
+            self.assertEqual(lm.get_cpu_percent(), 12.0)
+        boom.cpu_percent.assert_not_called()
+
+    def test_cpu_percent_stale_sample_falls_back_to_blocking_probe(self):
+        """采样过期（scheduler 停摆）→ 本地阻塞探测兜底，且 interval 非 0（绝不用冷进程增量口径）。"""
+        import time
+        from sentinel_platform.modules.system import log_monitor as lm
+        set_repo(_MemRepo())
+        get_repo().collection(lm.RESOURCE_HISTORY).insert_one(
+            {"ts": int(time.time()) - lm._CPU_SAMPLE_MAX_AGE - 10, "cpu": 12.0})
+        fake = mock.MagicMock()
+        fake.cpu_percent.return_value = 3.0
+        with mock.patch.dict("sys.modules", {"psutil": fake}):
+            self.assertEqual(lm.get_cpu_percent(), 3.0)
+        # 兜底探测必须带真实窗口，绝不 interval=0（假 critical 根因）
+        _, kwargs = fake.cpu_percent.call_args
+        self.assertEqual(kwargs.get("interval"), lm._CPU_PROBE_INTERVAL)
+        self.assertNotEqual(kwargs.get("interval"), 0)
+
+    def test_cpu_percent_no_sample_no_psutil_degrades_none(self):
+        """无采样且 psutil 不可用 → None（不参与分级，交由 _cpu_disk_level 走中性 relaxed）。"""
+        from sentinel_platform.modules.system import log_monitor as lm
+        set_repo(_MemRepo())
+        with mock.patch.dict("sys.modules", {"psutil": None}):
+            self.assertIsNone(lm.get_cpu_percent())
 
     def test_memory_percent_psutil_missing_degrades(self):
         from sentinel_platform.modules.system import log_monitor as lm

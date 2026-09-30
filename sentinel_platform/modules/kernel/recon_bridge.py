@@ -16,10 +16,15 @@ from typing import Any, Dict, List, Optional
 from .recon import build_registry
 from .recon.registry import (ROLE_HTTP_PROBE, ROLE_PORT_SCAN, ROLE_RESOLVE,
                              ROLE_VULN_SCAN, ROLE_WEAK_BRUTE, ROLE_WEBINFO,
-                             ROLE_SERVICE_POC)
+                             ROLE_SERVICE_POC, ROLE_ICMP_PING)
 
 from sentinel_platform.core import get_logger
 logger = get_logger()          # 模块级 logger（resolver 探活等模块级函数用；原仅函数内局部定义 → NameError）
+
+# 全局禁用主动扫描（用户明令 2026-08-28）：底层 RECON 的 nuclei_scan/run_poc/weak_brute 硬保险总开关。
+# 上层已断所有调用方（AI 工具 _ACTIVE_SCAN_TOOLS 全局 blocked + pipeline poc/weakbrute 铜钱不串），
+# 此常量是纵深防御——防将来有新调用方绕过上层直达底层能力。恢复主动扫描：置 False + 上层门控改回。
+_ACTIVE_SCAN_DISABLED = True
 
 
 # —— 字典供给（净室迁移缺口 D2/D4 补救）————————————————————————————————
@@ -192,6 +197,9 @@ class ReconBridge:
 
     # —— 漏扫（nuclei）——
     def nuclei_scan(self, targets: Any, **kwargs: Any) -> List[Dict[str, Any]]:
+        if _ACTIVE_SCAN_DISABLED:                        # 底层硬保险（纵深防御，见文件末常量）
+            logger.info("nuclei_scan 已全局禁用（主动扫描禁绝），返空不执行")
+            return []
         tool = self._reg.pick(ROLE_VULN_SCAN)
         if not tool:
             return []
@@ -217,6 +225,9 @@ class ReconBridge:
 
     # —— 弱口令/未授权（nmap NSE）——
     def weak_brute(self, host: str, port: int, scheme: str, **kwargs: Any) -> List[Dict[str, Any]]:
+        if _ACTIVE_SCAN_DISABLED:                        # 底层硬保险
+            logger.info("weak_brute 已全局禁用（主动扫描禁绝），返空不执行")
+            return []
         tool = self._reg.pick(ROLE_WEAK_BRUTE)
         if not tool:
             return []
@@ -225,6 +236,9 @@ class ReconBridge:
     # —— run_poc：RECON 契约。有 plugins 走 npoc 服务级验证（未授权/弱口令/特定 PoC）；
     #    无 plugins 退化 nuclei_scan（模板漏扫）。修复旧实现丢弃 plugins 只转 nuclei 的契约缺口。——
     def run_poc(self, plugins: Any = None, targets: Any = None, **kwargs: Any) -> List[Dict[str, Any]]:
+        if _ACTIVE_SCAN_DISABLED:                        # 底层硬保险（含 npoc + nuclei 降级两路）
+            logger.info("run_poc 已全局禁用（主动扫描禁绝），返空不执行")
+            return []
         plugin_list = _as_list(plugins)
         if plugin_list:
             tool = self._reg.pick(ROLE_SERVICE_POC)   # npoc(xing)；未装则降级 nuclei
@@ -249,6 +263,13 @@ class ReconBridge:
             return []
         return [asdict(x) for x in tool.hunt(_as_list(site))]
 
+    # —— 主机存活探测（native ICMP + TCP 降级）——
+    def icmp_ping(self, target: Any, **kwargs: Any) -> List[Dict[str, Any]]:
+        tool = self._reg.pick(ROLE_ICMP_PING)
+        if not tool:
+            return []
+        return [asdict(x) for x in tool.ping(_as_list(target))]
+
     # —— run_recon：侦察编排入口（RECON 契约主方法）——
     def run_recon(self, task_type: str, task_id: str, target: Any,
                   **kwargs: Any) -> Dict[str, Any]:
@@ -264,33 +285,69 @@ class ReconBridge:
         """
         from .recon import pipeline as _pipeline
         cancel_check = kwargs.pop("cancel_check", None)
-        # 断点续扫：载入上次已完成阶段（重投跳过不重扫）
-        done_steps = _load_checkpoint(task_id)
-        initial_records = _load_resume_records(task_id, done_steps)
+        # use_checkpoint=False（unit 任务流式分块调用）：不复用/不写 checkpoint，每块=对本块种子的
+        # 一次完整 fresh pipeline（阶段不被上一块的 done_steps 跳过）。默认 True，存量任务断点续扫不变。
+        use_checkpoint = bool(kwargs.pop("use_checkpoint", True))
+        # 断点续扫：载入上次已完成阶段（重投跳过不重扫）；流式分块调用时禁用，避免跳过新种子的阶段
+        done_steps = _load_checkpoint(task_id) if use_checkpoint else []
+        initial_records = _load_resume_records(task_id, done_steps) if use_checkpoint else {}
         budget_provider = _resource_budget
         budget = budget_provider()
         opts = dict(kwargs)
         opts.setdefault("io_concurrency", budget["io_concurrency"])
         opts.setdefault("scan_parallelism", budget["scan_parallelism"])
+        # 广域 API 收集源：策略只持久化 source id；真实凭据在每次运行时从 API 密钥中心 fresh 读，
+        # 仅以内存参数注入自包含 pipeline，绝不写入 task/options/checkpoint/日志。
+        # collect_sources 缺失=存量策略，兼容为全部已配置源；显式 []=用户明确全部取消。
+        if task_type == "domain" and str(opts.get("collect_mode") or "multi_brute").lower() != "single":
+            try:
+                from . import ext_source as _ext_source
+                _selected_sources = opts.get("collect_sources") if "collect_sources" in opts else None
+                _source_runtime = _ext_source.configured_collection_sources(_selected_sources)
+                if _source_runtime.get("subfinder"):
+                    opts["_collection_source_credentials"] = _source_runtime["subfinder"]
+                if _source_runtime.get("fofa"):
+                    opts["_fofa_collector"] = _ext_source.fofa_subdomains
+            except Exception as exc:
+                logger.debug("广域 API 收集源运行时解析降级: %s", exc)
         _supply_default_dicts(opts)   # D2/D4:按策略开关补默认字典(爆破/文件泄露),治恒 skip
         # 扫描出口代理（scan_proxy 两轨）：按策略注入 *_proxy env，扫描子进程/native 全走代理；finally 清除。
         _saved_egress = _apply_scan_egress(opts)
         # 流式：每阶段完成后增量落库 + 写 checkpoint + 站点产出阶段触发增量派发（边探边派）
-        streamer = _StreamPersister(task_id)
+        # save_checkpoint=use_checkpoint：流式分块调用不写 task.checkpoint（否则残留误导后续读取），
+        # 仍照常落库 + 流式派发。
+        streamer = _StreamPersister(task_id, save_checkpoint=use_checkpoint, cancel_check=cancel_check)
+        # 资源门（问题11）：注入 recon，内存重工具(截图/nuclei/service)执行前申请内存、让位 AI。
+        resource_gate = _build_resource_gate(task_id, cancel_check)
         try:
             out = _pipeline.run_pipeline(task_id, task_type, target,
                                          options=opts, cancel_check=cancel_check,
                                          on_stage=streamer.on_stage, done_steps=done_steps,
                                          budget_provider=budget_provider,
-                                         initial_records=initial_records)
+                                         initial_records=initial_records,
+                                         resource_gate=resource_gate)
             # 收尾兜底：补落任何流式未覆盖的尾部记录（幂等 upsert）
             out["persisted"] = streamer.flush(out.get("records") or {})
+            if cancel_check and cancel_check():
+                out["result"] = "stopped"
+            if out.get("result") != "stopped" and (streamer.persist_failed or streamer.pending_sites):
+                out["result"] = "error"
+                out["error"] = "流式链路未完成：落库失败={}，待派发站点={}".format(
+                    sorted(streamer.persist_failed), len(streamer.pending_sites))
             return out
         except Exception as exc:                    # 内部捕获，异常态经 result 表达（守 §0.4）
             return {"result": "error", "task_id": task_id, "task_type": task_type,
                     "stages": [], "records": {}, "error": str(exc)}
         finally:
             _restore_scan_egress(_saved_egress)   # 清除扫描代理 env，防泄漏到下个任务
+            # 资源门收尾（问题11）：释放本任务所有 recon 预留 + 清 resource_wait 徽标（防泄漏，
+            # 镜像 AI run_agent finally 的 release_session_all）。
+            try:
+                from .resource_pool import release_session_all
+                release_session_all(resource_gate.session_id)
+            except Exception:
+                pass
+            _clear_resource_wait(task_id)
 
     # —— 工具可用性（健康检查/降级排查）——
     def tool_report(self) -> Dict[str, Dict[str, bool]]:
@@ -360,9 +417,25 @@ class _StreamPersister:
     ④ 更新 task.statistic（前端 TaskList/TaskDetail 读此字段展示域名/IP/站点数量）。
     异常全吞——绝不反噬扫描（守 §0.4）。"""
 
-    def __init__(self, task_id: str) -> None:
+    def __init__(self, task_id: str, save_checkpoint: bool = True, cancel_check=None) -> None:
         self.task_id = task_id
         self._offset: Dict[str, int] = {}   # 各 ctx 字段已落库偏移
+        self._save_checkpoint = save_checkpoint   # unit 流式分块调用置 False：只落库+派发，不写 checkpoint
+        self.cancel_check = cancel_check
+        self.persist_failed = set()
+        self.pending_sites = {}
+
+    def _dispatch_pending(self):
+        if not self.pending_sites or (self.cancel_check and self.cancel_check()):
+            return
+        if _stream_dispatch(self.task_id, list(self.pending_sites.values())) is not False:
+            self.pending_sites.clear()
+
+    def _remember_sites(self, rows):
+        for row in rows:
+            url = row.get("site") or row.get("url")
+            if url:
+                self.pending_sites[url] = row
 
     def on_stage(self, ctx: Any, stage_name: str) -> None:
         # ① 增量落库（只写各字段 offset 之后的新记录）
@@ -372,23 +445,42 @@ class _StreamPersister:
             off = self._offset.get(field, 0)
             if len(rows) > off:
                 delta[coll] = _dataclass_rows({coll: rows[off:]}).get(coll, [])
-                self._offset[field] = len(rows)
         if delta:
-            _persist_records(self.task_id, delta)
-        # ② 写断点（终态阶段含空结果/策略关闭，重投不重复打目标）
-        states = {r.name: {"status": r.status, "count": r.count,
-                           "reason": r.reason, "error": r.error}
-                  for r in (getattr(ctx, "results", []) or [])}
-        _save_checkpoint(self.task_id, list(getattr(ctx, "done_steps", []) or []), states)
+            written = _persist_records(self.task_id, delta)
+            for field, coll in _CTX_COLLECTIONS.items():
+                if coll not in delta:
+                    continue
+                if written.get(coll, 0) == len(delta[coll]):
+                    self._offset[field] = len(getattr(ctx, field, None) or [])
+                    self.persist_failed.discard(coll)
+                    if coll == "site":
+                        self._remember_sites(delta[coll])
+                else:
+                    self.persist_failed.add(coll)
+        # 新增 site 即派发，不再硬编码只认名为 site/vhost 的铜钱；失败在下一回调/收尾重试。
+        self._dispatch_pending()
+        # ② 写断点（终态阶段含空结果/策略关闭，重投不重复打目标）；流式分块调用不写（save_checkpoint=False）
+        if self._save_checkpoint and not self.persist_failed and not self.pending_sites:
+            states = {r.name: {"status": r.status, "count": r.count,
+                               "reason": r.reason, "error": r.error}
+                      for r in (getattr(ctx, "results", []) or [])}
+            _save_checkpoint(self.task_id, list(getattr(ctx, "done_steps", []) or []), states)
         # ③ 站点产出阶段 → 增量派发（边探边派）
-        if stage_name in _SITE_STAGES:
-            _stream_dispatch(self.task_id)
         # ④ 更新 task.statistic（前端实时展示扫描进度数字）
         _update_statistic(self.task_id)
 
     def flush(self, final_records: Dict[str, Any]) -> Dict[str, int]:
         """收尾：补落流式未覆盖的尾部（幂等 upsert，二次落无害）。返回总写入摘要。"""
-        written = _persist_records(self.task_id, _dataclass_rows(final_records))
+        records = _dataclass_rows(final_records)
+        written = _persist_records(self.task_id, records)
+        for coll, rows in records.items():
+            if written.get(coll, 0) == len(rows):
+                self.persist_failed.discard(coll)
+                if coll == "site":
+                    self._remember_sites(rows)
+            else:
+                self.persist_failed.add(coll)
+        self._dispatch_pending()
         # 最终统计刷新（保证任务结束时 statistic 精确）
         _update_statistic(self.task_id)
         return written
@@ -426,6 +518,98 @@ def _load_resume_records(task_id: str, done_steps: List[str]) -> Dict[str, List[
         return {}
 
 
+def _res_cfg(key: str, default: float) -> float:
+    """读 RESOURCE.<key>，缺失/异常回退默认（recon gate 节流/超时参数，物理意义非魔数）。"""
+    try:
+        from sentinel_platform.core import get_config
+        v = get_config().section("RESOURCE", key)
+        return float(v) if v is not None else float(default)
+    except Exception:
+        return float(default)
+
+
+def _set_resource_wait(task_id: str, tool: str, res: Dict[str, Any]) -> None:
+    """写 task.resource_wait 子状态（recon 工具因内存等待→前端显"资源等待"徽标，问题11）。recon 不碰 DB，由桥写。"""
+    try:
+        import time
+        from sentinel_platform.core import get_repo
+        from sentinel_platform.contracts import Collections
+        get_repo().collection(Collections.TASK).update_one(
+            {"_id": _task_oid(task_id)},
+            {"$set": {"resource_wait": {
+                "tool": tool, "since": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "avail_mb": res.get("avail_mb"), "reserve_mb": res.get("reserve_mb"),
+                "reserved_mb": res.get("reserved_mb"), "headroom_mb": res.get("headroom_mb")}}})
+    except Exception:
+        pass
+
+
+def _clear_resource_wait(task_id: str) -> None:
+    """清 task.resource_wait（acquire 成功/退出/降级/收尾时调）。"""
+    try:
+        from sentinel_platform.core import get_repo
+        from sentinel_platform.contracts import Collections
+        get_repo().collection(Collections.TASK).update_one(
+            {"_id": _task_oid(task_id)}, {"$unset": {"resource_wait": ""}})
+    except Exception:
+        pass
+
+
+def _build_resource_gate(task_id: str, cancel_check):
+    """构建注入 recon 的资源门 callable（问题11，守 recon 自包含——recon 只调返回的 callable，不 import 池）。
+    gate(tool) → 上下文管理器：acquire 成功即放行并记账；内存不足则写 resource_wait 徽标 + 轮询等待、
+    让位 AI；cancel_check 真 → 抛 recon 的 StoppedException；超 max_wait → degraded=True 诚实跳过。"""
+    import time
+    from .resource_pool import acquire, release, _used_mb_now, PRIORITY_RECON
+    from .recon.context import StoppedException
+    sid = "recon:" + str(task_id)
+    poll = _res_cfg("RECON_GATE_POLL_SEC", 2.0)        # 轮询间隔（让位 AI 的检查周期）
+    max_wait = _res_cfg("RECON_GATE_MAX_WAIT_SEC", 0)  # 0=无限等（默认让位到底）；>0 超时诚实降级跳过
+
+    class _Holder:
+        def __init__(self, tool):
+            self.tool = tool
+            self.hid = ""
+            self._before = None
+            self.degraded = False
+
+        def __enter__(self):
+            start = time.time()
+            while True:
+                if cancel_check and cancel_check():
+                    raise StoppedException("recon stopped while waiting for memory (gate)")
+                res = acquire(self.tool, sid, int(PRIORITY_RECON))
+                if res.get("ok"):
+                    self.hid = res.get("hid", "")
+                    self._before = None if res.get("light") else _used_mb_now()
+                    _clear_resource_wait(task_id)
+                    return self
+                _set_resource_wait(task_id, self.tool, res)
+                if max_wait and (time.time() - start) > max_wait:
+                    self.degraded = True
+                    _clear_resource_wait(task_id)
+                    return self
+                time.sleep(poll)
+
+        def __exit__(self, *exc):
+            delta = None
+            if self._before is not None:
+                after = _used_mb_now()
+                if after is not None:
+                    delta = after - self._before
+            try:
+                release(self.hid, tool=self.tool, used_delta_mb=delta)
+            except Exception:
+                pass
+            _clear_resource_wait(task_id)
+            return False   # 不吞异常（StoppedException 等照常传播）
+
+    def gate(tool):
+        return _Holder(tool)
+    gate.session_id = sid
+    return gate
+
+
 def _load_checkpoint(task_id: str) -> List[str]:
     """读 task.checkpoint.done_steps（断点续扫）。无/异常 → 空（从头扫）。"""
     try:
@@ -453,16 +637,26 @@ def _save_checkpoint(task_id: str, done_steps: List[str], stage_status: Optional
         pass
 
 
-def _stream_dispatch(task_id: str) -> None:
+def _stream_dispatch(task_id: str, sites=None) -> bool:
     """站点阶段后增量归集派发（边探边派）。经 ROLE.INTEL 幂等归集 + 按 auto_pentest 派发；
     幂等（asset_key upsert + skip_pentested + 竞态防护），多次调不重派。缺失降级。"""
     try:
         from sentinel_platform.contracts import get_registry, ROLE
         svc = get_registry().get(ROLE.INTEL)
         if svc and hasattr(svc, "auto_collect_after_scan"):
-            svc.auto_collect_after_scan(task_id)
-    except Exception:
-        pass
+            if sites is not None and hasattr(svc, "auto_collect_sites"):
+                result = svc.auto_collect_sites(task_id, sites)
+            else:
+                result = svc.auto_collect_after_scan(task_id)
+            if isinstance(result, dict):
+                if result.get("error") or (result.get("collected") or {}).get("error") or (result.get("dispatched") or {}).get("error"):
+                    return False
+                if result.get("dispatch_pending"):
+                    return False
+            return True
+    except Exception as exc:
+        logger.warning("stream dispatch task=%s deferred: %s", task_id, type(exc).__name__)
+    return False
 
 
 def _update_statistic(task_id: str) -> None:

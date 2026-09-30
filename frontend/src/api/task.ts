@@ -36,22 +36,22 @@ const base = '/api/task'
 export const taskApi = {
   list: (query: ListQuery = {}) => request<ListResult<RowRecord>>(`${base}/${toQueryString(query)}`),
   create: (payload: TaskCreatePayload) => request<{ items?: RowRecord[] }>(`${base}/`, { method: 'POST', body: JSON.stringify(payload) }),
-  stop: (id: string) => request<Record<string, unknown>>(`${base}/stop/${id}`),
-  resume: (id: string) => request<Record<string, unknown>>(`${base}/resume/${id}`),
+  stop: (id: string) => request<Record<string, unknown>>(`${base}/stop/${id}`, { method: 'POST' }),
+  resume: (id: string) => request<Record<string, unknown>>(`${base}/resume/${id}`, { method: 'POST' }),
   restart: (ids: string[]) => request<Record<string, unknown>>(`${base}/restart/`, {
     method: 'POST',
     body: JSON.stringify({ task_id: ids })
   }),
-  delete: (ids: string[], del_task_data = false) => request<Record<string, unknown>>(`${base}/delete/`, {
+  delete: (ids: string[], del_task_data = false, del_sessions = false) => request<Record<string, unknown>>(`${base}/delete/`, {
     method: 'POST',
-    body: JSON.stringify({ task_id: ids, del_task_data })
+    body: JSON.stringify({ task_id: ids, del_task_data, del_sessions })
   }),
   batchStop: (ids: string[]) => request<Record<string, unknown>>(`${base}/batch_stop/`, {
     method: 'POST',
     body: JSON.stringify({ task_id: ids })
   }),
   // 孤儿资产：task_id 指向已删除任务的残留结果记录
-  scanOrphan: () => request<{ total: number; by_collection: Record<string, number>; live_task_count: number }>(`${base}/orphan_assets`),
+  scanOrphan: () => request<{ total: number; by_collection: Record<string, number>; live_task_count: number; purgeable?: boolean; note?: string }>(`${base}/orphan_assets`),
   purgeOrphan: () => request<{ purged: number; by_collection: Record<string, number>; skipped?: string; note?: string }>(`${base}/orphan_assets/purge`, { method: 'POST' }),
   /** 将任务结果同步到资产组 */
   sync: (task_id: string, scope_id: string) => request<Record<string, unknown>>(`${base}/sync/`, {
@@ -67,7 +67,12 @@ export const taskApi = {
     pentest_whitelist?: string;
     mission_intel?: string;
     pentest_provider_id?: string;
+    pentest_backup_provider_id?: string;
     pentest_egress_mode?: string;
+    pentest_fallback_egress_mode?: string;
+    pentest_max_context_tokens?: number;
+    observer_enabled?: boolean;
+    observer_provider_id?: string;
     'source.platform'?: string; 'source.category'?: string; 'source.unit'?: string; 'source.src_id'?: string
   }) =>
     request<{ items?: RowRecord[] }>(`${base}/policy/`, { method: 'POST', body: JSON.stringify(payload) })
@@ -87,11 +92,16 @@ export const taskFofaApi = {
     })
   },
   submit: (payload: {
-    queries?: Record<string, string>; query?: string; name: string; policy_id?: string; priority?: number;
+    queries?: Record<string, string>; limits?: Record<string, number>; query?: string; name: string; policy_id?: string; priority?: number;
     pentest_whitelist?: string;
     mission_intel?: string;
     pentest_provider_id?: string;
+    pentest_backup_provider_id?: string;
     pentest_egress_mode?: string;
+    pentest_fallback_egress_mode?: string;
+    pentest_max_context_tokens?: number;
+    observer_enabled?: boolean;
+    observer_provider_id?: string;
     'source.platform'?: string; 'source.category'?: string; 'source.unit'?: string; 'source.src_id'?: string
   }) =>
     request<RowRecord>(`${fofaBase}/submit`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -100,7 +110,12 @@ export const taskFofaApi = {
     name: string; units: string; policy_id?: string; priority?: number; pentest_whitelist?: string;
     mission_intel?: string;
     pentest_provider_id?: string;
+    pentest_backup_provider_id?: string;
     pentest_egress_mode?: string;
+    pentest_fallback_egress_mode?: string;
+    pentest_max_context_tokens?: number;
+    observer_enabled?: boolean;
+    observer_provider_id?: string;
     'source.platform'?: string; 'source.category'?: string; 'source.src_id'?: string
   }) =>
     request<{ task_id: string; name: string; unit_count: number }>(

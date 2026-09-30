@@ -1,0 +1,25 @@
+name: 功能建议
+description: 描述真实场景与期望改进
+title: "[Feature] "
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景与现有问题
+      description: 描述需要解决的问题，不要提交真实客户资料
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的行为
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 已尝试的替代方式
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 兼容性或使用约束

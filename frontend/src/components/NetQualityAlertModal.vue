@@ -16,6 +16,7 @@
         {{ d.label }}：{{ d.grade==='dead' ? '不可达' : '质量差' }}
       </a-tag>
     </div>
+    <div class="netq-time" v-if="alertTime">告警时间：{{ alertTime }}</div>
     <div class="netq-sub" style="margin-top:14px">建议排查：</div>
     <ul class="netq-tips">
       <li v-for="(t,i) in tips" :key="i">{{ t }}</li>
@@ -45,9 +46,18 @@ const score = ref(0)
 const levelText = ref('')
 const summary = ref('')
 const weakDims = ref<Array<{ key: string; label: string; grade: string }>>([])
+const alertTs = ref<number>(0)                   // 本次告警对应体检的 checked_ts（秒）
 let timer: number | null = null
 
 const DIM_LABEL: Record<string, string> = { deps: '平台依赖', stability: '出网稳定性', ping: '链路质量', dns: 'DNS 解析', proxy: '代理出口' }
+
+// 秒级 Unix 时间戳 → 本地可读时间（Date 需毫秒，故 *1000）
+const alertTime = computed(() => {
+  if (!alertTs.value) return ''
+  const d = new Date(alertTs.value * 1000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+})
 
 // 按失败维度给针对性排查建议（哪项坏给哪项的建议，无短板给通用建议）
 const tips = computed<string[]>(() => {
@@ -80,6 +90,7 @@ async function poll() {
       weakDims.value = Object.keys(dims)
         .filter(k => dims[k] === 'dead' || dims[k] === 'poor')
         .map(k => ({ key: k, label: DIM_LABEL[k] || k, grade: dims[k] }))
+      alertTs.value = ts
       open.value = true
       try { localStorage.setItem(SEEN_KEY, String(ts)) } catch { /* ignore */ }
     }
@@ -95,6 +106,7 @@ onUnmounted(() => { if (timer) { clearInterval(timer); timer = null } })
 </script>
 
 <style scoped>
+.netq-time { color: #999; font-size: 12px; margin-top: 10px; }
 .netq-sub { font-weight: 600; color: #333; margin-bottom: 6px; }
 .netq-dims { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .netq-tips { margin: 6px 0 0; padding-left: 20px; }

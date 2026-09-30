@@ -38,3 +38,20 @@ def image_dir() -> str:
     except Exception:
         pass
     return os.path.join(project_root(), "image")
+
+
+def template_dir() -> str:
+    """报告模板输出根：config `TEMPLATE.DIR`（或 `TEMPLATE_DIR`）优先，默认项目根 `template/`。
+
+    仿 image_dir()：报告模板学习产物（注入占位符后的 template.docx、原件备份 origin.docx、
+    按需截图、人工上传补充图、生成的报告 docx）统一落此根，host 卷持久（compose 整个项目根挂载 rw，
+    web/worker/scheduler 各进程共享同一目录）。缺 config 降级项目根 template/。
+    """
+    try:
+        cfg = get_config()
+        d = cfg.section("TEMPLATE", "DIR", default="") or cfg.section("TEMPLATE_DIR", default="")
+        if d:
+            return d
+    except Exception:
+        pass
+    return os.path.join(project_root(), "template")

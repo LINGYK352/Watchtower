@@ -39,7 +39,7 @@ def _svc():
 
 @ns.route("/")
 class ApiKeys(Resource):
-    @ns.doc(security="token", description="需权限 apikey:read")
+    @ns.doc(security="token", description="需权限 apikey:write")
     def get(self):
         """API 密钥列表（密钥字段掩码 + 分组元数据）"""
         svc = _svc()
@@ -61,3 +61,19 @@ class ApiKeys(Resource):
         if isinstance(result, dict) and result.get("error"):
             return err(CODE_ERROR, result["error"])
         return ok(result)
+
+
+@ns.route("/options")
+class ApiKeyOptions(Resource):
+    @ns.doc(security="token", description="任务/策略选择器，仅返回来源名称及配置状态")
+    def get(self):
+        svc = _svc()
+        if not svc:
+            return err(CODE_ERROR, "密钥中心服务未就绪")
+        items = []
+        for item in svc.list_keys().get("items", []):
+            row = {k: item.get(k) for k in ("id", "label", "group", "fields", "enabled")}
+            for field in item.get("fields", []):
+                row[field + "_set"] = bool(item.get(field + "_set"))
+            items.append(row)
+        return ok({"items": items})

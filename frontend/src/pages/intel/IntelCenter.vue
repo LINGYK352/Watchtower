@@ -1,5 +1,5 @@
 <template>
-  <PageContainer title="情报中心" kicker="Intel Center" description="扫描资产归集成三层身份(资产实例/系统/代码),服务渗透去重、同系统借鉴、代码审计复用。">
+  <PageContainer title="资产视图" kicker="Asset View" description="扫描资产归集成三层身份(资产实例/系统/代码)+单位视图,服务渗透去重、同系统借鉴、代码审计复用。">
     <template #extra>
       <a-space>
         <a-button @click="loadStat">刷新</a-button>
@@ -203,6 +203,11 @@
             </AppTable>
           </template>
         </a-tab-pane>
+
+        <!-- #11 用户 2026-09-15：单位视图并入资产视图，作为一个 Tab（原独立菜单已下线） -->
+        <a-tab-pane key="unit" tab="单位视图">
+          <UnitView v-if="unitTabLoaded" embedded />
+        </a-tab-pane>
       </a-tabs>
     </a-card>
 
@@ -355,11 +360,13 @@ import SearchBar from '../../components/SearchBar.vue'
 import AppTable from '../../components/AppTable.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
 import CopyText from '../../components/CopyText.vue'
+import UnitView from './UnitView.vue'   // #11 单位视图作为 Tab 内嵌（embedded）
 import { intelApi, type IntelStat, type IntelCollection, type PentestContext, type ReportTreeNode } from '../../api/intel'
 import type { ListResult, RowRecord } from '../../api/types'
 
 const loading = ref(false)
 const activeTab = ref('asset')
+const unitTabLoaded = ref(false)   // #11 单位视图 Tab 懒加载：首次切到才挂载 UnitView（其 onMounted 自拉数据）
 const stat = ref<IntelStat>({ asset_total: 0, asset_pentested: 0, system_total: 0, code_total: 0, code_audited: 0, report_total: 0, asset_with_vuln: 0, asset_with_leak: 0, asset_with_secret: 0 })
 
 const statusOptions = [
@@ -509,6 +516,7 @@ function onTabChange(key: string) {
   else if (key === 'system') loadSystem(1)
   else if (key === 'code') loadCode(1)
   else if (key === 'report') { reportView.value === 'tree' ? loadReportTree() : loadReport(1) }
+  else if (key === 'unit') { unitTabLoaded.value = true }   // #11 首次进单位视图 Tab 挂载 UnitView（内部自拉数据）
 }
 
 async function removeRow(collection: IntelCollection, id: string, reload: (p?: number) => void) {

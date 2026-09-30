@@ -62,3 +62,14 @@ class ConsoleResourceHistory(Resource):
         except (TypeError, ValueError):
             days = 1
         return ok(svc.resource_history(days))
+
+
+@ns.route("/resource_alert")
+class ConsoleResourceAlert(Resource):
+    @ns.doc(security="token", description="登录即可（资源水位告警弹窗轮询）")
+    def get(self):
+        """当前资源水位明细（内存/CPU/磁盘 + 综合水位 + 超标维度，供前端弹窗判定）"""
+        svc = _svc()
+        if not svc:
+            return err(CODE_ERROR, "态势总览服务未就绪")
+        return ok(svc.resource_alert())

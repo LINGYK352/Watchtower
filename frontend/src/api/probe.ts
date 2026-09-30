@@ -9,11 +9,12 @@ export interface ProbeConfig {
   type: string
   vps_ip: string
   port: number
-  auth_key: string
+  tunnel_port?: number
+  auth_key?: string
   protocol: string
   status: string
   created_at: number
-  build_path: string
+  build_path?: string
 }
 
 export interface AgentConfig {
@@ -28,10 +29,16 @@ export interface AgentConfig {
   reuse_port: number
   beacon_interval: number
   beacon_jitter: number
-  aes_key: string
+  aes_key?: string
   status: string
   created_at: number
-  build_path: string
+  build_path?: string
+}
+
+function _extractFilename(resp: Response, fallback: string): string {
+  const disposition = resp.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename[^;=\n]*=["']?([^"';\n]+)/)
+  return match?.[1] || fallback
 }
 
 export const probeApi = {
@@ -59,7 +66,7 @@ export const probeApi = {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `probe-${probeId.slice(0, 8)}`
+    a.download = _extractFilename(resp, `probe-${probeId.slice(0, 8)}`)
     a.click()
     URL.revokeObjectURL(url)
   },
@@ -92,7 +99,7 @@ export const probeApi = {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `agent-${agentId.slice(0, 8)}`
+    a.download = _extractFilename(resp, `agent-${agentId.slice(0, 8)}`)
     a.click()
     URL.revokeObjectURL(url)
   },

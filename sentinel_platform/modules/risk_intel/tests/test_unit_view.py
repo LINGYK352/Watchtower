@@ -39,9 +39,10 @@ class _FakeColl:
     def insert_one(self, doc):
         self.docs.append(doc)
     def delete_many(self, q):
+        # 复用 _match（支持 $or / $exists），使级联删除对「未知单位=空 unit $or」也能命中（Q4 修复）
         keep, removed = [], 0
         for d in self.docs:
-            if all(d.get(k) == v for k, v in q.items() if not isinstance(v, dict)):
+            if self._match(d, q or {}):
                 removed += 1
             else:
                 keep.append(d)
@@ -156,6 +157,22 @@ class TestDeleteUnit(unittest.TestCase):
         r = uv.delete_unit("")
         self.assertIn("error", r)
         self.assertEqual(len(self.repo.collection("intel_asset").docs), 3)   # 一条没删
+
+    def test_delete_unknown_unit_removes_empty_unit_records(self):
+        """Q4 幽灵单位：删除「未知单位」必须命中空/缺失 unit 的孤儿记录（原字面 {"unit":"未知单位"}
+        匹配 0 文档→幽灵永远删不掉）。seed 空 unit 的 asset/finding/report + source.unit 空的会话。"""
+        self.repo.collection("intel_asset").insert_one({"unit": "", "subdomain": "orphan.com"})
+        self.repo.collection("intel_finding").insert_one({"source": "ai", "unit": "", "verified": True})
+        self.repo.collection("intel_report").insert_one({"unit": "", "save_date": "2026-07-02"})
+        self.repo.collection("intel_pentest_session").insert_one({"target": "orphan.com"})  # 无 unit/source.unit
+        r = uv.delete_unit("未知单位")
+        self.assertNotIn("error", r)
+        self.assertEqual(r["deleted"]["intel_asset"], 1, "空 unit 的孤儿 asset 应被删")
+        self.assertEqual(r["deleted"]["intel_finding"], 1, "空 unit 的孤儿 finding 应被删")
+        self.assertEqual(r["deleted"]["intel_report"], 1, "空 unit 的孤儿 report 应被删")
+        self.assertEqual(r["deleted"]["intel_pentest_session"], 1, "unit/source.unit 缺失的会话应被删")
+        # 真实单位 A公司 的数据不受未知单位删除影响
+        self.assertEqual(len(self.repo.collection("intel_asset").docs), 3)  # A公司2 + B公司1 保留
 
 
 if __name__ == "__main__":

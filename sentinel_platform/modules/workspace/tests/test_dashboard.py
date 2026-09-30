@@ -80,7 +80,10 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(info["memory_percent"], 48.0)
         self.assertEqual(info["disk_percent"], 60.0)
         self.assertEqual(info["cpu_count"], 4)
-        self.assertTrue(info["uptime_seconds"] >= 3599)
+        # boot_time 喂的是 os_uptime_seconds（OS 开机时长）；uptime_seconds 是瞭望塔进程运行时长
+        # （来自 _PROC_START，测试进程刚起仅几秒）——原断言 mock 了 boot_time 却断言 uptime_seconds，
+        # 是预存的测试缺陷（与被测逻辑无关，恒失败）。改断言正确字段 os_uptime_seconds。
+        self.assertTrue(info["os_uptime_seconds"] >= 3599)
         self.assertTrue(info["psutil"])
         # 扁平字段（旧坑：嵌套 cpu.percent 前端读扁平永远 0）
         for k in ("cpu_percent", "memory_percent", "disk_percent"):
