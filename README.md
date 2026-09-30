@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/watchtower-logo.png" width="112" height="112" alt="Watchtower logo" />
+<img src="frontend/public/logo.png" width="112" height="112" alt="Watchtower logo" />
 
 # 瞭望塔 Watchtower
 
@@ -31,7 +31,17 @@ Watchtower 将资产侦察、AI 工具调用、人工介入和证据整理连接
 
 项目由个人开发者维护，免费开放源码，采用 **GPL-3.0-only**。软件可以自行部署；模型调用和外部数据源可能需要使用者自行配置账号或承担费用。
 
-> `main` 展示正式源码，当前为 **v1.21.165**，与官网当前正式版本一致。测试迭代不直接进入主分支；当前源码版本见 [version.txt](version.txt)，安装包及后续正式版本以[官网](https://watchtowers.info/)为准。
+> `main` 展示正式源码，当前为 **v1.21.166**。官网源码快照同为 `166`；预构建镜像基板可能使用更早版本，当前为 `165`，不能混同源码版本与镜像版本。测试迭代不直接进入主分支；当前源码版本见 [version.txt](version.txt)，安装包及后续正式版本以[官网](https://watchtowers.info/)为准。
+
+## v1.21.166 更新要点
+
+- 扩展清单补充来源与许可信息，支持 ZIP 和 tar.gz，以及本地安装或提交云端审核两种流程。
+- 更新品牌图标；系统派发会话增加思考和回复的流式展示。
+- 修复人工会话误入自动恢复路径、同目标重新评估被拦截等问题。
+- AI 控制台新增策略预填，改善长目标名称的布局，并兼容模型将工具调用作为文本输出的情况。
+- 更新注册、隐私与激活相关文本。
+
+查看[完整变更](CHANGELOG.md)和[版本下载](https://github.com/LINGYK352/Watchtower/releases)。
 
 ## 主要能力
 

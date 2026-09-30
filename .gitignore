@@ -37,6 +37,7 @@ sentinel_platform/config.yaml
 
 # 运行时数据（实例持久化，非源码）
 shared/
+/template/
 *.db
 
 # 运行时/调试输出与本地暂存（非源码）

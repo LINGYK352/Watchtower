@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/watchtower-logo.png" width="112" height="112" alt="Watchtower logo" />
+<img src="frontend/public/logo.png" width="112" height="112" alt="Watchtower logo" />
 
 # Watchtower
 
@@ -29,7 +29,17 @@ Watchtower connects asset reconnaissance, AI tool use, human intervention, and e
 
 The project is maintained by an individual developer and is available free of charge under **GPL-3.0-only**. You can deploy it yourself; model calls and external data sources may require your own accounts or incur separate costs.
 
-> `main` contains official stable source. Its current version is **v1.21.165**, matching the current official version on the website. Test iterations are not pushed directly to the main branch. See [version.txt](version.txt) for the source version and the [website](https://watchtowers.info/) for installation packages and subsequent official releases.
+> `main` contains official stable source, currently **v1.21.166**. The website source snapshot is also `166`; the prebuilt image base may be older and is currently `165`. Source and image versions are distinct. Test iterations are not pushed directly to the main branch. See [version.txt](version.txt) for the source version and the [website](https://watchtowers.info/) for installation packages and subsequent official releases.
+
+## v1.21.166 highlights
+
+- Extension manifests include source and licensing information, with ZIP/tar.gz support and separate local-install and cloud-review flows.
+- Updated brand icons and streamed reasoning/reply previews for automatically dispatched sessions.
+- Fixes for manual sessions entering automatic recovery and repeated assessments of the same target being blocked.
+- Policy presets in the AI console, improved layout for long target names, and recovery of tool calls emitted as plain text by models.
+- Updated registration, privacy, and activation-related text.
+
+See the [full changelog — Chinese](CHANGELOG.md) and [version downloads](https://github.com/LINGYK352/Watchtower/releases).
 
 ## Capabilities
 
