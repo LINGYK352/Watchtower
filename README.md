@@ -17,7 +17,7 @@ Self-hosted AI security assessment, asset intelligence, and evidence workflows.
 [![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)](frontend/package.json)
 [![Deployment](https://img.shields.io/badge/Deploy-Linux%20x86__64-101622?logo=docker&logoColor=white)](docs/installation.md)
 
-[官方网站](https://watchtowers.info/) · [快速部署](docs/installation.md) · [开发指南](docs/development.md) · [架构说明](docs/architecture.md) · [问题反馈](https://github.com/LINGYK352/Watchtower/issues)
+[官方网站](https://watchtowers.info/) · [快速部署](docs/installation.md) · [开发指南](docs/development.md) · [架构说明](docs/architecture.md) · [版本发布](https://github.com/LINGYK352/Watchtower/releases) · [问题反馈](https://github.com/LINGYK352/Watchtower/issues)
 
 </div>
 
@@ -104,6 +104,7 @@ Watchtower/
 | 我想做什么 | 从这里开始 |
 | --- | --- |
 | 安装和使用 | [部署与更新说明](docs/installation.md) |
+| 下载正式版源码和查看发布说明 | [Releases](https://github.com/LINGYK352/Watchtower/releases) |
 | 了解模块与调用关系 | [架构说明](docs/architecture.md) |
 | 在本地开发和检查改动 | [开发指南](docs/development.md) |
 | 提交代码或功能建议 | [贡献指南](CONTRIBUTING.md) |

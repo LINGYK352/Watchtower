@@ -15,7 +15,7 @@ A self-hosted platform for AI penetration testing and asset intelligence in auth
 [![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)](frontend/package.json)
 [![Deployment](https://img.shields.io/badge/Deploy-Linux%20x86__64-101622?logo=docker&logoColor=white)](docs/installation.md)
 
-[Website](https://watchtowers.info/) · [Installation (Chinese)](docs/installation.md) · [Development (Chinese)](docs/development.md) · [Architecture (Chinese)](docs/architecture.md) · [Issues](https://github.com/LINGYK352/Watchtower/issues)
+[Website](https://watchtowers.info/) · [Installation (Chinese)](docs/installation.md) · [Development (Chinese)](docs/development.md) · [Architecture (Chinese)](docs/architecture.md) · [Releases](https://github.com/LINGYK352/Watchtower/releases) · [Issues](https://github.com/LINGYK352/Watchtower/issues)
 
 </div>
 
@@ -104,6 +104,7 @@ The guides linked below are currently written in Chinese. This page provides the
 | Goal | Start here |
 | --- | --- |
 | Install and use the platform | [Deployment and updates](docs/installation.md) |
+| Download versioned source and read release notes | [Releases](https://github.com/LINGYK352/Watchtower/releases) |
 | Understand modules and call paths | [Architecture](docs/architecture.md) |
 | Develop locally and validate changes | [Development guide](docs/development.md) |
 | Contribute code or propose a feature | [Contributing](CONTRIBUTING.md) |
