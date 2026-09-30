@@ -5,6 +5,8 @@ export interface ExtensionItem {
   _id?: string; extension_id: string; name: string; version: string; source: 'local' | 'store'
   ext_type?: 'ai' | 'feature' | 'both'   // ai=AI工具扩展; feature=内核工具扩展(不进AI工具表); both=公共扩展(两边都注册,AI侧也可调用)
   category: string; summary: string; description: string; ai_instruction: string
+  origin?: 'self' | 'third_party'   // self=自研; third_party=第三方(封装外部工具,须补来源信息)
+  vendor?: string; license?: string; upstream_version?: string; homepage?: string
   enabled: boolean; available: boolean; unavailable_reason?: string; trust?: string
   side_effect?: 'read' | 'verify_write' | 'dangerous'; permissions?: Record<string, unknown>
   params?: ExtParam[]           // 从 parameters schema 解析(前端展示用,后端 list_enabled_tools 已带;list 未带则前端不显示)
@@ -31,6 +33,11 @@ export const aiExtensionApi = {
   upload: (file: File) => {
     const form = new FormData(); form.append('file', file)
     return request<{ ok: boolean; extension: ExtensionItem }>(`${base}/upload`, { method: 'POST', body: form })
+  },
+  // 提交到云端商店审核（不本地安装）：平台深校验清单后转发分发端存 pending，待运营方审核
+  submit: (file: File) => {
+    const form = new FormData(); form.append('file', file)
+    return request<{ ok: boolean; submission?: Record<string, unknown>; error?: string }>(`${base}/submit`, { method: 'POST', body: form })
   },
   enable: (id: string) => request(`${base}/${encodeURIComponent(id)}/enable`, { method: 'POST' }),
   disable: (id: string) => request(`${base}/${encodeURIComponent(id)}/disable`, { method: 'POST' }),

@@ -7,7 +7,7 @@ set -e
 
 SRC="${SENTINEL_SRC:-https://watchtowers.info/dist}"
 BASE_URL="${SENTINEL_BASE:-https://watchtowers.info}"
-CURL="curl -fSLk"
+CURL="curl -fSLk --retry 5 --retry-delay 3 --retry-all-errors"
 INSTALL_DIR="${SENTINEL_HOME:-/opt/sentinel}"
 COMPOSE_DIR="${INSTALL_DIR}/sentinel/docker"
 # Version/bundle are not hardcoded — fetched from the distribution system /dist/latest at
@@ -49,7 +49,7 @@ ARCH="$(uname -m 2>/dev/null || echo unknown)"
 # Best-effort fetch of the latest version from the distribution system for display in the banner,
 # so the user knows which version they are about to install. Non-fatal: on failure show "unknown".
 # (resolve_latest() later does the authoritative fetch used for the actual download.)
-DISPLAY_VERSION="$(curl -fSLk -s "${BASE_URL}/dist/latest" 2>/dev/null \
+DISPLAY_VERSION="$(curl -fSLk -s --retry 3 --retry-delay 2 --retry-all-errors "${BASE_URL}/dist/latest" 2>/dev/null \
     | grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 \
     | sed -E 's/.*"version"[^"]*"([^"]+)".*/\1/')"
 [ -n "$DISPLAY_VERSION" ] || DISPLAY_VERSION="unknown (offline?)"
@@ -101,7 +101,7 @@ echo ""
 resolve_latest() {
     log "fetching latest bundle info from the distribution system..."
     local info
-    info="$(curl -fSLk -s "${BASE_URL}/dist/latest" 2>/dev/null || true)"
+    info="$(curl -fSLk -s --retry 3 --retry-delay 2 --retry-all-errors "${BASE_URL}/dist/latest" 2>/dev/null || true)"
     if [ -n "$info" ] && echo "$info" | grep -q '"filename"'; then
         BUNDLE="$(echo "$info" | grep -oE '"filename"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 | sed -E 's/.*"filename"[^"]*"([^"]+)".*/\1/')"
         VERSION="$(echo "$info" | grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 | sed -E 's/.*"version"[^"]*"([^"]+)".*/\1/')"
@@ -245,7 +245,7 @@ download_and_extract() {
         if [ "$need_load" = "1" ]; then
             if [ ! -f "$BUNDLE" ]; then
                 log "downloading bundle ${BUNDLE}..."
-                if ! $CURL "$SRC/$BUNDLE" -o "$BUNDLE"; then
+                if ! $CURL -C - "$SRC/$BUNDLE" -o "$BUNDLE"; then
                     die "download failed: $SRC/$BUNDLE (check that the distribution source $SRC is reachable)"
                 fi
                 ok "downloaded: $(ls -lh $BUNDLE | awk '{print $5}')"

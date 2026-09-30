@@ -54,6 +54,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     || echo "WARN: playwright chromium 安装失败，browser_navigate/login 将降级 requests"
 
+# win_x64 探针/agent 打包改为「预编译 stub + 配置尾附」方案，不再需要容器内 Wine。
+# stub exe 通过热更分发到 external/probe/stubs/，build_agent.py 复制+追加配置即出 PE exe。
+
 # 应用代码 + 外部工具 + 前端产物烘焙进镜像（自包含）——数据清洗已在暂存阶段完成（无真 config/密钥）
 COPY sentinel_platform ./sentinel_platform
 COPY external ./external
@@ -66,7 +69,11 @@ COPY version.txt ./version.txt
 # 判断"本地镜像是否已是云端最新基板"→ 是则复用不重下 1.1G（不传则为 unknown，install.sh 回退旁标记文件）。
 ARG BASE_VERSION=unknown
 LABEL sentinel.base.version=$BASE_VERSION
-RUN chmod -R +x external 2>/dev/null || true       # 外部工具二进制（Go 工具经 PATH 调用）加执行权限
+# 外部工具二进制在构建上下文中已带执行位（VM 源 external/bin/* 及 nuclei/phantomjs/mihomo 等均 755；external 不入 git、
+# 经文件系统分发保权限），COPY 原样保留 Unix 权限位——故【不再 `chmod -R +x external`】：该递归 chmod 对已 755 的源是
+# 空操作(权限本已就位)，却会触发 overlayfs 把整个 external(501M) copy-up 复制一整层(实测白占 ~524M)。删除此层 + 下方软链
+# 层的冗余 chmod，镜像瘦身约 740M（3.46G→~2.7G），业务零影响（二进制仍保留源 755，PATH/软链照常可执行）。
+# ⚠️若在丢失 Unix 权限的环境（如 Windows 裸 checkout 后直接 build）构建，需先对 external 内二进制恢复 +x。
 # 侦察外部工具上 PATH（recon 对接模块用 shutil.which(bare-name) 解析）：
 #   external/bin/* = PD 全家桶(subfinder/dnsx/naabu/httpx/katana) + massdns；nuclei/phantomjs 各自归档目录。
 #   缺失的工具对应阶段 available()=False 自动降级（honest degrade），不阻断构建。
@@ -76,8 +83,9 @@ RUN set -e; \
     done; \
     [ -f external/nuclei/nuclei_3.3.9_linux_amd64/nuclei ] && ln -sf /opt/sentinel/current/external/nuclei/nuclei_3.3.9_linux_amd64/nuclei /usr/local/bin/nuclei || true; \
     [ -f external/phantomjs/phantomjs ] && ln -sf /opt/sentinel/current/external/phantomjs/phantomjs /usr/local/bin/phantomjs || true; \
-    chmod -R +x external/bin 2>/dev/null || true; \
     true
+# 注：此处不再 `chmod -R +x external/bin`——源二进制已 755（见上），软链指向的目标带执行位即可，
+# 递归 chmod 只会再触发 external/bin(210M) copy-up 白占一层（实测 ~219M）。
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 # config.yaml 不烘焙（挂载只读提供）；只暴露主平台端口（5080 是独立分发系统端口，不属本镜像）。command 由 compose 覆盖

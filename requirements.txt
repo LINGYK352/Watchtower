@@ -93,3 +93,8 @@ vine==5.1.0
 
 # —— 公开代理池 socks5 验活（system/_pool.py，可选运行时依赖，缺失则 socks5 验活降级）——
 PySocks==1.7.1
+
+# —— 探针/agent 打包（ai_pentest/probe.py 经 external/probe/build_probe.py 调 PyInstaller 打单文件可执行）——
+# 缺失时打包功能优雅降级（端点返 400「打包失败：No module named 'PyInstaller'」，不再 500）。
+# 注意：PyInstaller 打包吃内存，小内存实例（<2G）打包可能 OOM，需评估或异步化。
+pyinstaller==6.22.3

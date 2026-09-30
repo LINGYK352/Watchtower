@@ -11,7 +11,7 @@
         <template #rightExtra>
           <a-space>
             <template v-if="tab !== 'logs'">
-              <a-upload :show-upload-list="false" accept=".tar.gz,.tgz" :before-upload="(f: File) => upload(f)">
+              <a-upload :show-upload-list="false" accept=".tar.gz,.tgz,.zip" :before-upload="(f: File) => pickFile(f)">
                 <a-button type="primary"><template #icon><UploadOutlined /></template>上传扩展</a-button>
               </a-upload>
               <a-button @click="openStore"><template #icon><AppstoreOutlined /></template>扩展商店</a-button>
@@ -123,7 +123,7 @@
           <div class="c-head"><code class="c-name">{{ e.name || e.extension_id }}</code>
             <a-tag :color="e.ext_type === 'both' ? 'purple' : e.ext_type === 'feature' ? 'cyan' : 'geekblue'" size="small">{{ e.ext_type === 'both' ? '公共扩展' : e.ext_type === 'feature' ? '内核工具扩展' : 'AI 工具扩展' }}</a-tag>
           </div>
-          <div class="c-cat"><a-tag color="blue" size="small">{{ e.category }}</a-tag><span class="muted">v{{ e.version }}</span></div>
+          <div class="c-cat"><a-tag color="blue" size="small">{{ e.category }}</a-tag><a-tag :color="e.origin === 'third_party' ? 'orange' : 'cyan'" size="small">{{ e.origin === 'third_party' ? '第三方' : '自研' }}</a-tag><span class="muted">v{{ e.version }}</span></div>
           <div class="c-sum">{{ e.summary }}</div>
           <div class="c-actions"><a-button type="primary" size="small" @click="install(e)">下载安装</a-button></div>
         </div>
@@ -139,6 +139,10 @@
           <a-descriptions-item label="版本">{{ detail.version }}</a-descriptions-item>
           <a-descriptions-item label="分类">{{ detail.category }}</a-descriptions-item>
           <a-descriptions-item label="来源">{{ detail.source === 'store' ? '扩展商店' : '本地上传' }}（{{ detail.trust }}）</a-descriptions-item>
+          <a-descriptions-item label="自研/第三方">
+            <a-tag :color="detail.origin === 'third_party' ? 'orange' : 'cyan'">{{ detail.origin === 'third_party' ? '第三方' : '自研' }}</a-tag>
+            <span v-if="detail.origin === 'third_party'" class="muted">{{ detail.vendor }} · {{ detail.license }} · 上游 {{ detail.upstream_version }}</span>
+          </a-descriptions-item>
           <a-descriptions-item label="兼容性">
             <a-tag :color="detail.available ? 'green' : 'red'">{{ detail.available ? '兼容' : detail.unavailable_reason || '不可用' }}</a-tag>
           </a-descriptions-item>
@@ -152,11 +156,25 @@
         </div>
       </template>
     </a-drawer>
+
+    <!-- 上传目标选择：本地安装运行 / 提交云端商店审核 -->
+    <a-modal v-model:open="uploadOpen" title="上传扩展" :confirm-loading="uploading"
+      :ok-text="uploadTarget === 'cloud' ? '提交云端审核' : '安装到本地'" @ok="doUpload" @cancel="pendingFile = null">
+      <p class="up-file">扩展包：<code>{{ pendingFile?.name }}</code>（支持 .tar.gz / .tgz / .zip）</p>
+      <a-radio-group v-model:value="uploadTarget" class="up-target">
+        <a-radio value="local">本地安装运行</a-radio>
+        <a-radio value="cloud">提交云端商店审核</a-radio>
+      </a-radio-group>
+      <a-alert v-if="uploadTarget === 'local'" type="warning" show-icon
+        message="本地安装等价于授予主机代码执行能力，仅安装你完全信任的代码。安装后需手动启用；manifest 的 ext_type 决定归入 AI / 内核 / 公共扩展。" />
+      <a-alert v-else type="info" show-icon
+        message="提交到云端商店：平台先校验清单，再转发到分发端排队。运营方在管理后台审核通过后，才会出现在扩展商店供各实例安装（凭激活凭证鉴权下发）。不在本机安装。" />
+    </a-modal>
   </PageContainer>
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { UploadOutlined, AppstoreOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import ExtCard from './ExtCard.vue'
@@ -176,6 +194,10 @@ const storeOpen = ref(false)
 const detailOpen = ref(false)
 const detail = ref<ExtensionItem | null>(null)
 const logFilter = ref('')
+const uploadOpen = ref(false)
+const pendingFile = ref<File | null>(null)
+const uploadTarget = ref<'local' | 'cloud'>('local')
+const uploading = ref(false)
 
 // AI 扩展统一按功能分类展示（内置工具 + 已装 AI 扩展合并，去掉「内置能力/已装扩展」两段分隔）。
 // 与「AI 工具」页 CAT_ORDER 一致；未登记的新分类排最后不丢。每类含 builtin(内置只读) + exts(已装可管)。
@@ -226,10 +248,22 @@ function onTab(k: string) { if (k === 'tools') onSubTab(subTab.value); else load
 function onSubTab(k: string) { if (k === 'feature') { loadKernelBuiltin(); loadFeature() } else { loadBuiltin(); loadAi() } }
 function refreshCurrent() { tab.value === 'logs' ? loadLogs() : onSubTab(subTab.value) }
 
-function upload(file: File) {
-  Modal.confirm({ title: '确认授予扩展执行权限？', content: `将安装 ${file.name}。仅上传你完全信任的代码。扩展 manifest 的 ext_type 决定归入 AI 工具扩展 / 内核工具扩展 / 公共扩展(both,两边都注册)。`, okType: 'danger',
-    async onOk() { try { await aiExtensionApi.upload(file); message.success('扩展已安装，兼容后可手工启用'); loadAi(); loadFeature() } catch (e) { message.error(String(e)) } } })
-  return false
+function pickFile(file: File) { pendingFile.value = file; uploadTarget.value = 'local'; uploadOpen.value = true; return false }
+async function doUpload() {
+  const file = pendingFile.value
+  if (!file) { uploadOpen.value = false; return }
+  uploading.value = true
+  try {
+    if (uploadTarget.value === 'cloud') {
+      const r = await aiExtensionApi.submit(file)
+      if (r && r.ok) { message.success('已提交云端商店，等待运营方审核'); uploadOpen.value = false; pendingFile.value = null }
+      else message.error((r && r.error) || '提交失败')
+    } else {
+      await aiExtensionApi.upload(file); message.success('扩展已安装，兼容后可手工启用'); loadAi(); loadFeature()
+      uploadOpen.value = false; pendingFile.value = null
+    }
+  } catch (e) { message.error(String(e)) }
+  finally { uploading.value = false }
 }
 async function toggle(r: ExtensionItem, v: boolean) {
   try { v ? await aiExtensionApi.enable(r.extension_id) : await aiExtensionApi.disable(r.extension_id); r.enabled = v; message.success(v ? '已启用' : '已停用') }
@@ -272,4 +306,6 @@ onMounted(() => { loadBuiltin(); loadAi() })
 .d-block p { margin: 6px 0 0; line-height: 1.7; color: var(--dt-text, #333); white-space: pre-wrap }
 .d-block ul { margin: 6px 0 0; padding-left: 18px }
 .d-block .req { color: #ff4d4f; margin: 0 4px; font-style: normal }
+.up-file { font-size: 13px; margin-bottom: 12px }
+.up-target { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px }
 </style>

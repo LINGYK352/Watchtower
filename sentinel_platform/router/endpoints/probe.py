@@ -65,9 +65,19 @@ class ProbeBuild(Resource):
         svc = _svc()
         if not svc:
             return err(CODE_ERROR, "探针服务未就绪")
-        path = svc.generate_probe_binary(probe_id)
+        # 打包是耗时且可能失败的操作（PyInstaller 缺失/OOM/环境异常）：服务层已 honest degrade 返回 None，
+        # 这里再兜一层防任何意外异常逃逸成 500，并把失败真因（build_error）回给用户而非笼统提示。
+        try:
+            path = svc.generate_probe_binary(probe_id)
+        except Exception as e:
+            # 真正意外异常（服务层已兜住绝大多数）：保留 500，值得上报开发者
+            return err(CODE_ERROR, "打包异常：{}".format(str(e)[:200]))
         if not path:
-            return err(CODE_ERROR, "打包失败，请检查 PyInstaller 是否安装")
+            # 预期内的打包失败（PyInstaller 缺失/OOM/环境异常）：返回 400 而非 500——
+            # 这是可读的操作性失败，前端只 toast 显示真因，不触发「上报开发者」崩溃弹窗。
+            reason = svc.last_build_error(probe_id) if hasattr(svc, "last_build_error") else ""
+            return err(CODE_BAD_REQUEST, "打包失败：{}".format(reason) if reason
+                       else "打包失败，请检查 PyInstaller 是否安装及打包环境（内存/编译链）")
         return ok({"build_path": os.path.basename(path)})
 
 
@@ -159,9 +169,14 @@ class AgentBuild(Resource):
         svc = _svc()
         if not svc:
             return err(CODE_ERROR, "探针服务未就绪")
-        path = svc.generate_agent_binary(agent_id)
+        try:
+            path = svc.generate_agent_binary(agent_id)
+        except Exception as e:
+            return err(CODE_ERROR, "打包异常：{}".format(str(e)[:200]))
         if not path:
-            return err(CODE_ERROR, "打包失败，请检查 PyInstaller 是否安装")
+            reason = svc.last_agent_build_error(agent_id) if hasattr(svc, "last_agent_build_error") else ""
+            return err(CODE_BAD_REQUEST, "打包失败：{}".format(reason) if reason
+                       else "打包失败，请检查 PyInstaller 是否安装及打包环境（内存/编译链）")
         return ok({"build_path": os.path.basename(path)})
 
 

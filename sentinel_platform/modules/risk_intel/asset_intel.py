@@ -395,7 +395,11 @@ def auto_collect_after_scan(task_id: str, site_rows=None) -> Dict[str, Any]:
                 _fbrid = (_fbeg.get("rule_id") if isinstance(_fbeg, dict) else "") or ""
                 dispatched = dispatcher.batch_create_from_assets(
                     asset_keys=_keys,
-                    auto_start=True, skip_pentested=True,
+                    # 不拦截"已渗透"资产（用户 2026-09-30）：短时间内对同目标再发起任务，此前 skip_pentested=True
+                    # 会把 pentest_status==done 的资产全跳过 → 0 会话 → 任务直接"完成"，是错误逻辑。
+                    # 平台设计本就是"每次渗透独立报告"（v1.21.160），重复检测只作非阻塞提示，不该在派发处拦。
+                    # 仅当策略显式开 skip_pentested_assets 才跳（默认 False=不拦截，每次都重新派发）。
+                    auto_start=True, skip_pentested=bool(options.get("skip_pentested_assets", False)),
                     mode=options.get("pentest_mode") or "src",
                     egress_proxy=_pmode, proxy_source=_prid or options.get("proxy_source") or "subscription",
                     fallback_egress=_fbmode, fallback_proxy_source=_fbrid,

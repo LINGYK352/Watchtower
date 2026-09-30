@@ -235,7 +235,11 @@ def _sse(event: str, data) -> str:
 def _stream_meta(sess: dict) -> dict:
     return {"status": sess.get("status", ""), "round": sess.get("round", 0),
             "total_tokens": sess.get("total_tokens", 0),
-            "tool_count": len(sess.get("tool_log") or [])}
+            "window_tokens": sess.get("window_tokens", 0), "token_budget": sess.get("token_budget", 0),
+            "tool_count": len(sess.get("tool_log") or []),
+            # 流式逐字气泡（对齐 console observe 流）：run_agent 生成中经 on_delta 写入的 partial 文本/阶段
+            "stream": sess.get("stream_buffer", "") or "",
+            "stream_phase": sess.get("stream_phase", "") or ""}
 
 
 def _assist_text(content) -> str:

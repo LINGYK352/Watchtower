@@ -330,7 +330,7 @@ def _tick_sessions() -> dict:
         coll = get_repo().collection("intel_pentest_session")
         now_epoch = _t.time()
         # ① 回收 running 心跳超时：只回到 queued，稍后与其他候选共享槽位
-        for s in coll.find({"status": "running"}, {"_id": 1, "update_date": 1}):
+        for s in coll.find({"status": "running", "console_created": {"$ne": True}}, {"_id": 1, "update_date": 1}):
             ud = s.get("update_date", "") or ""
             try:
                 age = now_epoch - _t.mktime(_t.strptime(ud, "%Y-%m-%d %H:%M:%S"))
@@ -345,7 +345,8 @@ def _tick_sessions() -> dict:
         # dispatch 心跳(update_date，由 _claim_session 进 dispatching 时盖)超 dispatch_stall 且非 stop_requested
         # → 回 queued 重新派发；连续回收超 MAX_DISPATCH_RECLAIM 次仍起不来(如 provider 失效/run_agent 起转即崩)
         # → 降级 paused_manual(由 ②.5 隔 MANUAL_RETRY_SECONDS 延迟自愈)，别无限 queued↔dispatching 抖动占槽。
-        for s in coll.find({"status": "dispatching", "stop_requested": {"$ne": True}},
+        for s in coll.find({"status": "dispatching", "stop_requested": {"$ne": True},
+                            "console_created": {"$ne": True}},
                            {"_id": 1, "update_date": 1, "dispatch_reclaim_count": 1}):
             if _heartbeat_age(s, now_epoch) <= dispatch_stall:
                 continue
@@ -390,7 +391,10 @@ def _tick_sessions() -> dict:
         # 候选查询排除 stop_requested（与 _claim_session 的 stop_requested!=True 认领过滤同口径）：
         # 停掉的会话卡在 paused_transient/queued 时，若进候选并排到前面，会白占 slot 预算认领失败，
         # 饿死后面健康候选（实测顽疾：3 个 stop_requested 的 paused_transient 排最前堵死 10 个健康 queued）。
-        paused = list(coll.find({"status": "paused_transient", "stop_requested": {"$ne": True}},
+        # console_created 会话绝不进自动派发（run_agent）候选——它是会话台人工会话，由 _tick_console_sessions
+        # 与人工接管管理；误纳入会被当自动会话重投、与人工回合双跑冲突（用户报的「恢复导致重投」根治）。
+        paused = list(coll.find({"status": "paused_transient", "stop_requested": {"$ne": True},
+                                 "console_created": {"$ne": True}},
                                 {"_id": 1, "retry_count": 1, "priority": 1}))
         candidates = []
         for s in paused:
@@ -401,7 +405,8 @@ def _tick_sessions() -> dict:
                 out["degraded"] += 1
             else:
                 candidates.append((0, -int(s.get("priority", 0) or 0), s, "paused_transient"))
-        for s in coll.find({"status": "queued", "stop_requested": {"$ne": True}}, {"_id": 1, "priority": 1}):
+        for s in coll.find({"status": "queued", "stop_requested": {"$ne": True},
+                            "console_created": {"$ne": True}}, {"_id": 1, "priority": 1}):
             candidates.append((1, -int(s.get("priority", 0) or 0), s, "queued"))
         candidates.sort(key=lambda item: (item[0], item[1]))  # 恢复优先，同类高价值优先
         # 填满 slots 个**成功派发**（而非切前 slots 个尝试）：认领失败(竞态/被停/状态漂移)不占 slot 预算，

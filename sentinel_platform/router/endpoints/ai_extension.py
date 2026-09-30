@@ -73,13 +73,38 @@ class Upload(Resource):
         if not svc: return _bad_service()
         f = request.files.get("file")
         if not f: return err(CODE_BAD_REQUEST, "file 必填(multipart)")
-        suffix = ".tar.gz" if f.filename and f.filename.endswith((".tar.gz", ".tgz")) else ""
-        if not suffix: return err(CODE_BAD_REQUEST, "仅支持 .tar.gz/.tgz 扩展包")
+        name = (f.filename or "").lower()
+        if name.endswith((".tar.gz", ".tgz")): suffix = ".tar.gz"
+        elif name.endswith(".zip"): suffix = ".zip"
+        else: return err(CODE_BAD_REQUEST, "仅支持 .tar.gz/.tgz/.zip 扩展包")
         fd, path = tempfile.mkstemp(prefix="sentinel-ext-upload-", suffix=suffix); os.close(fd)
         try:
             f.save(path)
             result = svc.install_archive(path, source="local", username=_username())
             return ok(result) if result.get("ok") else err(CODE_BAD_REQUEST, result.get("error", "安装失败"))
+        except Exception as exc:
+            try: os.unlink(path)
+            except OSError: pass
+            return err(CODE_BAD_REQUEST, str(exc))
+
+
+@ns.route("/submit")
+class Submit(Resource):
+    @ns.doc(security="token", description="需权限 ai_extension:manage；multipart file；深校验清单后转发云端商店审核（不本地安装）")
+    def post(self):
+        svc = _svc()
+        if not svc: return _bad_service()
+        f = request.files.get("file")
+        if not f: return err(CODE_BAD_REQUEST, "file 必填(multipart)")
+        name = (f.filename or "").lower()
+        if name.endswith((".tar.gz", ".tgz")): suffix = ".tar.gz"
+        elif name.endswith(".zip"): suffix = ".zip"
+        else: return err(CODE_BAD_REQUEST, "仅支持 .tar.gz/.tgz/.zip 扩展包")
+        fd, path = tempfile.mkstemp(prefix="sentinel-ext-submit-", suffix=suffix); os.close(fd)
+        try:
+            f.save(path)
+            result = svc.submit_to_store(path, _username())
+            return ok(result) if result.get("ok") else err(CODE_BAD_REQUEST, result.get("error", "提交失败"))
         except Exception as exc:
             try: os.unlink(path)
             except OSError: pass
