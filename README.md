@@ -10,6 +10,8 @@
 
 Self-hosted AI security assessment, asset intelligence, and evidence workflows.
 
+**开发起始日期：2026年6月3日**
+
 **[中文](README.md) · [English](README.en.md)**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL_v3-19b6cf.svg)](LICENSE)

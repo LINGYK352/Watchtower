@@ -8,6 +8,8 @@
 
 A self-hosted platform for AI penetration testing and asset intelligence in authorized security assessments.
 
+**Development started: June 3, 2026.**
+
 **[中文](README.md) · [English](README.en.md)**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL_v3-19b6cf.svg)](LICENSE)
