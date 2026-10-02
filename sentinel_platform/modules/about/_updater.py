@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import time
 import py_compile
+import re
 import urllib.error
 from urllib.request import Request, urlopen
 from urllib.parse import quote
@@ -423,6 +424,24 @@ def _apply_restart(current_root: str, backend_changed: bool, compose_changed: bo
             subprocess.run(["systemctl", "reload", "sentinel-web"], timeout=15, capture_output=True)
 
 
+def _download_candidates(data, local_version):
+    full = data.get("manifest", {})
+    if not isinstance(full, dict) or not full:
+        raise ValueError("invalid release manifest")
+    for path, sha in full.items():
+        if (not isinstance(path, str) or "\\" in path or ":" in path
+                or any(p in ("", ".", "..") for p in path.split("/"))
+                or not (path in _TRACK_FILES or any(path.startswith(d + "/") for d in _TRACK_DIRS + ["runtime_libs"]))
+                or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)):
+            raise ValueError("invalid release file entry")
+    if data.get("download_mode") != "delta" or data.get("base_version") != local_version:
+        return full
+    selected = data.get("download_manifest")
+    if not isinstance(selected, dict) or any(p not in full or full[p] != h for p, h in selected.items()):
+        raise ValueError("invalid release download plan")
+    return selected
+
+
 def run_update(source_url: str, key: str, current_root: str, target_version: str = "",
                chain_hop: bool = False, chain_final: bool = False):
     """独立进程执行热更新：fetch manifest → diff → 逐文件(下载+校验+写入)。
@@ -440,7 +459,8 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
             return
         set_progress("checking", msg="正在获取更新清单..." if not is_rollback
                      else "正在获取版本 {} 清单...".format(target_version))
-        headers = _auth_headers(key, current_root)   # 含 X-Client-Version：最终跳拉裸 manifest 时过台阶闸
+        headers = _auth_headers(key, current_root)
+        headers["X-Update-Protocol"] = "2"
 
         manifest_url = source_url + "/manifest"
         if is_rollback:
@@ -475,9 +495,12 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
             except Exception:
                 pass
 
-        # 计算本地 sha256
+        # 保留完整目标目录供回滚/前端清理；正常升级只核验服务端指定的变更候选。
+        candidates = _download_candidates(data, headers["X-Client-Version"])
+        set_progress("checking", total=len(candidates),
+                     msg="核验更新计划中的 {} 个文件".format(len(candidates)))
         local_manifest = {}
-        for rel in remote_manifest:
+        for rel in candidates:
             fp = os.path.join(current_root, rel)
             if os.path.isfile(fp):
                 h = hashlib.sha256()
@@ -486,7 +509,7 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
                         h.update(chunk)
                 local_manifest[rel] = h.hexdigest()
 
-        changed = [r for r, h in remote_manifest.items() if local_manifest.get(r) != h]
+        changed = [r for r, h in candidates.items() if local_manifest.get(r) != h]
         removed = _rollback_removed_files(current_root, set(remote_manifest.keys())) if is_rollback else []
         if not changed and not removed:
             set_progress("done", msg="已是最新，无需更新" if not is_rollback
@@ -506,7 +529,10 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
         #   下载中断/失败后再次点击更新，命中同一 stage_dir、复用已下部分文件（配合 _download_to 的
         #   Range 续传）；失败时**不删 stage**（保留残缺供续传），仅成功提交后才清。已下且 sha 已对的
         #   文件跳过重下（秒过），只续未完成的。跨会话/切菜单返回再点也续传。
-        stage_dir = os.path.join(current_root, ".update_stage", (target_version or "latest").replace("/", "_"))
+        stage_version = remote_version or target_version or "latest"
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", stage_version) or stage_version in (".", ".."):
+            raise ValueError("invalid release version")
+        stage_dir = os.path.join(current_root, ".update_stage", stage_version)
         os.makedirs(stage_dir, exist_ok=True)
 
         def _cleanup_stage():
@@ -533,8 +559,8 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
             # URL 编码 path/version：rel 可能含 + 空格 中文等特殊字符（如 tzdata 的 GMT+0）。
             # 不编码则 query 里的 + 被服务端 parse_qs 解成空格 → 找不到文件 404（runtime_libs tzdata 引入后暴露）。
             file_url = source_url + "/file?path=" + quote(rel, safe="")
-            if is_rollback:
-                file_url += "&version=" + quote(target_version, safe="")
+            if is_rollback or data.get("immutable"):
+                file_url += "&version=" + quote(remote_version, safe="")
             spath = os.path.join(stage_dir, rel)
             os.makedirs(os.path.dirname(spath), exist_ok=True)
             want_sha = remote_manifest.get(rel, "")

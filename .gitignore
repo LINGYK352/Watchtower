@@ -80,3 +80,6 @@ _vm-*.tar.gz
 /_dryrun*.txt
 /_shots_tmp/
 frontend-dist-*.tar.gz
+
+# 本地压测脚本、测试容器和结果（不外发）
+/validation/

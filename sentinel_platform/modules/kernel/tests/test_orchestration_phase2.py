@@ -34,7 +34,13 @@ class _Coll:
 
     def find_one(self, q, proj=None):
         for d in self.docs:
-            if all(d.get(k) == v for k, v in q.items()):
+            def matches(key, expected):
+                value=d.get(key)
+                if isinstance(expected,dict):
+                    if "$in" in expected:return value in expected["$in"]
+                    if "$ne" in expected:return value != expected["$ne"]
+                return value == expected
+            if all(matches(k,v) for k,v in q.items()):
                 return d
         return None
 

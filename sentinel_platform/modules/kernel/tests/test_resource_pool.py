@@ -155,6 +155,29 @@ class ResourcePoolTest(unittest.TestCase):
         self.assertEqual(len(holders), 1)
         self.assertGreaterEqual(rev, 1)   # rev 随登记递增
 
+    def test_cas_conflict_resamples_physical_memory(self):
+        with mock.patch.object(rp,"learned_peak_mb",return_value=400), \
+             mock.patch.object(rp,"_available_mb",side_effect=[1500,1500,600]), \
+             mock.patch.object(rp,"_register_cas",return_value="") as register:
+            outcome=rp.acquire("browser_open","test",rp.PRIORITY_RECON)
+        self.assertFalse(outcome["ok"])
+        self.assertEqual(outcome["avail_mb"],600)
+        self.assertEqual(register.call_count,1)
+
+    def test_lost_sample_does_not_admit_using_old_balance(self):
+        with mock.patch.object(rp,"learned_peak_mb",return_value=400), \
+             mock.patch.object(rp,"_available_mb",side_effect=[1500,None]), \
+             mock.patch.object(rp,"_register_cas") as register:
+            outcome=rp.acquire("browser_open","test",rp.PRIORITY_RECON)
+        self.assertFalse(outcome["ok"])
+        register.assert_not_called()
+
+    def test_peak_lookup_projects_only_requested_tool(self):
+        coll=mock.Mock();coll.find_one.return_value={"peaks":{"browser_open":[180,200]}}
+        with mock.patch.object(rp,"_coll",return_value=coll):
+            self.assertEqual(rp.learned_peak_mb("browser_open"),200)
+        self.assertEqual(coll.find_one.call_args.args[1],{"peaks.browser_open":1})
+
     def test_ai_preempts_recon_band(self):
         # recon 先占预留；AI 自动会话(priority=5)内存不足时抢占 recon 带 → 放行
         with mock.patch.object(rp, "learned_peak_mb", return_value=400.0), \

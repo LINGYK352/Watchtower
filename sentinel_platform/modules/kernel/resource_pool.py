@@ -116,9 +116,10 @@ def _used_mb_now() -> Optional[float]:
 # 自学习峰值（每工具历史真实增量峰值 → p95 作预留）
 # ============================================================================
 
-def _peak_doc() -> Dict[str, Any]:
+def _peak_doc(tool: str = "") -> Dict[str, Any]:
     try:
-        d = _coll().find_one({"_id": _cfg("TOOL_PEAK_DOC_ID")})
+        query = {"_id": _cfg("TOOL_PEAK_DOC_ID")}
+        d = _coll().find_one(query, {"peaks." + tool: 1}) if tool else _coll().find_one(query)
         return d or {}
     except Exception:
         return {}
@@ -127,7 +128,7 @@ def _peak_doc() -> Dict[str, Any]:
 def learned_peak_mb(tool: str) -> float:
     """工具预留峰值：历史真实增量样本的 p95；无历史 → 保守默认。"""
     default = float(_cfg("TOOL_DEFAULT_PEAK_MB"))
-    doc = _peak_doc()
+    doc = _peak_doc(tool)
     samples = (doc.get("peaks") or {}).get(tool) or []
     if not samples:
         return default
@@ -270,7 +271,14 @@ def acquire(tool: str, session_id: str, priority: int = 0) -> Dict[str, Any]:
     #       rev 已变（别的 worker 抢先登记）→ 重采样重试。杜绝两个 worker 读同一空账本各自获批超预算。=====
     # 修复前：_read_holders 读预算 → 判定 → 独立 $push 登记，三步非原子，多 worker TOCTOU 超额。
     _CAS_RETRIES = 5
+    reserved = 0.0
     for _attempt in range(_CAS_RETRIES):
+        # 冲突后的账本与物理内存必须一起 fresh 读，旧 avail 不能用于下一次准入。
+        current_avail = _available_mb()
+        if current_avail is None:
+            break  # 已进入可观测准入路径后丢失样本，不能沿用旧余额放行。
+        avail = current_avail
+        headroom = max(float(_cfg("TOOL_HEADROOM_MIN_MB")), avail * float(_cfg("TOOL_HEADROOM_PCT")))
         now = time.time()
         holders, rev = _read_pool()
         reserved = _reserved_active_mb(holders, now)
@@ -286,6 +294,11 @@ def acquire(tool: str, session_id: str, priority: int = 0) -> Dict[str, Any]:
         if priority >= PRIORITY_MANUAL:
             freed = _preempt_lower(holders, priority, needed=(reserve - budget), now=now)
             if freed > 0:
+                current_avail = _available_mb()
+                if current_avail is None:
+                    break
+                avail = current_avail
+                headroom = max(float(_cfg("TOOL_HEADROOM_MIN_MB")), avail * float(_cfg("TOOL_HEADROOM_PCT")))
                 holders2, rev2 = _read_pool()
                 if (avail - _reserved_active_mb(holders2, now) - headroom) >= reserve:
                     hid = _register_cas(tool, session_id, priority, reserve, now, rev2)
@@ -298,6 +311,11 @@ def acquire(tool: str, session_id: str, priority: int = 0) -> Dict[str, Any]:
         elif priority > PRIORITY_RECON:
             freed = _preempt_recon_band(holders, needed=(reserve - budget), now=now)
             if freed > 0:
+                current_avail = _available_mb()
+                if current_avail is None:
+                    break
+                avail = current_avail
+                headroom = max(float(_cfg("TOOL_HEADROOM_MIN_MB")), avail * float(_cfg("TOOL_HEADROOM_PCT")))
                 holders2, rev2 = _read_pool()
                 if (avail - _reserved_active_mb(holders2, now) - headroom) >= reserve:
                     hid = _register_cas(tool, session_id, priority, reserve, now, rev2)

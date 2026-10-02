@@ -287,21 +287,32 @@ def get_memory_percent() -> Optional[float]:
             return None
 
 
+def get_cpu_sample() -> Optional[Dict[str, Any]]:
+    """读取共享 CPU 样本；过期/未来时间或非法数值不可作为有效采样。无进程内缓存。"""
+    import math
+    import time
+    try:
+        row = get_repo().collection(RESOURCE_HISTORY).find_one({}, sort=[("ts", -1)])
+        if not row:
+            return None
+        ts, cpu = float(row["ts"]), float(row["cpu"])
+        age = time.time() - ts
+        if math.isfinite(ts) and math.isfinite(cpu) and 0 <= age <= _CPU_SAMPLE_MAX_AGE and 0 <= cpu <= 100:
+            return {"cpu": cpu, "ts": ts, "age_seconds": round(age, 1)}
+    except Exception:
+        pass
+    return None
+
+
 def get_cpu_percent() -> Optional[float]:
     """当前 CPU 使用率。**优先读 scheduler 写入 resource_history 的最近采样**——它是长驻进程按 tick
     间隔（默认 30s）算出的真实窗口均值，天然平滑、跨 gunicorn 多 worker 一致，且与态势总览趋势图同源。
     绝不在此用 psutil.cpu_percent(interval=0)：非阻塞增量口径按「本进程距上次调用」计，web worker 冷基线
     会返回 0 或虚高 100%（假 critical 告警的根因）。
     采样缺失/过期（scheduler 停摆）才本地阻塞探测 _CPU_PROBE_INTERVAL 秒兜底；仍不可用返回 None（不参与分级）。"""
-    import time
-    try:
-        row = get_repo().collection(RESOURCE_HISTORY).find_one({}, sort=[("ts", -1)])
-        if row and row.get("cpu") is not None:
-            ts = row.get("ts")
-            if ts is not None and (time.time() - float(ts)) <= _CPU_SAMPLE_MAX_AGE:
-                return float(row["cpu"])
-    except Exception:
-        pass
+    sample = get_cpu_sample()
+    if sample is not None:
+        return sample["cpu"]
     # 无新鲜采样（scheduler 未运行/首启）：给足窗口的本地阻塞探测，绝不 interval=0
     try:
         import psutil
@@ -586,6 +597,9 @@ class LogServiceImpl:
 
     def get_resource_level(self) -> str:
         return get_resource_level()
+
+    def get_cpu_sample(self) -> Optional[Dict[str, Any]]:
+        return get_cpu_sample()
 
     def get_resource_budget(self) -> Dict[str, Any]:
         return get_resource_budget()

@@ -74,7 +74,9 @@ def build() -> object:
 
     # ③ 执行器切 celery：submit_task 从起线程变投 worker 队列
     installed = _celery_adapter.install_celery_executor(app)
-    logger.info("celery_app built: broker=%s executor_installed=%s", _broker_url(), installed)
+    from urllib.parse import urlsplit
+    logger.info("celery_app built: broker_host=%s executor_installed=%s",
+                urlsplit(_broker_url()).hostname or "", installed)
     return app
 
 

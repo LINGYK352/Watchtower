@@ -47,6 +47,10 @@ class DashboardTest(unittest.TestCase):
     def setUp(self):
         reset_repo()
         reset_registry()
+        # 固定 Linux loadavg，避免宿主机真实负载覆盖本测试的假 CPU 采样。
+        load = mock.patch("os.getloadavg", return_value=(0.0, 0.0, 0.0), create=True)
+        load.start()
+        self.addCleanup(load.stop)
 
     def tearDown(self):
         reset_repo()

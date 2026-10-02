@@ -69,10 +69,25 @@ class DashboardServiceImpl:
         try:
             cnt = ps.cpu_count() or 0
             info["cpu_count"] = cnt
-            # CPU 稳健采样：单次 0.3s 瞬时窗口对整机太短、读数在 0~1% 抖动不代表真实负载。
-            # 用 0.6s 采样 + 结合 1 分钟 loadavg 派生的利用率取较能反映负载者（loadavg/核数×100，
-            # 封顶 100）。loadavg 仅 Linux 有；缺失则退回瞬时采样值。
-            inst = ps.cpu_percent(interval=0.6)
+            # 优先复用 scheduler 的有效共享样本，避免每个页面请求都等待采样窗口。
+            # 无有效样本时沿用 0.6s 本地探测；保持结合 loadavg 的展示口径。
+            # cpu_sample_* 明确数据来源与时间，cpu_percent_inst 保留为兼容字段。
+            sample = None
+            try:
+                from sentinel_platform.contracts import get_registry
+                svc = get_registry().get("log_service")
+                if svc and hasattr(svc, "get_cpu_sample"):
+                    sample = svc.get_cpu_sample()
+            except Exception:
+                pass
+            if sample is not None:
+                inst = sample["cpu"]
+                info.update(cpu_sample_source="scheduler", cpu_sample_ts=sample["ts"],
+                            cpu_sample_age_seconds=sample["age_seconds"])
+            else:
+                inst = ps.cpu_percent(interval=0.6)
+                info.update(cpu_sample_source="local_probe", cpu_sample_ts=time.time(),
+                            cpu_sample_age_seconds=0.0)
             load1 = 0.0
             try:
                 import os as _os

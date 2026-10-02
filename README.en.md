@@ -29,7 +29,14 @@ Watchtower connects asset reconnaissance, AI tool use, human intervention, and e
 
 The project is maintained by an individual developer and is available free of charge under **GPL-3.0-only**. You can deploy it yourself; model calls and external data sources may require your own accounts or incur separate costs.
 
-> `main` contains official stable source, currently **v1.21.166**. The website source snapshot is also `166`; the prebuilt image base may be older and is currently `165`. Source and image versions are distinct. Test iterations are not pushed directly to the main branch. See [version.txt](version.txt) for the source version and the [website](https://watchtowers.info/) for installation packages and subsequent official releases.
+> `main` contains official stable source, currently **v1.21.167**. The website source snapshot is also `167`; the prebuilt image base may be older and is currently `165`. Source and image versions are distinct. Test iterations are not pushed directly to the main branch. See [version.txt](version.txt) for the source version and the [website](https://watchtowers.info/) for installation packages and subsequent official releases.
+
+## v1.21.167 highlights
+
+- Fixes tool-message pairing after DeepSeek DSML text calls. Existing affected history is repaired on the next resume request while retaining text, reasoning and saved results.
+- Missing results are marked explicitly; orphan or duplicate results remain historical observations. Historical tools are never re-executed by the repair.
+- Durable parameter references reduce queue and prefetch duplication for large tasks. Monitoring avoids overlapping polls and resource admission re-samples after conflicts.
+- Hot updates download changed content; older versions without a historical manifest perform an initial full verification. This release covers the Linux Web edition only; Windows remains a local test build.
 
 ## v1.21.166 highlights
 

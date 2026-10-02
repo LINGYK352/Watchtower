@@ -390,9 +390,15 @@ async function loadNetQuality() {
 
 // silent=true：静默刷新（不显 loading 骨架屏），用于 30s 自动刷新——数据已有，只更新不闪屏。
 // 首次挂载 silent=false：显骨架屏。治"设备/代理卡每 30s 退回骨架屏、看着像没工作"。
-function loadAll(silent = false) {
-  loadMetrics(silent); loadSession(silent); loadToken(silent); loadDevice(silent); loadProxy(silent); loadTasks(); loadChart(); loadNetQuality()
-  lastRefresh.value = new Date().toLocaleTimeString()
+let refreshInFlight: Promise<void> | null = null
+function loadAll(silent = false): Promise<void> {
+  if (refreshInFlight) return refreshInFlight
+  refreshInFlight = Promise.allSettled([
+    loadMetrics(silent), loadSession(silent), loadToken(silent), loadDevice(silent),
+    loadProxy(silent), loadTasks(), loadChart(), loadNetQuality(),
+  ]).then(() => { lastRefresh.value = new Date().toLocaleTimeString() })
+    .finally(() => { refreshInFlight = null })
+  return refreshInFlight
 }
 // 默认自动刷新(30s)——恒定开启且静默(不闪骨架屏);首次挂载显骨架屏。
 useAutoRefresh(() => loadAll(true), 30000)

@@ -101,6 +101,33 @@ def make_celery(broker_url: str, backend_url: Optional[str] = None, name: str = 
     return app
 
 
+def _large_task_options(options) -> bool:
+    """小消息走原路径；有界估算驻留大小，不序列化整个大配置，只选择传输方式。"""
+    import sys
+    from itertools import chain
+    pending, seen, size = [iter((options,))], set(), 0
+    for _ in range(256):
+        while pending:
+            try:
+                value = next(pending[-1])
+                break
+            except StopIteration:
+                pending.pop()
+        else:
+            return False
+        if id(value) in seen:
+            continue
+        seen.add(id(value))
+        size += sys.getsizeof(value)
+        if size >= 32768:
+            return True
+        if isinstance(value, dict):
+            pending.append(chain(value.keys(), value.values()))
+        elif isinstance(value, (list, tuple)):
+            pending.append(iter(value))
+    return bool(pending)
+
+
 def install_celery_executor(app=None) -> bool:
     """把 orchestration 执行器切成"投递到 celery worker"。app 缺省用 make_celery 建的。
     成功返回 True；未先 make_celery（无 _RUN_TASK）返回 False（调用方决定降级线程）。"""
@@ -116,7 +143,21 @@ def install_celery_executor(app=None) -> bool:
 
     # 更稳妥：直接替换 submit_task 的投递实现为 celery delay（可序列化参数）
     orchestration.set_executor(_celery_executor)
-    orchestration._celery_delay = lambda task_id, task_type, options: _RUN_TASK.delay(task_id, task_type, options)
+    def _task_delay(task_id, task_type, options):
+        # 已持久化且相同的任务配置由 worker 原有缺省读取路径取回；队列保留轻量引用。
+        # 未持久化/显式覆盖/读取失败仍按原协议发送完整参数，兼容旧 worker 的三个位置参数。
+        if options is not None and _large_task_options(options):
+            try:
+                query = {**orchestration._task_query(task_id), "status": orchestration.S_QUEUED}
+                doc = orchestration.get_repo().collection(orchestration.TASK_COLL).find_one(
+                    query, {"task_type": 1, "type": 1, "options": 1})
+                stored_type = (doc or {}).get("task_type", "") or (doc or {}).get("type", "")
+                if doc and (not task_type or task_type == stored_type) and options == doc.get("options", {}):
+                    options = None
+            except Exception:
+                pass
+        return _RUN_TASK.delay(task_id, task_type, options)
+    orchestration._celery_delay = _task_delay
     if _RUN_SESSION is not None:
         orchestration._celery_session_delay = lambda session_id: _RUN_SESSION.delay(session_id)
     if _RUN_CONSOLE is not None:

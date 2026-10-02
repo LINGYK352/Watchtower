@@ -1,4 +1,4 @@
-import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, type Ref } from 'vue'
 
 /**
  * 定时自动刷新 composable。
@@ -10,22 +10,27 @@ import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
  *
  * 不负责首次加载(由调用方 onMounted 自行 load),只管"周期性再刷"。
  */
-export function useAutoRefresh(fn: () => void, intervalMs = 30000, defaultOn = true): {
+export function useAutoRefresh(fn: () => void | Promise<unknown>, intervalMs = 30000, defaultOn = true): {
   enabled: Ref<boolean>
   trigger: () => void
 } {
   const enabled = ref(defaultOn)
   let timer: ReturnType<typeof setInterval> | null = null
+  let running = false
+  let disposed = false
 
-  function tick() {
-    if (enabled.value && document.visibilityState === 'visible') {
-      try { fn() } catch { /* 单次刷新失败不影响后续 */ }
-    }
+  async function tick() {
+    if (disposed || running || !enabled.value || document.visibilityState !== 'visible') return
+    running = true
+    try { await fn() } catch { /* 单次刷新失败不影响后续 */ }
+    finally { running = false }
   }
 
   function start() {
     stop()
-    timer = setInterval(tick, intervalMs)
+    if (!disposed && enabled.value && document.visibilityState === 'visible') {
+      timer = setInterval(tick, intervalMs)
+    }
   }
 
   function stop() {
@@ -35,7 +40,10 @@ export function useAutoRefresh(fn: () => void, intervalMs = 30000, defaultOn = t
   function onVisible() {
     // 切回前台立即刷新一次,避免等满一个周期才更新
     if (document.visibilityState === 'visible' && enabled.value) {
-      try { fn() } catch { /* 忽略 */ }
+      void tick()
+      start()
+    } else {
+      stop()
     }
   }
 
@@ -44,7 +52,10 @@ export function useAutoRefresh(fn: () => void, intervalMs = 30000, defaultOn = t
     document.addEventListener('visibilitychange', onVisible)
   })
 
+  watch(enabled, () => enabled.value ? start() : stop())
+
   onBeforeUnmount(() => {
+    disposed = true
     stop()
     document.removeEventListener('visibilitychange', onVisible)
   })

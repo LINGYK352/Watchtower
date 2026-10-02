@@ -164,8 +164,13 @@ def run_task(task_id: str, task_type: str = "", options: Optional[Dict[str, Any]
             doc = get_repo().collection(TASK_COLL).find_one(_task_query(task_id)) or {}
             task_type = task_type or doc.get("task_type", "") or doc.get("type", "")
             options = options if options is not None else (doc.get("options", {}) or {})
-        except Exception:
-            options = options or {}
+        except Exception as exc:
+            # 引用型消息必须成功加载持久参数后才能执行；禁止读取失败时用空配置启动。
+            _rollback_task_claim(task_id, "任务参数暂时无法读取")
+            result["result"] = "waiting"
+            result["error"] = "任务参数暂时无法读取，已保留等待重投"
+            logger.warning("run_task configuration unavailable: task=%s error_type=%s", task_id, type(exc).__name__)
+            return result
     result["task_type"] = task_type
 
     # 入口挡:已是停止态不启动（协作式取消 + 抢占）
