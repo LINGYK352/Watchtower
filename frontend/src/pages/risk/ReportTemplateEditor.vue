@@ -1,20 +1,20 @@
 <template>
   <div class="template-editor">
-    <a-alert type="info" show-icon message="按原模板保存字段、复现步骤和截图；保存后重新生成 Word。截图移除只影响本报告。" />
+    <a-alert type="info" show-icon :message="translate('ui.m_52bca129fc8d')" />
     <a-form layout="vertical" class="report-fields">
       <a-row :gutter="16">
         <a-col :span="12" v-for="field in reportFields" :key="field.key">
           <a-form-item :label="field.label"><a-input v-model:value="data.report[field.key]" /></a-form-item>
         </a-col>
       </a-row>
-      <a-form-item label="报告概述"><a-textarea v-model:value="data.report.summary" :auto-size="{ minRows: 2 }" /></a-form-item>
+      <a-form-item :label="translate('ui.m_433620cb3b06')"><a-textarea v-model:value="data.report.summary" :auto-size="{ minRows: 2 }" /></a-form-item>
     </a-form>
     <a-collapse :default-active-key="data.findings.map(f => f.finding_id)">
-      <a-collapse-panel v-for="(finding, fi) in data.findings" :key="finding.finding_id" :header="`${fi + 1}. ${finding.vuln_type || '漏洞详情'}`">
+      <a-collapse-panel v-for="(finding, fi) in data.findings" :key="finding.finding_id" :header="`${fi + 1}. ${finding.vuln_type || translate('ui.m_978074e2b1b9')}`">
         <a-form layout="vertical">
           <a-row :gutter="16">
             <a-col :span="12">
-              <a-form-item label="漏洞等级"><a-select :value="String(finding.severity || '')" :options="severityOptions" @change="(value: string) => setSeverity(finding, value)" /></a-form-item>
+              <a-form-item :label="translate('ui.m_58c48802553a')"><a-select :value="String(finding.severity || '')" :options="severityOptions" @change="(value: string) => setSeverity(finding, value)" /></a-form-item>
             </a-col>
             <a-col :span="12" v-for="field in shortFields" :key="field.key">
               <a-form-item :label="field.label"><a-input :value="String(finding[field.key] ?? '')" @update:value="finding[field.key] = $event" /></a-form-item>
@@ -24,33 +24,33 @@
             <a-textarea :value="String(finding[field.key] ?? '')" @update:value="finding[field.key] = $event" :auto-size="{ minRows: 2, maxRows: 16 }" />
           </a-form-item>
         </a-form>
-        <h3>复现步骤</h3>
+        <h3>{{ translate('ui.m_ce3597f37f12') }}</h3>
         <div v-for="(step, si) in finding.reproduction_steps" :key="si" class="step-editor">
-          <div class="step-label">步骤 {{ si + 1 }} <a-button size="small" type="link" danger @click="removeStep(finding, si)">移除步骤</a-button></div>
-          <a-textarea v-model:value="step.text" :auto-size="{ minRows: 2 }" placeholder="填写该步骤的操作与观察结果" />
+          <div class="step-label">{{ translate('ui.m_4ec7d4554df9') }} {{ si + 1 }} <a-button size="small" type="link" danger @click="removeStep(finding, si)">{{ translate('ui.m_979fcfe25ff4') }}</a-button></div>
+          <a-textarea v-model:value="step.text" :auto-size="{ minRows: 2 }" :placeholder="translate('ui.m_f83c4877ecc3')" />
         </div>
-        <a-button @click="finding.reproduction_steps.push({ text: '' })">添加步骤</a-button>
-        <h3>截图编排</h3>
+        <a-button @click="finding.reproduction_steps.push({ text: '' })">{{ translate('ui.m_f2ee4d080167') }}</a-button>
+        <h3>{{ translate('ui.m_ebc711ca0c3c') }}</h3>
         <a-space wrap>
           <a-upload :show-upload-list="false" accept="image/png,image/jpeg,image/webp,image/gif" :before-upload="(file: File) => upload(finding, file)">
-            <a-button :loading="uploading === finding.finding_id">上传截图</a-button>
+            <a-button :loading="uploading === finding.finding_id">{{ translate('ui.m_3495f2cca5ab') }}</a-button>
           </a-upload>
-          <a-button @click="importShots(finding)">添加已有漏洞截图</a-button>
-          <span class="help">长截图导出时自动分段；按当前位置和列表顺序插入。</span>
+          <a-button @click="importShots(finding)">{{ translate('ui.m_62e293a7bd61') }}</a-button>
+          <span class="help">{{ translate('ui.m_617ecd19d49a') }}</span>
         </a-space>
-        <div v-if="!finding.screenshots.length" class="help">暂无截图，导出不会生成虚假证据。</div>
+        <div v-if="!finding.screenshots.length" class="help">{{ translate('ui.m_9d8b248f8644') }}</div>
         <div v-for="(shot, index) in finding.screenshots" :key="shot.name" class="shot-editor">
           <a :href="shotUrl(finding, shot)" target="_blank" rel="noopener"><img :src="shotUrl(finding, shot)" alt="证据截图" /></a>
           <div class="shot-controls">
-            <a-input v-model:value="shot.caption" placeholder="截图说明，例如响应返回了哪项关键数据" />
+            <a-input v-model:value="shot.caption" :placeholder="translate('ui.m_5306d50c58f8')" />
             <a-space wrap>
               <a-select v-model:value="shot.section" style="width:160px" :options="sections" />
-              <a-input-number v-model:value="shot.width_percent" :min="10" :max="100" :placeholder="'100'" addon-before="宽度 %" />
-              <a-input-number v-if="shot.section === 'steps'" v-model:value="shot.step" :min="1" :max="Math.max(1, finding.reproduction_steps.length)" addon-before="步骤" />
-              <a-button size="small" :disabled="index === 0" @click="move(finding, index, -1)">上移</a-button>
-              <a-button size="small" :disabled="index === finding.screenshots.length - 1" @click="move(finding, index, 1)">下移</a-button>
-              <a-button size="small" @click="annotating = { finding, shot }">标注 / 脱敏</a-button>
-              <a-button size="small" danger @click="finding.screenshots.splice(index, 1)">从报告移除</a-button>
+              <a-input-number v-model:value="shot.width_percent" :min="10" :max="100" :placeholder="'100'" :addon-before="translate('ui.m_9d9a54a0e090')" />
+              <a-input-number v-if="shot.section === 'steps'" v-model:value="shot.step" :min="1" :max="Math.max(1, finding.reproduction_steps.length)" :addon-before="translate('ui.m_4ec7d4554df9')" />
+              <a-button size="small" :disabled="index === 0" @click="move(finding, index, -1)">{{ translate('ui.m_f853a70b1204') }}</a-button>
+              <a-button size="small" :disabled="index === finding.screenshots.length - 1" @click="move(finding, index, 1)">{{ translate('ui.m_e75e8b4e5c97') }}</a-button>
+              <a-button size="small" @click="annotating = { finding, shot }">{{ translate('ui.m_2d407f17c6df') }}</a-button>
+              <a-button size="small" danger @click="finding.screenshots.splice(index, 1)">{{ translate('ui.m_493b5d3e95a6') }}</a-button>
             </a-space>
           </div>
         </div>
@@ -62,6 +62,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { findingShotApi, type ReportData, type ReportFindingData, type ReportScreenshot } from '../../api/intel'
@@ -78,28 +80,28 @@ async function saveAnnotation(file: File) {
     const result = await findingShotApi.upload(target.finding.finding_id, file)
     target.shot.name = String(result.name)
     annotating.value = null
-    message.success('标注副本已生成，保存报告后生效；原图保留')
-  } catch (e) { message.error((e as Error).message || '标注保存失败') }
+    message.success(translate('ui.m_e5e777160740'))
+  } catch (e) { message.error((e as Error).message || translate('ui.m_df8f4028c446')) }
   finally { annotationSaving.value = false }
 }
-const reportFields = [{ key: 'unit', label: '涉及单位全称' }, { key: 'system_name', label: '平台 / 系统名称' }, { key: 'period', label: '报告日期' }]
+const reportFields = [{ key: 'unit', get label() { return translate('ui.m_59dca28a1dd0') } }, { key: 'system_name', get label() { return translate('ui.m_ba21e862e3bd') } }, { key: 'period', get label() { return translate('ui.m_4b5e3139311d') } }]
 const shortFields = [
-  { key: 'vuln_type', label: '漏洞类型' }, { key: 'cvss_score', label: 'CVSS 评分' },
-  { key: 'target', label: '访问地址' }, { key: 'affected_ip', label: '受影响 IP' },
-  { key: 'discovered_at', label: '漏洞发现时间' }, { key: 'version', label: '版本信息' },
-  { key: 'test_environment', label: '测试环境' }, { key: 'verification_status', label: '验证状态' },
+  { key: 'vuln_type', get label() { return translate('ui.m_5600494fad70') } }, { key: 'cvss_score', get label() { return translate('ui.m_47aead3dfc67') } },
+  { key: 'target', get label() { return translate('ui.m_092cb725c713') } }, { key: 'affected_ip', get label() { return translate('ui.m_8f79dae69a8c') } },
+  { key: 'discovered_at', get label() { return translate('ui.m_18560650321c') } }, { key: 'version', get label() { return translate('ui.m_2da3906a24ee') } },
+  { key: 'test_environment', get label() { return translate('ui.m_d1992adbd980') } }, { key: 'verification_status', get label() { return translate('ui.m_6a2176d9e5d9') } },
 ]
 const longFields = [
-  { key: 'discovery_context', label: '事件发现场景' }, { key: 'affected_users', label: '受影响用户类型' },
-  { key: 'affected_data', label: '受影响数据类型' }, { key: 'quantification', label: '事件量化信息' },
-  { key: 'trigger_path', label: '漏洞触发路径' }, { key: 'root_cause', label: '漏洞产生原因' },
-  { key: 'impact', label: '事件影响范围' }, { key: 'verify_method', label: '复现条件与说明' },
-  { key: 'poc', label: '请求 / POC 原文' }, { key: 'evidence', label: '关键响应与证据原文' },
-  { key: 'remediation', label: '紧急修复建议' }, { key: 'hardening', label: '长期加固方案' },
-  { key: 'fix_validation', label: '修复验证建议' }, { key: 'notes', label: '备注' },
+  { key: 'discovery_context', get label() { return translate('ui.m_b7676e52a40a') } }, { key: 'affected_users', get label() { return translate('ui.m_e080cda6d39b') } },
+  { key: 'affected_data', get label() { return translate('ui.m_d7b320eed35a') } }, { key: 'quantification', get label() { return translate('ui.m_289824cdbfc6') } },
+  { key: 'trigger_path', get label() { return translate('ui.m_eb5f3abe2fb3') } }, { key: 'root_cause', get label() { return translate('ui.m_1efd16c515ee') } },
+  { key: 'impact', get label() { return translate('ui.m_637254217d9a') } }, { key: 'verify_method', get label() { return translate('ui.m_13e2802d34d2') } },
+  { key: 'poc', get label() { return translate('ui.m_4c796c4a154b') } }, { key: 'evidence', get label() { return translate('ui.m_090001170311') } },
+  { key: 'remediation', get label() { return translate('ui.m_324227697bfc') } }, { key: 'hardening', get label() { return translate('ui.m_431c0c30a4e6') } },
+  { key: 'fix_validation', get label() { return translate('ui.m_08d08f966d1e') } }, { key: 'notes', get label() { return translate('ui.m_daede9881787') } },
 ]
-const sections = [{ value: 'icp', label: '单位 / ICP 归属证明' }, { value: 'steps', label: '对应复现步骤' }, { value: 'evidence', label: '证据材料' }]
-const severityOptions = [{ value: 'critical', label: '严重' }, { value: 'high', label: '高危' }, { value: 'medium', label: '中危' }, { value: 'low', label: '低危' }, { value: 'info', label: '信息' }]
+const sections = [{ value: 'icp', get label() { return translate('ui.m_946c53b99f1e') } }, { value: 'steps', get label() { return translate('ui.m_82555f649ba4') } }, { value: 'evidence', get label() { return translate('ui.m_63bc7bcf0453') } }]
+const severityOptions = [{ value: 'critical', get label() { return translate('ui.m_73eb0e14e307') } }, { value: 'high', get label() { return translate('ui.m_4aa71c570566') } }, { value: 'medium', get label() { return translate('ui.m_36a7c77b623b') } }, { value: 'low', get label() { return translate('ui.m_27a7f42a0afb') } }, { value: 'info', get label() { return translate('ui.m_e7028601e7da') } }]
 function setSeverity(f: ReportFindingData, value: string) { f.severity = value; f.severity_cn = severityOptions.find(o => o.value === value)?.label || value }
 function shotUrl(f: ReportFindingData, shot: ReportScreenshot) { return `/api/image/finding_${encodeURIComponent(f.finding_id)}/${encodeURIComponent(shot.name)}` }
 function append(f: ReportFindingData, name: string) {
@@ -107,13 +109,13 @@ function append(f: ReportFindingData, name: string) {
 }
 function upload(f: ReportFindingData, file: File) {
   uploading.value = f.finding_id
-  findingShotApi.upload(f.finding_id, file).then(result => { append(f, String(result.name)); message.success('截图已添加，保存报告后生效') })
-    .catch(e => message.error(e.message || '截图上传失败')).finally(() => { uploading.value = '' })
+  findingShotApi.upload(f.finding_id, file).then(result => { append(f, String(result.name)); message.success(translate('ui.m_39c43dd507e3')) })
+    .catch(e => message.error(e.message || translate('ui.m_8417fca8bc09'))).finally(() => { uploading.value = '' })
   return false
 }
 async function importShots(f: ReportFindingData) {
   try { const result = await findingShotApi.list(f.finding_id); result.shots.forEach(s => append(f, s.name)) }
-  catch (e) { message.error((e as Error).message || '读取截图失败') }
+  catch (e) { message.error((e as Error).message || translate('ui.m_d8e74014939a')) }
 }
 function move(f: ReportFindingData, i: number, delta: number) { const [shot] = f.screenshots.splice(i, 1); f.screenshots.splice(i + delta, 0, shot) }
 function removeStep(f: ReportFindingData, i: number) {

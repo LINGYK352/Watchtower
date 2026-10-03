@@ -32,22 +32,23 @@
         </div>
         <a-space :size="16">
           <BrokerDegradeTag />
+          <LanguageSwitch />
           <TimezoneTag />
           <!-- 激活时钟统一：activated/expired/revoked 为权威，remaining_days 用 ceil（剩<1天显示1天） -->
           <a-tag v-if="licenseActivated && licenseDays !== null && licenseDays > 1" color="green" style="cursor:pointer" @click="router.push('/about/activation')">
-            已激活 · 剩余 {{ licenseDays }} 天
+            {{ t('header.activated', { days: licenseDays }) }}
           </a-tag>
           <a-tag v-else-if="licenseActivated && licenseDays === 1" color="orange" style="cursor:pointer" @click="router.push('/about/activation')">
-            即将到期 · 剩余 1 天
+            {{ t('header.expiring') }}
           </a-tag>
           <a-tag v-else-if="licenseExpired" color="red" style="cursor:pointer" @click="router.push('/about/activation')">
-            授权已过期
+            {{ t('header.expired') }}
           </a-tag>
           <!-- 未激活/无key时不显徽标，由 402 事件驱动的激活向导全屏阻断 -->
           <a-tag color="blue">{{ serverVersion }}</a-tag>
-          <a-button type="text" @click="router.push('/proxy')"><template #icon><GlobalOutlined /></template>代理中心</a-button>
+          <a-button type="text" @click="router.push('/proxy')"><template #icon><GlobalOutlined /></template>{{ t('header.proxy') }}</a-button>
           <button class="theme-toggle" :class="{ dark: isDark }" @click="toggleTheme"
-            :title="isDark ? '切换到日间模式' : '切换到夜间模式'" aria-label="切换主题">
+            :title="isDark ? t('header.dayMode') : t('header.nightMode')" :aria-label="t('header.theme')">
             <span class="tt-track">
               <span class="tt-ico sun">☀</span>
               <span class="tt-ico moon">🌙</span>
@@ -62,9 +63,9 @@
             </a>
             <template #overlay>
               <a-menu>
-                <a-menu-item key="pass" @click="openChangePass"><LockOutlined /> 修改密码</a-menu-item>
+                <a-menu-item key="pass" @click="openChangePass"><LockOutlined /> {{ t('header.password') }}</a-menu-item>
                 <a-menu-divider />
-                <a-menu-item key="logout" danger @click="logout"><LogoutOutlined /> 退出登录</a-menu-item>
+                <a-menu-item key="logout" danger @click="logout"><LogoutOutlined /> {{ t('header.logout') }}</a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>
@@ -77,11 +78,11 @@
       </a-layout-content>
     </a-layout>
 
-    <a-modal v-model:open="passOpen" title="修改密码" @ok="submitChangePass" :confirm-loading="passLoading">
+    <a-modal v-model:open="passOpen" :title="t('header.password')" @ok="submitChangePass" :confirm-loading="passLoading">
       <a-form layout="vertical">
-        <a-form-item label="旧密码" required><a-input-password v-model:value="passForm.old_password" placeholder="旧密码" /></a-form-item>
-        <a-form-item label="新密码" required><a-input-password v-model:value="passForm.new_password" placeholder="新密码" /></a-form-item>
-        <a-form-item label="确认新密码" required><a-input-password v-model:value="passForm.check_password" placeholder="再次输入新密码" /></a-form-item>
+        <a-form-item :label="t('header.oldPassword')" required><a-input-password v-model:value="passForm.old_password" :placeholder="t('header.oldPassword')" /></a-form-item>
+        <a-form-item :label="t('header.newPassword')" required><a-input-password v-model:value="passForm.new_password" :placeholder="t('header.newPassword')" /></a-form-item>
+        <a-form-item :label="t('header.confirmPassword')" required><a-input-password v-model:value="passForm.check_password" :placeholder="t('header.reenterPassword')" /></a-form-item>
       </a-form>
     </a-modal>
 
@@ -179,6 +180,8 @@ import DeskPet from '../components/DeskPet.vue'
 import AnnouncementBar from '../components/AnnouncementBar.vue'
 import TimezoneTag from '../components/TimezoneTag.vue'
 import BrokerDegradeTag from '../components/BrokerDegradeTag.vue'
+import LanguageSwitch from '../components/LanguageSwitch.vue'
+import { appLocale, t } from '../i18n'
 import { useTheme } from '../composables/useTheme'
 
 const { isDark, toggleTheme } = useTheme()
@@ -191,7 +194,7 @@ const router = useRouter()
 const route = useRoute()
 const collapsed = ref(false)
 const openKeys = ref(menuGroups.map(group => group.key))
-const username = computed(() => getUser() || '管理员')
+const username = computed(() => getUser() || t('common.administrator'))
 const licenseActivated = ref(false)
 const licenseExpired = ref(false)
 const licenseDays = ref<number | null>(null)
@@ -267,7 +270,11 @@ const icons: Record<string, unknown> = {
   WifiOutlined
 }
 
-const flatItems = computed(() => menuGroups.flatMap(group => group.children.map(item => ({ ...item, groupTitle: group.title }))))
+const localizedGroups = computed(() => {
+  void appLocale.value
+  return menuGroups.map(group => ({ ...group, title: t(`navigation.${group.key}`), children: group.children.map(item => ({ ...item, title: t(`navigation.${item.key}`) })) }))
+})
+const flatItems = computed(() => localizedGroups.value.flatMap(group => group.children.map(item => ({ ...item, groupTitle: group.title }))))
 // 按当前用户权限过滤菜单:item.perm 有值时须命中 permissions;空组(子项全被过滤)不显示。
 // 注:这只是 UX 隐藏,后端 RBAC 网关才是权威闸。
 const permsVersion = ref(0)   // profile 刷新后 +1,驱动 visibleGroups 重算(localStorage 非响应式)
@@ -276,7 +283,7 @@ const visibleGroups = computed(() => {
   const perms = getPerms()
   // 无 perms 记录(存量登录态/旧缓存)→ 不过滤(避免误隐藏);有记录则按 perm 过滤
   const noPermInfo = perms.length === 0
-  return menuGroups
+  return localizedGroups.value
     .map(group => ({
       ...group,
       children: group.children.filter(item => !item.perm || noPermInfo || perms.includes(item.perm)),
@@ -293,7 +300,7 @@ const activeItem = computed(() => {
 })
 const selectedKeys = computed(() => [activeItem.value?.key || 'dashboard'])
 const pageTitle = computed(() => activeItem.value?.title || String(route.meta.title || APP_NAME))
-const breadcrumbItems = computed(() => [{ title: activeItem.value?.groupTitle || '工作台' }, { title: pageTitle.value }])
+const breadcrumbItems = computed(() => [{ title: activeItem.value?.groupTitle || t('navigation.workspace') }, { title: pageTitle.value }])
 
 function onOpenChange(keys: string[]) {
   openKeys.value = keys
@@ -326,12 +333,12 @@ const passLoading = ref(false)
 const passForm = reactive({ old_password: '', new_password: '', check_password: '' })
 function openChangePass() { passForm.old_password = ''; passForm.new_password = ''; passForm.check_password = ''; passOpen.value = true }
 async function submitChangePass() {
-  if (!passForm.old_password || !passForm.new_password) return message.warning('请填写旧密码和新密码')
-  if (passForm.new_password !== passForm.check_password) return message.warning('两次新密码不一致')
+  if (!passForm.old_password || !passForm.new_password) return message.warning(t('header.passwordRequired'))
+  if (passForm.new_password !== passForm.check_password) return message.warning(t('header.passwordMismatch'))
   passLoading.value = true
   try {
     await userApi.changePassword(passForm.old_password, passForm.new_password, passForm.check_password)
-    message.success('密码已修改，请重新登录')
+    message.success(t('header.passwordChanged'))
     passOpen.value = false
     clearToken()
     router.push('/login')

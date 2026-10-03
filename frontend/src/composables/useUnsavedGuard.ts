@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n'
 // 未保存修改守卫（问题4）：整页内联编辑的配置页，改了没点保存就切走会静默丢设置。
 // 用法：传入一个「当前状态序列化」函数，数据载入成功 / 保存成功后调 markSaved() 重置基线；
 // dirty 供页面显示「有未保存修改」角标。路由切走弹确认框，刷新/关闭页触发浏览器原生拦截。
@@ -21,9 +22,9 @@ export function useUnsavedGuard(serialize: () => string, opts?: { content?: stri
   onBeforeRouteLeave((_to, _from, next) => {
     if (!dirty.value) return next()
     Modal.confirm({
-      title: '有未保存的修改',
-      content: opts?.content || '当前修改尚未保存，直接离开将丢失这些修改。确定要离开吗？',
-      okText: '离开不保存', okType: 'danger', cancelText: '返回继续编辑',
+      get title() { return translate('ui.m_c2277872cdce') },
+      content: opts?.content || translate('ui.m_8c90fad4ed7a'),
+      get okText() { return translate('ui.m_573c3f773c6e') }, okType: 'danger', get cancelText() { return translate('ui.m_120e7cea1231') },
       onOk: () => next(),
       onCancel: () => next(false),
     })

@@ -1,11 +1,11 @@
 <template>
-  <PageContainer title="漏洞情报" kicker="Vuln Intelligence" description="外部 CVE 情报由 Watchtower 云端情报库统一采集、去重后分发,本平台从云端拉取入库;并聚合本地可直接执行的验证(NPoC 插件 / nuclei 模板)。AI 渗透识别出组件后直接查该组件已知漏洞与可用 PoC。">
+  <PageContainer :title="translate('ui.m_152ea9270e8d')" kicker="Vuln Intelligence" :description="translate('ui.m_f8aad8c4e6c7')">
     <template #extra>
       <a-space>
-        <span class="feed-meta">上次同步:{{ cloudSource?.last_fetch || status.last_fetch || '尚未同步' }}</span>
-        <a-button @click="loadAll">刷新</a-button>
-        <a-tooltip title="常态由调度器按间隔自动从云端同步;刚公开的高危 CVE 可点此立即同步一次">
-          <a-button type="primary" ghost :loading="running" @click="runFeed">立即同步</a-button>
+        <span class="feed-meta">{{ translate('ui.m_71b5575e5eea') }}{{ cloudSource?.last_fetch || status.last_fetch || translate('ui.m_439e864e8324') }}</span>
+        <a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button>
+        <a-tooltip :title="translate('ui.m_b28d8e83811b')">
+          <a-button type="primary" ghost :loading="running" @click="runFeed">{{ translate('ui.m_36e7a43a1c67') }}</a-button>
         </a-tooltip>
       </a-space>
     </template>
@@ -13,9 +13,9 @@
     <!-- 情报来源：云端主来源(突出) + 本地可执行源 -->
     <a-card size="small" class="page-card src-health" :bordered="false">
       <div class="src-health-head">
-        <span class="sh-title">情报来源</span>
+        <span class="sh-title">{{ translate('ui.m_271b89be4187') }}</span>
         <span class="sh-interval">
-          云端同步间隔
+          {{ translate('ui.m_9060d076368a') }}
           <a-select v-model:value="intervalSel" size="small" style="width: 120px" :options="intervalOptions" @change="saveInterval" />
         </span>
       </div>
@@ -27,23 +27,23 @@
         </div>
         <div class="cloud-main">
           <div class="cloud-title">
-            <span class="cloud-name">Watchtower 云端情报库</span>
+            <span class="cloud-name">{{ translate('ui.m_16165e40c5ba') }}</span>
             <span class="cloud-badge" :class="cloudSource.health">{{ healthText(cloudSource.health) }}</span>
           </div>
           <div class="cloud-sub">
-            外部 CVE 情报统一来源 · 已同步 <b>{{ (cloudSource.remote_count || cloudSource.fetched || stat.total) || 0 }}</b> 条
-            <span v-if="cloudSource.last_fetch"> · 上次同步 {{ cloudSource.last_fetch }}</span>
+            {{ translate('ui.m_5fd43ee6cb4f') }} <b>{{ (cloudSource.remote_count || cloudSource.fetched || stat.total) || 0 }}</b> {{ translate('ui.m_f004f1d84cf9') }}
+            <span v-if="cloudSource.last_fetch"> {{ translate('ui.m_bc74063b3467') }} {{ cloudSource.last_fetch }}</span>
           </div>
         </div>
         <div class="cloud-metrics">
-          <div class="cm"><span class="cm-n">{{ stat.in_kev || 0 }}</span><span class="cm-l">在野</span></div>
-          <div class="cm"><span class="cm-n">{{ stat.by_severity && stat.by_severity.critical || 0 }}</span><span class="cm-l">严重</span></div>
+          <div class="cm"><span class="cm-n">{{ stat.in_kev || 0 }}</span><span class="cm-l">{{ translate('ui.m_8f5c138a5a03') }}</span></div>
+          <div class="cm"><span class="cm-n">{{ stat.by_severity && stat.by_severity.critical || 0 }}</span><span class="cm-l">{{ translate('ui.m_73eb0e14e307') }}</span></div>
         </div>
       </div>
 
       <!-- 本地可执行能力源 -->
       <div v-if="localSources.length" class="local-src-wrap">
-        <div class="local-src-label">本地可执行能力（本机 · 直接可打）</div>
+        <div class="local-src-label">{{ translate('ui.m_bcfa821d6231') }}</div>
         <div class="src-grid">
           <div v-for="s in localSources" :key="s.name" class="src-chip" :class="s.health">
             <span class="dot" :class="s.health"></span>
@@ -52,7 +52,7 @@
               <span v-else class="src-name">{{ s.label }}</span>
               <div class="src-sub">
                 <span>{{ healthText(s.health) }}</span>
-                <span v-if="s.fetched"> · {{ s.fetched }} 条</span>
+                <span v-if="s.fetched"> · {{ s.fetched }} {{ translate('ui.m_f004f1d84cf9') }}</span>
                 <span v-if="s.error" class="src-err"> · {{ s.error.slice(0, 30) }}</span>
               </div>
             </div>
@@ -63,30 +63,30 @@
 
     <!-- 概览卡 -->
     <a-row :gutter="16" class="stat-row">
-      <a-col :span="4"><a-card size="small"><a-statistic title="漏洞总数" :value="stat.total" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic title="在野利用" :value="stat.in_kev" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic title="本地可直接打" :value="stat.executable" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic title="严重" :value="stat.by_severity.critical || 0" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic title="高危" :value="stat.by_severity.high || 0" :value-style="{ color: '#fa541c' }" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic title="中危" :value="stat.by_severity.medium || 0" :value-style="{ color: '#faad14' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_e4246b7d0651')" :value="stat.total" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_350a4c722f51')" :value="stat.in_kev" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_2639efc862c1')" :value="stat.executable" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_73eb0e14e307')" :value="stat.by_severity.critical || 0" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_4aa71c570566')" :value="stat.by_severity.high || 0" :value-style="{ color: '#fa541c' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_36a7c77b623b')" :value="stat.by_severity.medium || 0" :value-style="{ color: '#faad14' }" /></a-card></a-col>
     </a-row>
 
     <!-- 按组件查(AI 同款) -->
-    <a-card size="small" class="page-card" title="按组件查漏洞">
-      <a-input-search v-model:value="comp" placeholder="输入组件名,如 weblogic / struts / seeyon" enter-button="查询"
+    <a-card size="small" class="page-card" :title="translate('ui.m_60065844f714')">
+      <a-input-search v-model:value="comp" :placeholder="translate('ui.m_f3f859dc4de6')" enter-button="查询"
         style="max-width: 480px" @search="doQuery" />
-      <div v-if="queryDone" class="query-hint">命中 {{ queryResult.length }} 条{{ queryResult.length ? '(可执行/在野优先)' : ',换个组件名或别名试试(中文组件可能需英文名,如 致远→seeyon)' }}</div>
+      <div v-if="queryDone" class="query-hint">{{ translate('ui.m_393df9bb13ea') }} {{ queryResult.length }} {{ translate('ui.m_f004f1d84cf9') }}{{ queryResult.length ? translate('ui.m_850cc0f4acaa') : translate('ui.m_62df7b620997') }}</div>
     </a-card>
 
     <!-- 过滤 + 列表 -->
     <SearchBar :model="query" @search="reload" @reset="onReset">
-      <a-form-item label="关键词"><a-input v-model:value="query.keyword" placeholder="CVE/标题/组件" allow-clear style="width: 200px" /></a-form-item>
-      <a-form-item label="等级">
-        <a-select v-model:value="query.severity" allow-clear style="width: 120px" :options="sevOptions" placeholder="全部" />
+      <a-form-item :label="translate('ui.m_1f7f0db90f93')"><a-input v-model:value="query.keyword" :placeholder="translate('ui.m_98a2e4ac3a0b')" allow-clear style="width: 200px" /></a-form-item>
+      <a-form-item :label="translate('ui.m_337717173807')">
+        <a-select v-model:value="query.severity" allow-clear style="width: 120px" :options="sevOptions" :placeholder="translate('ui.m_5c55a67935af')" />
       </a-form-item>
-      <a-form-item label="在野"><a-switch v-model:checked="kevOnly" @change="reload" /></a-form-item>
-      <a-form-item label="可执行"><a-switch v-model:checked="execOnly" @change="reload" /></a-form-item>
-      <a-form-item label="排序">
+      <a-form-item :label="translate('ui.m_8f5c138a5a03')"><a-switch v-model:checked="kevOnly" @change="reload" /></a-form-item>
+      <a-form-item :label="translate('ui.m_7ab7815d503d')"><a-switch v-model:checked="execOnly" @change="reload" /></a-form-item>
+      <a-form-item :label="translate('ui.m_a96c9a854190')">
         <a-switch v-model:checked="sortByExposure" checked-children="最新曝光" un-checked-children="在野优先" @change="reload" />
       </a-form-item>
     </SearchBar>
@@ -96,14 +96,14 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'cve'">
           <span v-if="record.cve_id">{{ record.cve_id }}</span>
-          <span v-else class="muted">(无 CVE)</span>
+          <span v-else class="muted">{{ translate('ui.m_c7443bfcb656') }}</span>
         </template>
         <template v-else-if="column.key === 'severity'">
           <a-tag :color="sevColor(record.severity)">{{ record.severity }}</a-tag>
         </template>
         <template v-else-if="column.key === 'flags'">
-          <a-tag v-if="record.in_kev" color="red">在野</a-tag>
-          <a-tag v-if="record.executable" color="green">可打:{{ record.exec_kind }}</a-tag>
+          <a-tag v-if="record.in_kev" color="red">{{ translate('ui.m_8f5c138a5a03') }}</a-tag>
+          <a-tag v-if="record.executable" color="green">{{ translate('ui.m_68abf2b6a4fa') }}{{ record.exec_kind }}</a-tag>
         </template>
         <template v-else-if="column.key === 'products'">
           <div class="prod-cell">
@@ -114,7 +114,7 @@
           </div>
         </template>
         <template v-else-if="column.key === 'sources'">
-          <span class="src-wt"><span class="src-wt-dot"></span>Watchtower 云端情报库</span>
+          <span class="src-wt"><span class="src-wt-dot"></span>{{ translate('ui.m_16165e40c5ba') }}</span>
         </template>
         <template v-else-if="column.key === 'poc'">
           <a v-for="(u, i) in record.poc_urls.slice(0, 2)" :key="i" :href="u" target="_blank" rel="noreferrer" class="poc-link">PoC{{ i + 1 }}</a>
@@ -132,6 +132,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -152,12 +154,12 @@ const localSources = computed(() => (status.sources || []).filter((s: any) => s.
 
 const intervalSel = ref(21600)
 const intervalOptions = [
-  { value: 1800, label: '30 分钟' }, { value: 3600, label: '1 小时' },
-  { value: 10800, label: '3 小时' }, { value: 21600, label: '6 小时' },
-  { value: 43200, label: '12 小时' }, { value: 86400, label: '24 小时' }
+  { value: 1800, get label() { return translate('ui.m_a01a28d147ac') } }, { value: 3600, get label() { return translate('ui.m_5482d1abc42f') } },
+  { value: 10800, get label() { return translate('ui.m_9148f7dd3f6f') } }, { value: 21600, get label() { return translate('ui.m_f65d1130354c') } },
+  { value: 43200, get label() { return translate('ui.m_796225b96c1e') } }, { value: 86400, get label() { return translate('ui.m_9248356749d6') } }
 ]
 function healthText(h: string) {
-  return { ok: '正常', error: '异常', empty: '拉取为空', unknown: '未拉取' }[h] || h
+  return { get ok() { return translate('ui.m_296de0e31f8c') }, get error() { return translate('ui.m_428fb8bfeecf') }, get empty() { return translate('ui.m_736c3f124d28') }, get unknown() { return translate('ui.m_971f5b8ca048') } }[h] || h
 }
 
 const comp = ref('')
@@ -179,20 +181,20 @@ function toDay(v: unknown) {
 
 const columns = [
   { title: 'CVE', key: 'cve', width: 150 },
-  { title: '标题', dataIndex: 'title', ellipsis: true, width: 280 },
-  { title: '等级', key: 'severity', width: 90 },
-  { title: '标记', key: 'flags', width: 140 },
-  { title: '组件', key: 'products', width: 220 },
-  { title: '来源', key: 'sources', width: 180, ellipsis: true },
-  { title: 'PoC/可执行', key: 'poc', width: 150 },
-  { title: '曝光时间', key: 'exposure', width: 160 },
-  { title: '获取时间', key: 'fetched', width: 160 }
+  { get title() { return translate('ui.m_c3405f8c7d9d') }, dataIndex: 'title', ellipsis: true, width: 280 },
+  { get title() { return translate('ui.m_337717173807') }, key: 'severity', width: 90 },
+  { get title() { return translate('ui.m_269635727321') }, key: 'flags', width: 140 },
+  { get title() { return translate('ui.m_783d638053ea') }, key: 'products', width: 220 },
+  { get title() { return translate('ui.m_a488e93d69cc') }, key: 'sources', width: 180, ellipsis: true },
+  { get title() { return translate('ui.m_32e5556f0437') }, key: 'poc', width: 150 },
+  { get title() { return translate('ui.m_914f2e69ec51') }, key: 'exposure', width: 160 },
+  { get title() { return translate('ui.m_1aed7ae9b020') }, key: 'fetched', width: 160 }
 ]
 
 async function loadStat() {
   try {
     Object.assign(stat, await vulnIntelApi.stat())
-  } catch (e) { message.error((e as Error).message || '统计加载失败') }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_6a9f4d2dd7f0')) }
 }
 
 async function loadStatus() {
@@ -205,9 +207,9 @@ async function loadStatus() {
 async function saveInterval(v: number) {
   try {
     await vulnIntelApi.setInterval(v)
-    message.success('自动拉取间隔已更新')
+    message.success(translate('ui.m_e5862999e13c'))
     loadStatus()
-  } catch (e) { message.error((e as Error).message || '设置失败') }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_bf76bc819550')) }
 }
 
 async function loadList() {
@@ -220,7 +222,7 @@ async function loadList() {
       page: query.page, size: query.size
     })
     rows.value = res.items; total.value = res.total
-  } catch (e) { message.error((e as Error).message || '列表加载失败') } finally { loading.value = false }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_1c9ed3475e81')) } finally { loading.value = false }
 }
 
 function loadAll() { loadStat(); loadStatus(); loadList() }
@@ -235,16 +237,16 @@ async function doQuery() {
     queryResult.value = r.vulns; queryDone.value = true
     // 命中结果直接填进列表展示
     rows.value = r.vulns; total.value = r.vulns.length
-  } catch (e) { message.error((e as Error).message || '查询失败') }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_bf4cedf76a4e')) }
 }
 
 async function runFeed() {
   running.value = true
   try {
     const r = await vulnIntelApi.run()
-    message.success('已触发拉取: ' + JSON.stringify(r))
+    message.success(translate('ui.m_2666b22d5702') + JSON.stringify(r))
     loadAll()
-  } catch (e) { message.error((e as Error).message || '拉取失败') } finally { running.value = false }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_61e2203a8042')) } finally { running.value = false }
 }
 
 onMounted(loadAll)

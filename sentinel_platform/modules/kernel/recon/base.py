@@ -18,6 +18,7 @@ import os
 import shutil
 import subprocess
 import time
+from sentinel_platform.core import process_control
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional
 
 
@@ -165,7 +166,7 @@ class ExternalTool:
                 try:
                     if cancel_check and cancel_check():
                         raise ToolCancelled("外部工具 {} 启动前已取消".format(self.adapter))
-                    proc = subprocess.Popen(argv, stdin=source, stdout=output, stderr=error, start_new_session=True)
+                    proc = process_control.popen(argv, stdin=source, stdout=output, stderr=error, start_new_session=True)
                     with open(output_path, "rb") as reader:
                         while True:
                             if cancel_check and cancel_check():
@@ -198,11 +199,12 @@ class ExternalTool:
                         if proc.poll() is None:
                             self._kill_tree(proc)
                         proc.wait()
+                        process_control.close(proc)
 
     def _run_blocking(self, argv: List[str], stdin_data: Optional[str]) -> List[Any]:
         """原阻塞执行（无 cancel_check 时；行为与历史一致）。"""
         try:
-            proc = subprocess.run(
+            proc = process_control.run(
                 argv, input=stdin_data, capture_output=True, text=True,
                 timeout=self.timeout, encoding="utf-8", errors="replace",
             )
@@ -224,7 +226,7 @@ class ExternalTool:
         communicate(timeout) 超时只抛 TimeoutExpired，**不损坏进程/管道状态**，可循环重试直到完成或取消。
         start_new_session=True 使子进程自成进程组，取消时连带杀 spawn 的孙进程（massdns 等）。"""
         try:
-            proc = subprocess.Popen(
+            proc = process_control.popen(
                 argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, encoding="utf-8", errors="replace", start_new_session=True,
             )
@@ -257,6 +259,7 @@ class ExternalTool:
                 self._kill_tree(proc)
                 worker.join(timeout=5)
                 raise ToolFailed("外部工具 {} 执行超时（{}s）".format(self.adapter, self.timeout))
+        process_control.close(proc)
         out = box.get("out") or ""
         err = box.get("err") or ""
         if proc.returncode not in (0, None) and not out.strip():
@@ -267,17 +270,7 @@ class ExternalTool:
     @staticmethod
     def _kill_tree(proc: "subprocess.Popen") -> None:
         """杀子进程及其整个进程组（start_new_session 使 pid=pgid），连带 spawn 的孙进程。"""
-        try:
-            os.killpg(os.getpgid(proc.pid), 9)
-        except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-        try:
-            proc.wait(timeout=5)
-        except Exception:
-            pass
+        process_control.terminate_tree(proc)
 
     def structure(self, output: str) -> Iterator[Any]:
         """逐行 JSON 解析 + 结构化。杂行/非 dict/None 跳过——只放行干净记录。"""

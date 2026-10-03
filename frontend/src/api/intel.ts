@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n'
 import { request, toQueryString, getToken } from './request'
 import type { ListQuery, ListResult, RowRecord } from './types'
 
@@ -191,7 +192,7 @@ async function exportReportDocx(seg: 'report' | 'pentest_report', reportId: stri
   if (ct.includes('application/json') || !resp.ok) {
     // 出错：后端返 JSON 信封（如 docx 组件未安装 / 报告不存在）
     const data = await resp.json().catch(() => ({} as { message?: string }))
-    throw new Error(data.message || `导出失败：${resp.status}`)
+    throw new Error(data.message || translate('ui.m_a53238d6cfc8', { p0: (resp.status) }))
   }
   const blob = await resp.blob()
   // 从 Content-Disposition 取文件名（filename*=UTF-8''xxx），取不到用默认
@@ -236,7 +237,7 @@ async function tplUpload(path: string, form: FormData): Promise<Record<string, u
   const resp = await fetch(`${base}${path}`, { method: 'POST', headers, body: form })
   const data = await resp.json().catch(() => ({} as { code?: number; message?: string; data?: unknown }))
   if (!resp.ok || (data.code && data.code !== 200)) {
-    throw new Error(data.message || `请求失败：${resp.status}`)
+    throw new Error(data.message || translate('ui.m_47245f9bc28a', { p0: (resp.status) }))
   }
   return (data.data as Record<string, unknown>) || {}
 }
@@ -250,7 +251,7 @@ async function tplArrayBuffer(path: string): Promise<ArrayBuffer> {
   const ct = resp.headers.get('Content-Type') || ''
   if (!resp.ok || ct.includes('application/json')) {
     const data = await resp.json().catch(() => ({} as { message?: string }))
-    throw new Error(data.message || `加载失败：${resp.status}`)
+    throw new Error(data.message || translate('ui.m_91df1b36811e', { p0: (resp.status) }))
   }
   return resp.arrayBuffer()
 }

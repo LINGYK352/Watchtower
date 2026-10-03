@@ -1,5 +1,5 @@
 <template>
-  <PageContainer title="资产检索" kicker="Asset Search" description="按资产类型检索任务发现结果，每类资产提供专属字段、查询条件与导出。">
+  <PageContainer :title="translate('ui.m_15d01ccc18e1')" kicker="Asset Search" :description="translate('ui.m_5f31922395b0')">
     <a-tabs v-model:activeKey="active">
       <a-tab-pane v-for="t in tabs" :key="t.key" :tab="t.title" />
     </a-tabs>
@@ -10,6 +10,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -23,13 +25,13 @@ import FileleakTab from './collections/FileleakTab.vue'
 import WihTab from './collections/WihTab.vue'
 
 const tabs = [
-  { key: 'site', title: '站点', comp: SiteTab },
-  { key: 'domain', title: '域名', comp: DomainTab },
+  { key: 'site', get title() { return translate('ui.m_a59fe62777ff') }, comp: SiteTab },
+  { key: 'domain', get title() { return translate('ui.m_222952431147') }, comp: DomainTab },
   { key: 'ip', title: 'IP', comp: IpTab },
   { key: 'url', title: 'URL', comp: UrlTab },
-  { key: 'cert', title: '证书', comp: CertTab },
-  { key: 'service', title: '服务', comp: ServiceTab },
-  { key: 'fileleak', title: '文件泄露', comp: FileleakTab },
+  { key: 'cert', get title() { return translate('ui.m_69eb41708bcb') }, comp: CertTab },
+  { key: 'service', get title() { return translate('ui.m_ec309ab207ef') }, comp: ServiceTab },
+  { key: 'fileleak', get title() { return translate('ui.m_ddca902e3201') }, comp: FileleakTab },
   { key: 'wih', title: 'WIH', comp: WihTab }
 ]
 const route = useRoute()

@@ -1,24 +1,26 @@
 <template>
-  <a-modal :open="!!cur" title="业务出现异常" :mask-closable="false" :closable="false"
-    ok-text="上传给开发者" cancel-text="忽略" :confirm-loading="uploading"
+  <a-modal :open="!!cur" :title="translate('ui.m_1379c8cc47ff')" :mask-closable="false" :closable="false"
+    :ok-text="translate('ui.m_036a0e4228fc')" :cancel-text="translate('ui.m_6e90ac940752')" :confirm-loading="uploading"
     @ok="submit" @cancel="ignore">
     <a-alert type="warning" show-icon style="margin-bottom:12px"
-      message="操作过程中出现异常"
-      description="是否将本次错误日志上传给开发者以便定位修复？仅上传错误摘要（类型/消息/接口/版本），不含你的请求数据、目标信息或密钥。" />
+      :message="translate('ui.m_f2e2fb365696')"
+      :description="translate('ui.m_495c16f97a72')" />
     <div class="er-box" v-if="cur">
-      <div class="er-row"><span class="er-k">接口</span><span class="er-v">{{ cur.method }} {{ cur.path }}</span></div>
-      <div class="er-row"><span class="er-k">状态</span><span class="er-v">{{ cur.status || '网络异常' }}</span></div>
-      <div class="er-row"><span class="er-k">错误</span><span class="er-v er-msg">{{ cur.message }}</span></div>
-      <div class="er-row"><span class="er-k">版本</span><span class="er-v">{{ cur.version }}</span></div>
-      <div class="er-row"><span class="er-k">时间</span><span class="er-v">{{ cur.ts }}</span></div>
+      <div class="er-row"><span class="er-k">{{ translate('ui.m_c80d519245a7') }}</span><span class="er-v">{{ cur.method }} {{ cur.path }}</span></div>
+      <div class="er-row"><span class="er-k">{{ translate('ui.m_6320b4a8722a') }}</span><span class="er-v">{{ cur.status || translate('ui.m_d536d47bd3da') }}</span></div>
+      <div class="er-row"><span class="er-k">{{ translate('ui.m_0bc1fb72ae1b') }}</span><span class="er-v er-msg">{{ cur.message }}</span></div>
+      <div class="er-row"><span class="er-k">{{ translate('ui.m_5f76b2bf82dd') }}</span><span class="er-v">{{ cur.version }}</span></div>
+      <div class="er-row"><span class="er-k">{{ translate('ui.m_8b6ff498515b') }}</span><span class="er-v">{{ cur.ts }}</span></div>
     </div>
     <a-textarea v-model:value="note" :rows="3" style="margin-top:10px"
-      placeholder="补充说明（可选）：你当时在做什么操作？" />
-    <div class="er-hint">上传后可在「日志监测 → 我的上报」查看开发者的回复与修复进展。</div>
+      :placeholder="translate('ui.m_95a20700ed81')" />
+    <div class="er-hint">{{ translate('ui.m_c997bd57a488') }}</div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { usePendingError, clearPending, dismissError } from '../composables/useErrorReport'
@@ -42,16 +44,16 @@ async function submit() {
       `时间: ${e.ts}`,
     ].join('\n')
     await reportError({
-      description: note.value.trim() || '(用户未填写补充说明)',
+      description: note.value.trim() || translate('ui.m_c39e232e0de7'),
       log_content: logContent,
       version: e.version,
       meta: JSON.stringify({ path: e.path, method: e.method, status: e.status }),
     })
-    message.success('已上传给开发者，可在「日志监测 → 我的上报」查看回复')
+    message.success(translate('ui.m_91b12d58fe16'))
     note.value = ''
     clearPending()
   } catch (err) {
-    message.error((err as Error).message || '上传失败')
+    message.error((err as Error).message || translate('ui.m_219481a6dde7'))
   } finally {
     uploading.value = false
   }

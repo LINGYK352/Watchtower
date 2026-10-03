@@ -1,9 +1,9 @@
 <template>
-  <PageContainer title="系统扩展" kicker="System Extensions"
-    description="扩展平台能力。「工具扩展」下分：AI 工具扩展=AI 渗透可主动调用的工具（据此生成 AI 工具表）；内核工具扩展=内核扫描时使用的工具（不进 AI 工具表）。">
+  <PageContainer :title="translate('ui.m_f6c93a56a62a')" kicker="System Extensions"
+    :description="translate('ui.m_1a88601a1e86')">
     <a-alert type="warning" show-icon class="risk"
-      message="本地 Python/二进制扩展等价于授予主机代码执行能力"
-      description="仅上传可信扩展。平台以子进程、目标 scope、资源限制与审计降低风险，但无法证明黑盒程序不会自行越界。" />
+      :message="translate('ui.m_c1a8ad460d7c')"
+      :description="translate('ui.m_c18d7385929b')" />
 
     <a-card class="page-card">
       <a-tabs v-model:activeKey="tab" @change="onTab">
@@ -12,11 +12,11 @@
           <a-space>
             <template v-if="tab !== 'logs'">
               <a-upload :show-upload-list="false" accept=".tar.gz,.tgz,.zip" :before-upload="(f: File) => pickFile(f)">
-                <a-button type="primary"><template #icon><UploadOutlined /></template>上传扩展</a-button>
+                <a-button type="primary"><template #icon><UploadOutlined /></template>{{ translate('ui.m_0aa0d37f58c4') }}</a-button>
               </a-upload>
-              <a-button @click="openStore"><template #icon><AppstoreOutlined /></template>扩展商店</a-button>
+              <a-button @click="openStore"><template #icon><AppstoreOutlined /></template>{{ translate('ui.m_9449fa923c64') }}</a-button>
             </template>
-            <a-button @click="refreshCurrent"><template #icon><ReloadOutlined /></template>刷新</a-button>
+            <a-button @click="refreshCurrent"><template #icon><ReloadOutlined /></template>{{ translate('ui.m_aee887434131') }}</a-button>
           </a-space>
         </template>
 
@@ -25,9 +25,9 @@
           <a-tabs v-model:activeKey="subTab" @change="onSubTab" size="small">
             <!-- AI 工具扩展：AI 可调用的工具，据此生成 AI 工具表（内置工具 + 已装 AI 扩展，统一按功能分类展示，不再分隔） -->
             <a-tab-pane key="ai" tab="AI 工具扩展">
-              <div class="hint">AI 渗透会话可主动调用的工具，平台据此生成 AI 工具表。内置工具随平台发布不可移除；已装 AI 扩展可启停，仅启用后 AI 才能看到并调用。上传的 .tar.gz 按其 manifest 的 ext_type 自动归入 AI 工具扩展或内核工具扩展。</div>
+              <div class="hint">{{ translate('ui.m_46614e71e8dc') }}</div>
               <div class="toolbar">
-                <span class="muted">共 {{ builtin.length + aiExts.length }} 个 AI 工具（内置 {{ builtin.length }} · 已装扩展 {{ aiExts.length }}），按功能分 {{ aiGroups.length }} 类</span>
+                <span class="muted">{{ translate('ui.m_76e547a8fa54') }} {{ builtin.length + aiExts.length }} {{ translate('ui.m_b6c44909348b') }} {{ builtin.length }} {{ translate('ui.m_c5ec89befba3') }} {{ aiExts.length }}{{ translate('ui.m_961bc8bf4f92') }} {{ aiGroups.length }} {{ translate('ui.m_4fb249b9d7ac') }}</span>
               </div>
               <!-- 内置工具 + 已装 AI 扩展 合并按功能分类，去掉「内置能力/已装扩展」两段分隔 -->
               <div v-for="g in aiGroups" :key="g.name" class="cat-block">
@@ -39,17 +39,17 @@
                   <div v-for="t in g.builtin" :key="t.name" class="ext-card readonly">
                     <div class="c-head">
                       <code class="c-name">{{ t.name }}</code>
-                      <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? '可调用' : '未接入' }}</a-tag>
+                      <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? translate('ui.m_d59e47070f7f') : translate('ui.m_af33de3507b4') }}</a-tag>
                     </div>
                     <div class="c-cat">
                       <a-tag :color="t.origin === 'third_party' ? 'orange' : 'cyan'" size="small">
-                        {{ t.origin === 'third_party' ? '第三方' : '自研' }}
+                        {{ t.origin === 'third_party' ? translate('ui.m_376cbd8cfc85') : translate('ui.m_4e88cd310f2c') }}
                       </a-tag>
-                      <span class="c-tag builtin">内置</span>
+                      <span class="c-tag builtin">{{ translate('ui.m_95e35aabd9a9') }}</span>
                     </div>
                     <div class="c-sum">{{ t.summary || t.description }}</div>
                     <div v-if="t.params && t.params.length" class="c-params">
-                      <span class="c-params-label">参数</span>
+                      <span class="c-params-label">{{ translate('ui.m_9634fb0832be') }}</span>
                       <span v-for="p in t.params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
                     </div>
                   </div>
@@ -62,29 +62,29 @@
 
             <!-- 内核工具扩展（原「功能扩展」，ext_type=feature/both）：内核扫描时使用的工具，不进 AI 工具表 -->
             <a-tab-pane key="feature" tab="内核工具扩展">
-              <div class="hint">内核扫描时使用的工具（内置扫描器/弱口令爆破/JS 挖掘 + 已装内核扩展）。内核内置工具全局禁用于 AI（易触发 WAF/封 IP）、由侦察/扫描 pipeline 调用、不可移除；公共扩展两边都注册。</div>
+              <div class="hint">{{ translate('ui.m_ca1c159f4c13') }}</div>
               <div class="toolbar">
-                <span class="muted">共 {{ kernelBuiltin.length + featureExts.length }} 个内核工具（内置 {{ kernelBuiltin.length }} · 已装扩展 {{ featureExts.length }}）</span>
+                <span class="muted">{{ translate('ui.m_76e547a8fa54') }} {{ kernelBuiltin.length + featureExts.length }} {{ translate('ui.m_13457a509db5') }} {{ kernelBuiltin.length }} {{ translate('ui.m_c5ec89befba3') }} {{ featureExts.length }}）</span>
               </div>
               <!-- 内核内置工具（只读） + 已装内核扩展 合并为一个连续列表，去掉两段分隔 -->
-              <a-empty v-if="!kernelBuiltin.length && !featureExts.length" description="暂无内核工具，点右上角「上传扩展」或「扩展商店」添加" />
+              <a-empty v-if="!kernelBuiltin.length && !featureExts.length" :description="translate('ui.m_1e13ffda90aa')" />
               <div v-else class="grid">
                 <!-- 内核内置工具卡（只读，AI 禁用，不可移除） -->
                 <div v-for="t in kernelBuiltin" :key="t.name" class="ext-card readonly">
                   <div class="c-head">
                     <code class="c-name">{{ t.name }}</code>
-                    <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? '内核已接入' : '未接入' }}</a-tag>
+                    <a-tag :color="t.available ? 'green' : 'default'" size="small">{{ t.available ? translate('ui.m_952e164dd982') : translate('ui.m_af33de3507b4') }}</a-tag>
                   </div>
                   <div class="c-cat">
                     <a-tag :color="t.origin === 'third_party' ? 'orange' : 'cyan'" size="small">
-                      {{ t.origin === 'third_party' ? '第三方' : '自研' }}
+                      {{ t.origin === 'third_party' ? translate('ui.m_376cbd8cfc85') : translate('ui.m_4e88cd310f2c') }}
                     </a-tag>
-                    <span class="c-tag builtin">内置</span>
-                    <a-tag color="red" size="small">AI 禁用</a-tag>
+                    <span class="c-tag builtin">{{ translate('ui.m_95e35aabd9a9') }}</span>
+                    <a-tag color="red" size="small">{{ translate('ui.m_9e6d81f58f0c') }}</a-tag>
                   </div>
                   <div class="c-sum">{{ t.summary || t.description }}</div>
                   <div v-if="t.params && t.params.length" class="c-params">
-                    <span class="c-params-label">参数</span>
+                    <span class="c-params-label">{{ translate('ui.m_9634fb0832be') }}</span>
                     <span v-for="p in t.params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
                   </div>
                 </div>
@@ -99,8 +99,8 @@
         <!-- 运行日志 -->
         <a-tab-pane key="logs" tab="运行日志">
           <div class="toolbar">
-            <a-input v-model:value="logFilter" placeholder="扩展 ID" style="width:220px" allow-clear />
-            <a-button @click="loadLogs">查询</a-button>
+            <a-input v-model:value="logFilter" :placeholder="translate('ui.m_82420d52a5cc')" style="width:220px" allow-clear />
+            <a-button @click="loadLogs">{{ translate('ui.m_bcd6771e08ec') }}</a-button>
           </div>
           <a-table :data-source="logs" :columns="logColumns" row-key="_id" size="small" />
         </a-tab-pane>
@@ -108,24 +108,24 @@
     </a-card>
 
     <!-- 扩展商店抽屉 -->
-    <a-drawer v-model:open="storeOpen" title="扩展商店" width="640" @open="loadStore">
+    <a-drawer v-model:open="storeOpen" :title="translate('ui.m_9449fa923c64')" width="640" @open="loadStore">
       <a-alert v-if="storeError && storeAuthState !== 'ok'" type="warning" show-icon style="margin-bottom:12px">
         <template #message>
           {{ storeError }}
-          <a-button type="link" size="small" @click="$router.push('/about/activation')" style="padding:0 4px">前往激活</a-button>
+          <a-button type="link" size="small" @click="$router.push('/about/activation')" style="padding:0 4px">{{ translate('ui.m_e12cdebb88f8') }}</a-button>
         </template>
       </a-alert>
       <a-alert v-else-if="storeError" type="info" :message="storeError" show-icon style="margin-bottom:12px" />
-      <div class="toolbar"><span class="muted">使用统一 JWT 激活凭证访问扩展商店</span><a-button size="small" @click="loadStore">刷新</a-button></div>
-      <a-empty v-if="!store.length && !storeError" description="商店暂无可用扩展" />
+      <div class="toolbar"><span class="muted">{{ translate('ui.m_9c1c75322816') }}</span><a-button size="small" @click="loadStore">{{ translate('ui.m_aee887434131') }}</a-button></div>
+      <a-empty v-if="!store.length && !storeError" :description="translate('ui.m_e88e38f1a957')" />
       <div class="grid">
         <div v-for="e in store" :key="e.extension_id" class="ext-card">
           <div class="c-head"><code class="c-name">{{ e.name || e.extension_id }}</code>
-            <a-tag :color="e.ext_type === 'both' ? 'purple' : e.ext_type === 'feature' ? 'cyan' : 'geekblue'" size="small">{{ e.ext_type === 'both' ? '公共扩展' : e.ext_type === 'feature' ? '内核工具扩展' : 'AI 工具扩展' }}</a-tag>
+            <a-tag :color="e.ext_type === 'both' ? 'purple' : e.ext_type === 'feature' ? 'cyan' : 'geekblue'" size="small">{{ e.ext_type === 'both' ? translate('ui.m_4e7009404af9') : e.ext_type === 'feature' ? translate('ui.m_9699be65e632') : translate('ui.m_061afd55163f') }}</a-tag>
           </div>
-          <div class="c-cat"><a-tag color="blue" size="small">{{ e.category }}</a-tag><a-tag :color="e.origin === 'third_party' ? 'orange' : 'cyan'" size="small">{{ e.origin === 'third_party' ? '第三方' : '自研' }}</a-tag><span class="muted">v{{ e.version }}</span></div>
+          <div class="c-cat"><a-tag color="blue" size="small">{{ e.category }}</a-tag><a-tag :color="e.origin === 'third_party' ? 'orange' : 'cyan'" size="small">{{ e.origin === 'third_party' ? translate('ui.m_376cbd8cfc85') : translate('ui.m_4e88cd310f2c') }}</a-tag><span class="muted">v{{ e.version }}</span></div>
           <div class="c-sum">{{ e.summary }}</div>
-          <div class="c-actions"><a-button type="primary" size="small" @click="install(e)">下载安装</a-button></div>
+          <div class="c-actions"><a-button type="primary" size="small" @click="install(e)">{{ translate('ui.m_9b393d495f23') }}</a-button></div>
         </div>
       </div>
     </a-drawer>
@@ -134,45 +134,47 @@
     <a-drawer v-model:open="detailOpen" :title="detail?.name || detail?.extension_id" width="560">
       <template v-if="detail">
         <a-descriptions :column="1" size="small" bordered>
-          <a-descriptions-item label="扩展 ID"><code>{{ detail.extension_id }}</code></a-descriptions-item>
-          <a-descriptions-item label="类型">{{ detail.ext_type === 'both' ? '公共扩展（AI + 内核两边都注册）' : detail.ext_type === 'feature' ? '内核工具扩展（内核扫描工具）' : 'AI 工具扩展（AI 可调用工具）' }}</a-descriptions-item>
-          <a-descriptions-item label="版本">{{ detail.version }}</a-descriptions-item>
-          <a-descriptions-item label="分类">{{ detail.category }}</a-descriptions-item>
-          <a-descriptions-item label="来源">{{ detail.source === 'store' ? '扩展商店' : '本地上传' }}（{{ detail.trust }}）</a-descriptions-item>
-          <a-descriptions-item label="自研/第三方">
-            <a-tag :color="detail.origin === 'third_party' ? 'orange' : 'cyan'">{{ detail.origin === 'third_party' ? '第三方' : '自研' }}</a-tag>
-            <span v-if="detail.origin === 'third_party'" class="muted">{{ detail.vendor }} · {{ detail.license }} · 上游 {{ detail.upstream_version }}</span>
+          <a-descriptions-item :label="translate('ui.m_82420d52a5cc')"><code>{{ detail.extension_id }}</code></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_ba40014ff496')">{{ detail.ext_type === 'both' ? translate('ui.m_7ff66f176951') : detail.ext_type === 'feature' ? translate('ui.m_fc8728557ff8') : translate('ui.m_c3b69dcbda21') }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_5f76b2bf82dd')">{{ detail.version }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_515559957fd3')">{{ detail.category }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_a488e93d69cc')">{{ detail.source === 'store' ? translate('ui.m_9449fa923c64') : translate('ui.m_02413a69d5ca') }}（{{ detail.trust }}）</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_21275af720b3')">
+            <a-tag :color="detail.origin === 'third_party' ? 'orange' : 'cyan'">{{ detail.origin === 'third_party' ? translate('ui.m_376cbd8cfc85') : translate('ui.m_4e88cd310f2c') }}</a-tag>
+            <span v-if="detail.origin === 'third_party'" class="muted">{{ detail.vendor }} · {{ detail.license }} {{ translate('ui.m_a419fd912fa2') }} {{ detail.upstream_version }}</span>
           </a-descriptions-item>
-          <a-descriptions-item label="兼容性">
-            <a-tag :color="detail.available ? 'green' : 'red'">{{ detail.available ? '兼容' : detail.unavailable_reason || '不可用' }}</a-tag>
+          <a-descriptions-item :label="translate('ui.m_174df048bacb')">
+            <a-tag :color="detail.available ? 'green' : 'red'">{{ detail.available ? translate('ui.m_e1ba8151b252') : detail.unavailable_reason || translate('ui.m_460b3574e4bd') }}</a-tag>
           </a-descriptions-item>
-          <a-descriptions-item label="启用状态">{{ detail.enabled ? '已启用' : '已停用' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_d334c402ead1')">{{ detail.enabled ? translate('ui.m_dfb802238b38') : translate('ui.m_a8c3698b5b8c') }}</a-descriptions-item>
         </a-descriptions>
-        <div class="d-block"><b>摘要</b><p>{{ detail.summary }}</p></div>
-        <div class="d-block"><b>说明</b><p>{{ detail.description }}</p></div>
-        <div class="d-block" v-if="detail.ext_type !== 'feature' && detail.ai_instruction"><b>给 AI 的调用说明</b><p>{{ detail.ai_instruction }}</p></div>
-        <div class="d-block" v-if="detailParams.length"><b>参数</b>
-          <ul><li v-for="p in detailParams" :key="p.name"><code>{{ p.name }}</code><i v-if="p.required" class="req">*必填</i> — {{ p.desc || '—' }}</li></ul>
+        <div class="d-block"><b>{{ translate('ui.m_21c04b2eeeb4') }}</b><p>{{ detail.summary }}</p></div>
+        <div class="d-block"><b>{{ translate('ui.m_4262c45dc797') }}</b><p>{{ detail.description }}</p></div>
+        <div class="d-block" v-if="detail.ext_type !== 'feature' && detail.ai_instruction"><b>{{ translate('ui.m_2fb90c162c46') }}</b><p>{{ detail.ai_instruction }}</p></div>
+        <div class="d-block" v-if="detailParams.length"><b>{{ translate('ui.m_9634fb0832be') }}</b>
+          <ul><li v-for="p in detailParams" :key="p.name"><code>{{ p.name }}</code><i v-if="p.required" class="req">{{ translate('ui.m_7aa0babac834') }}</i> — {{ p.desc || '—' }}</li></ul>
         </div>
       </template>
     </a-drawer>
 
     <!-- 上传目标选择：本地安装运行 / 提交云端商店审核 -->
-    <a-modal v-model:open="uploadOpen" title="上传扩展" :confirm-loading="uploading"
-      :ok-text="uploadTarget === 'cloud' ? '提交云端审核' : '安装到本地'" @ok="doUpload" @cancel="pendingFile = null">
-      <p class="up-file">扩展包：<code>{{ pendingFile?.name }}</code>（支持 .tar.gz / .tgz / .zip）</p>
+    <a-modal v-model:open="uploadOpen" :title="translate('ui.m_0aa0d37f58c4')" :confirm-loading="uploading"
+      :ok-text="uploadTarget === 'cloud' ? translate('ui.m_ba2120c98884') : translate('ui.m_ada9c55359d7')" @ok="doUpload" @cancel="pendingFile = null">
+      <p class="up-file">{{ translate('ui.m_f34fa313b2d3') }}<code>{{ pendingFile?.name }}</code>{{ translate('ui.m_92c87e695608') }}</p>
       <a-radio-group v-model:value="uploadTarget" class="up-target">
-        <a-radio value="local">本地安装运行</a-radio>
-        <a-radio value="cloud">提交云端商店审核</a-radio>
+        <a-radio value="local">{{ translate('ui.m_04b1c39196ac') }}</a-radio>
+        <a-radio value="cloud">{{ translate('ui.m_a5a3f7fcf05e') }}</a-radio>
       </a-radio-group>
       <a-alert v-if="uploadTarget === 'local'" type="warning" show-icon
-        message="本地安装等价于授予主机代码执行能力，仅安装你完全信任的代码。安装后需手动启用；manifest 的 ext_type 决定归入 AI / 内核 / 公共扩展。" />
+        :message="translate('ui.m_6cffb138e983')" />
       <a-alert v-else type="info" show-icon
-        message="提交到云端商店：平台先校验清单，再转发到分发端排队。运营方在管理后台审核通过后，才会出现在扩展商店供各实例安装（凭激活凭证鉴权下发）。不在本机安装。" />
+        :message="translate('ui.m_de42954e4d13')" />
     </a-modal>
   </PageContainer>
 </template>
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadOutlined, AppstoreOutlined, ReloadOutlined } from '@ant-design/icons-vue'
@@ -205,7 +207,7 @@ const CAT_ORDER = ['资产收集', '漏洞验证', '情报查询', '情报回写
 const aiGroups = computed(() => {
   const map = new Map<string, { builtin: BuiltinTool[]; exts: ExtensionItem[] }>()
   const ensure = (cat: string) => {
-    const k = cat || '其他'
+    const k = cat || translate('ui.m_d2909f1647e7')
     if (!map.has(k)) map.set(k, { builtin: [], exts: [] })
     return map.get(k)!
   }
@@ -229,9 +231,9 @@ const detailParams = computed<ExtParam[]>(() => {
 })
 
 const logColumns = [
-  { title: '时间', dataIndex: 'save_date' }, { title: '事件', dataIndex: 'event' },
-  { title: '扩展', dataIndex: 'extension_id' }, { title: '会话', dataIndex: 'session_id' },
-  { title: '状态', dataIndex: 'status' }, { title: '耗时(ms)', dataIndex: 'duration_ms' }, { title: '错误', dataIndex: 'error' }
+  { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date' }, { get title() { return translate('ui.m_c560201b331c') }, dataIndex: 'event' },
+  { get title() { return translate('ui.m_99a4e1e59743') }, dataIndex: 'extension_id' }, { get title() { return translate('ui.m_a63280253f17') }, dataIndex: 'session_id' },
+  { get title() { return translate('ui.m_6320b4a8722a') }, dataIndex: 'status' }, { get title() { return translate('ui.m_105bab45479c') }, dataIndex: 'duration_ms' }, { get title() { return translate('ui.m_0bc1fb72ae1b') }, dataIndex: 'error' }
 ]
 
 async function loadBuiltin() { try { builtin.value = (await aiExtensionApi.builtin()).tools || [] } catch (e) { message.error(String(e)) } }
@@ -256,22 +258,22 @@ async function doUpload() {
   try {
     if (uploadTarget.value === 'cloud') {
       const r = await aiExtensionApi.submit(file)
-      if (r && r.ok) { message.success('已提交云端商店，等待运营方审核'); uploadOpen.value = false; pendingFile.value = null }
-      else message.error((r && r.error) || '提交失败')
+      if (r && r.ok) { message.success(translate('ui.m_d596e522e35c')); uploadOpen.value = false; pendingFile.value = null }
+      else message.error((r && r.error) || translate('ui.m_1440c7e23865'))
     } else {
-      await aiExtensionApi.upload(file); message.success('扩展已安装，兼容后可手工启用'); loadAi(); loadFeature()
+      await aiExtensionApi.upload(file); message.success(translate('ui.m_d044be36c4fa')); loadAi(); loadFeature()
       uploadOpen.value = false; pendingFile.value = null
     }
   } catch (e) { message.error(String(e)) }
   finally { uploading.value = false }
 }
 async function toggle(r: ExtensionItem, v: boolean) {
-  try { v ? await aiExtensionApi.enable(r.extension_id) : await aiExtensionApi.disable(r.extension_id); r.enabled = v; message.success(v ? '已启用' : '已停用') }
+  try { v ? await aiExtensionApi.enable(r.extension_id) : await aiExtensionApi.disable(r.extension_id); r.enabled = v; message.success(v ? translate('ui.m_dfb802238b38') : translate('ui.m_a8c3698b5b8c')) }
   catch (e) { message.error(String(e)) }
 }
-async function check(r: ExtensionItem) { try { await aiExtensionApi.check(r.extension_id); message.success('检测完成'); loadAi(); loadFeature() } catch (e) { message.error(String(e)) } }
-async function remove(r: ExtensionItem) { try { await aiExtensionApi.remove(r.extension_id); message.success('已删除'); loadAi(); loadFeature() } catch (e) { message.error(String(e)) } }
-async function install(r: ExtensionItem) { try { await aiExtensionApi.install(r); message.success('已安装，请到对应分类启用'); loadAi(); loadFeature() } catch (e) { message.error(String(e)) } }
+async function check(r: ExtensionItem) { try { await aiExtensionApi.check(r.extension_id); message.success(translate('ui.m_37888055c912')); loadAi(); loadFeature() } catch (e) { message.error(String(e)) } }
+async function remove(r: ExtensionItem) { try { await aiExtensionApi.remove(r.extension_id); message.success(translate('ui.m_077a6d37719a')); loadAi(); loadFeature() } catch (e) { message.error(String(e)) } }
+async function install(r: ExtensionItem) { try { await aiExtensionApi.install(r); message.success(translate('ui.m_a98e6c2031e5')); loadAi(); loadFeature() } catch (e) { message.error(String(e)) } }
 function showDetail(r: ExtensionItem) { detail.value = r; detailOpen.value = true }
 
 onMounted(() => { loadBuiltin(); loadAi() })

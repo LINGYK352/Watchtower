@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n'
 import { reactive } from 'vue'
 import { APP_VERSION } from '../config/brand'
 
@@ -46,7 +47,7 @@ export function captureError(info: { path: string; method?: string; status?: num
     path: (info.path || '').split('?')[0],
     method: info.method || 'GET',
     status: info.status || 0,
-    message: info.message || '未知错误',
+    message: info.message || translate('ui.m_13a46616e16f'),
     version: APP_VERSION,
     ts: new Date().toLocaleString(),
   }

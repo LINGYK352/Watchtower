@@ -212,12 +212,15 @@ def _reclaim_on_startup() -> dict:
     # 有 pending 的由周期 _tick_console_sessions 重投。此处只解锁，不续跑半截回合（防重复工具执行）。
     try:
         ccoll = get_repo().collection("intel_pentest_session")
-        for doc in ccoll.find({"console_created": True, "console_running": True},
+        from sentinel_platform.modules.ai_pentest.session import console_eligible_query
+        for doc in ccoll.find(dict(console_eligible_query(), console_running=True),
                               {"_id": 1, "console_update": 1}):
             if _heartbeat_age({"update_date": doc.get("console_update", "")}, now_epoch) < stale_th:
                 continue                     # 心跳新鲜=worker 还在跑该回合，不动
-            ccoll.update_one({"_id": doc["_id"], "console_running": True},
-                             {"$set": {"console_running": False}})
+            changed = ccoll.update_one({"_id": doc["_id"], "console_running": True, "console_update": doc.get("console_update")},
+                             {"$set": {"console_running": False}, "$unset": {"console_execution_token": ""}})
+            if not getattr(changed, "modified_count", 0):
+                continue
             out["console_unlocked"] = out.get("console_unlocked", 0) + 1
     except Exception as exc:
         logger.debug("startup reclaim console degraded: %s", exc)
@@ -330,7 +333,7 @@ def _tick_sessions() -> dict:
         coll = get_repo().collection("intel_pentest_session")
         now_epoch = _t.time()
         # ① 回收 running 心跳超时：只回到 queued，稍后与其他候选共享槽位
-        for s in coll.find({"status": "running", "console_created": {"$ne": True}}, {"_id": 1, "update_date": 1}):
+        for s in coll.find({"status": "running", "console_created": {"$ne": True}, "console_taken_over": {"$ne": True}}, {"_id": 1, "update_date": 1}):
             ud = s.get("update_date", "") or ""
             try:
                 age = now_epoch - _t.mktime(_t.strptime(ud, "%Y-%m-%d %H:%M:%S"))
@@ -346,7 +349,7 @@ def _tick_sessions() -> dict:
         # → 回 queued 重新派发；连续回收超 MAX_DISPATCH_RECLAIM 次仍起不来(如 provider 失效/run_agent 起转即崩)
         # → 降级 paused_manual(由 ②.5 隔 MANUAL_RETRY_SECONDS 延迟自愈)，别无限 queued↔dispatching 抖动占槽。
         for s in coll.find({"status": "dispatching", "stop_requested": {"$ne": True},
-                            "console_created": {"$ne": True}},
+                            "console_created": {"$ne": True}, "console_taken_over": {"$ne": True}},
                            {"_id": 1, "update_date": 1, "dispatch_reclaim_count": 1}):
             if _heartbeat_age(s, now_epoch) <= dispatch_stall:
                 continue
@@ -377,7 +380,7 @@ def _tick_sessions() -> dict:
         # 网络恢复后能自动跑起来，不必人工干预。**绝不碰 console_created 会话台会话**（它天生 paused_manual、
         # 自动拉起会用错提示词跑飞，见 console_create_session 设计）；也不碰 stop_requested（用户显式停的不复活）。
         manual_retry_sec = _sess_cfg("MANUAL_RETRY_SECONDS", 1200)
-        for s in coll.find({"status": "paused_manual", "console_created": {"$ne": True},
+        for s in coll.find({"status": "paused_manual", "console_created": {"$ne": True}, "console_taken_over": {"$ne": True},
                             "stop_requested": {"$ne": True}},
                            {"_id": 1, "update_date": 1}):
             if _heartbeat_age(s, now_epoch) < manual_retry_sec:
@@ -394,7 +397,7 @@ def _tick_sessions() -> dict:
         # console_created 会话绝不进自动派发（run_agent）候选——它是会话台人工会话，由 _tick_console_sessions
         # 与人工接管管理；误纳入会被当自动会话重投、与人工回合双跑冲突（用户报的「恢复导致重投」根治）。
         paused = list(coll.find({"status": "paused_transient", "stop_requested": {"$ne": True},
-                                 "console_created": {"$ne": True}},
+                                 "console_created": {"$ne": True}, "console_taken_over": {"$ne": True}},
                                 {"_id": 1, "retry_count": 1, "priority": 1}))
         candidates = []
         for s in paused:
@@ -406,7 +409,7 @@ def _tick_sessions() -> dict:
             else:
                 candidates.append((0, -int(s.get("priority", 0) or 0), s, "paused_transient"))
         for s in coll.find({"status": "queued", "stop_requested": {"$ne": True},
-                            "console_created": {"$ne": True}}, {"_id": 1, "priority": 1}):
+                            "console_created": {"$ne": True}, "console_taken_over": {"$ne": True}}, {"_id": 1, "priority": 1}):
             candidates.append((1, -int(s.get("priority", 0) or 0), s, "queued"))
         candidates.sort(key=lambda item: (item[0], item[1]))  # 恢复优先，同类高价值优先
         # 填满 slots 个**成功派发**（而非切前 slots 个尝试）：认领失败(竞态/被停/状态漂移)不占 slot 预算，
@@ -444,7 +447,8 @@ def _tick_console_sessions() -> dict:
     try:
         coll = get_repo().collection("intel_pentest_session")
         now_epoch = _t.time()
-        for s in coll.find({"console_created": True, "console_running": True},
+        from sentinel_platform.modules.ai_pentest.session import console_eligible_query
+        for s in coll.find(dict(console_eligible_query(), console_running=True),
                            {"_id": 1, "console_update": 1, "pending_user_msgs": 1}):
             ud = s.get("console_update", "") or ""
             try:
@@ -454,11 +458,13 @@ def _tick_console_sessions() -> dict:
             if age <= stall_sec:
                 continue
             # 心跳超时 = worker 死/回合卡死 → 解锁
-            coll.update_one({"_id": s["_id"], "console_running": True},
-                            {"$set": {"console_running": False}})
+            changed = coll.update_one({"_id": s["_id"], "console_running": True, "console_update": s.get("console_update")},
+                            {"$set": {"console_running": False, "console_error": "后台回合心跳中断；已保存指令与历史，请重新发送或等待待发指令恢复"}, "$unset": {"console_execution_token": ""}})
+            if not getattr(changed, "modified_count", 0):
+                continue
             out["unlocked"] += 1
             # 有排队指令 → 重投一个新回合（submit_console_turn 内 CAS 认领，幂等）
-            if s.get("pending_user_msgs"):
+            if s.get("pending_user_msgs") and not coll.find_one({"_id": s["_id"], "console_stop_requested": True}):
                 r = orchestration.submit_console_turn(str(s["_id"])) or {}
                 if r.get("submitted"):
                     out["resubmitted"] += 1

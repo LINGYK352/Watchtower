@@ -1,3 +1,4 @@
+import { t as translate } from '../../i18n'
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -73,17 +74,17 @@ export function useAssetList(namespace: string, defaultFilters: Record<string, s
   }
   async function removeSelected() {
     if (!selectedRowKeys.value.length) return
-    try { await collectionApi.deleteByIds(namespace, expandIds(selectedRowKeys.value)); message.success('已删除'); load() }
+    try { await collectionApi.deleteByIds(namespace, expandIds(selectedRowKeys.value)); message.success(translate('ui.m_077a6d37719a')); load() }
     catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
   }
   async function removeOne(id: string) {
-    try { await collectionApi.deleteByIds(namespace, expandIds([id])); message.success('已删除'); load() }
+    try { await collectionApi.deleteByIds(namespace, expandIds([id])); message.success(translate('ui.m_077a6d37719a')); load() }
     catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
   }
   function exportCurrent() { window.open(collectionApi.exportUrl(namespace, buildQuery()), '_blank') }
 
   function pagination() {
-    return { current: page.value, pageSize: size.value, total: total.value, showSizeChanger: true, showTotal: (t: number) => `共 ${t} 条` }
+    return { current: page.value, pageSize: size.value, total: total.value, showSizeChanger: true, showTotal: (t: number) => translate('ui.m_f292bcb94fe6', { p0: (t) }) }
   }
 
   onMounted(load)

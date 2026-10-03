@@ -1,21 +1,21 @@
 <template>
-  <PageContainer title="任务详情" kicker="Task Detail" description="任务基本信息、扫描选项与结果统计，结果可跳转到资产检索。">
-    <template #extra><a-button @click="router.push('/tasks')">返回列表</a-button></template>
+  <PageContainer :title="translate('ui.m_56b3909705f3')" kicker="Task Detail" :description="translate('ui.m_f42972d89f9e')">
+    <template #extra><a-button @click="router.push('/tasks')">{{ translate('ui.m_e9d5ca6c1406') }}</a-button></template>
     <a-card :bordered="false" :loading="loading" style="margin-bottom: 16px">
       <a-descriptions bordered size="small" :column="2">
-        <a-descriptions-item label="任务 ID"><CopyText :text="id" /></a-descriptions-item>
-        <a-descriptions-item label="任务名">{{ task.name || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="目标">
+        <a-descriptions-item :label="translate('ui.m_68c60746f1d0')"><CopyText :text="id" /></a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_2c43cd7db149')">{{ task.name || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_57060c88a36b')">
           <!-- unit 任务 target 可能是几千字符的单位名/域名清单，定高滚动截断防撑长页面；点击 CopyText 复制全量 -->
           <div style="max-height:96px;overflow:auto;word-break:break-all"><CopyText :text="String(task.target || '')" /></div>
         </a-descriptions-item>
-        <a-descriptions-item label="状态"><StatusTag :value="String(task.status || '')" /></a-descriptions-item>
-        <a-descriptions-item label="类型">{{ typeLabel(task.type) }}</a-descriptions-item>
-        <a-descriptions-item label="开始时间">{{ task.start_time || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="结束时间">{{ task.end_time || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="耗时">{{ duration }}</a-descriptions-item>
-        <a-descriptions-item v-if="sourceLabel" label="来源">{{ sourceLabel }}</a-descriptions-item>
-        <a-descriptions-item v-if="sourceQueries.length" label="源查询语句" :span="2">
+        <a-descriptions-item :label="translate('ui.m_6320b4a8722a')"><StatusTag :value="String(task.status || '')" /></a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_ba40014ff496')">{{ typeLabel(task.type) }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_6a9906c79f26')">{{ task.start_time || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_f50276449943')">{{ task.end_time || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_e77e3d58b0dc')">{{ duration }}</a-descriptions-item>
+        <a-descriptions-item v-if="sourceLabel" :label="translate('ui.m_a488e93d69cc')">{{ sourceLabel }}</a-descriptions-item>
+        <a-descriptions-item v-if="sourceQueries.length" :label="translate('ui.m_1bc215d1d147')" :span="2">
           <div v-for="q in sourceQueries" :key="q.src" style="margin-bottom:4px">
             <a-tag color="blue">{{ q.src }}</a-tag><CopyText :text="q.query" />
           </div>
@@ -24,28 +24,30 @@
     </a-card>
 
     <a-alert v-if="isEmptyDone" type="warning" show-icon style="margin-bottom: 16px"
-      message="任务已结束,但未发现任何资产"
-      description="域名 / IP / 站点均为 0。可能原因:目标无存活资产、扫描策略未开启对应扫描项、DNS/代理不通或目标限速。建议检查扫描策略配置,或返回列表点「重启」重跑。" />
+      :message="translate('ui.m_a043b3e5f4d5')"
+      :description="translate('ui.m_80f2fbda4c50')" />
 
-    <a-card title="结果统计" :bordered="false" style="margin-bottom: 16px">
+    <a-card :title="translate('ui.m_0c907aa7861b')" :bordered="false" style="margin-bottom: 16px">
       <a-row :gutter="16">
         <a-col :span="4" v-for="s in statItems" :key="s.key">
           <a-statistic :title="s.title" :value="statValue(s.key)" />
-          <a-button type="link" size="small" @click="goSearch(s.tab)">查看</a-button>
+          <a-button type="link" size="small" @click="goSearch(s.tab)">{{ translate('ui.m_db8db0530432') }}</a-button>
         </a-col>
       </a-row>
     </a-card>
 
-    <a-card title="扫描选项" :bordered="false">
+    <a-card :title="translate('ui.m_3c21b1f29bd5')" :bordered="false">
       <a-space wrap>
         <a-tag v-for="(v, k) in enabledOptions" :key="k" color="blue">{{ k }}</a-tag>
-        <span v-if="!Object.keys(enabledOptions).length">无</span>
+        <span v-if="!Object.keys(enabledOptions).length">{{ translate('ui.m_484d55613910') }}</span>
       </a-space>
     </a-card>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -62,11 +64,11 @@ const loading = ref(false)
 const task = ref<RowRecord>({})
 
 const statItems = [
-  { key: 'domain_cnt', title: '域名', tab: 'domain' },
+  { key: 'domain_cnt', get title() { return translate('ui.m_222952431147') }, tab: 'domain' },
   { key: 'ip_cnt', title: 'IP', tab: 'ip' },
-  { key: 'site_cnt', title: '站点', tab: 'site' },
+  { key: 'site_cnt', get title() { return translate('ui.m_a59fe62777ff') }, tab: 'site' },
   { key: 'url_cnt', title: 'URL', tab: 'url' },
-  { key: 'vuln_cnt', title: '漏洞', tab: 'site' },
+  { key: 'vuln_cnt', get title() { return translate('ui.m_b0475a364bcb') }, tab: 'site' },
   { key: 'wih_cnt', title: 'WIH', tab: 'wih' }
 ]
 function statValue(key: string) {
@@ -83,12 +85,12 @@ const duration = computed(() => {
   const s = String(task.value.start_time || '')
   const e = String(task.value.end_time || '')
   if (!s) return '-'
-  if (!e || e === '-') return '进行中'
+  if (!e || e === '-') return translate('ui.m_dc9591e56d50')
   const ms = new Date(e.replace(/-/g, '/')).getTime() - new Date(s.replace(/-/g, '/')).getTime()
   if (isNaN(ms) || ms < 0) return '-'
   const sec = Math.floor(ms / 1000)
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), ss = sec % 60
-  return (h ? h + '时' : '') + (h || m ? m + '分' : '') + ss + '秒'
+  return (h ? h + translate('ui.m_7d58b6422cac') : '') + (h || m ? m + translate('ui.m_b6a993c256ef') : '') + ss + translate('ui.m_9dcdc2b289b9')
 })
 const enabledOptions = computed(() => {
   const opts = (task.value.options as Record<string, unknown>) || {}
@@ -106,8 +108,8 @@ const sourceLabel = computed(() => {
 })
 // 任务类型中文映射（type 内部数据值不改，仅展示友好化；未知原样兼容）
 const _TYPE_LABELS: Record<string, string> = {
-  domain: '域名', ip: 'IP', fofa: '源查询', risk_cruising: '风险巡航',
-  asset_site_update: '站点监控', asset_site_add: '站点新增', asset_wih_update: 'WIH 监控',
+  get domain() { return translate('ui.m_222952431147') }, ip: 'IP', get fofa() { return translate('ui.m_6518c904a840') }, get risk_cruising() { return translate('ui.m_7dc02b74d145') },
+  get asset_site_update() { return translate('ui.m_137e364e3583') }, get asset_site_add() { return translate('ui.m_2c9e47665100') }, get asset_wih_update() { return translate('ui.m_ae8c0465f059') },
 }
 function typeLabel(t: unknown) { return _TYPE_LABELS[String(t || '')] || String(t || '-') }
 // 源查询语句（source.queries = {源名: 语句}；存量老任务无此字段则空数组，v-if 不显示）

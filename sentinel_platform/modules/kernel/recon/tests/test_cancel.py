@@ -69,7 +69,7 @@ class TestCancelPassthrough(unittest.TestCase):
             calls["n"] += 1
             return calls["n"] >= 1            # 第一次轮询就要求取消
         with self._patch_locate(tool), \
-             mock.patch("subprocess.Popen", return_value=fake), \
+             mock.patch("sentinel_platform.core.process_control.popen", return_value=fake), \
              mock.patch.object(ExternalTool, "_kill_tree") as kill_tree:
             with self.assertRaises(ToolCancelled):
                 tool.run(stdin_lines=["a.com"], cancel_check=cancel)
@@ -81,7 +81,7 @@ class TestCancelPassthrough(unittest.TestCase):
         tool.cancel_check = lambda: True      # 模拟 Tools 注入
         fake = _FakePopen(stall_rounds=999)
         with self._patch_locate(tool), \
-             mock.patch("subprocess.Popen", return_value=fake), \
+             mock.patch("sentinel_platform.core.process_control.popen", return_value=fake), \
              mock.patch.object(ExternalTool, "_kill_tree"):
             with self.assertRaises(ToolCancelled):
                 tool.run(stdin_lines=["a.com"])   # 不传 cancel_check，走 self.cancel_check
@@ -91,7 +91,7 @@ class TestCancelPassthrough(unittest.TestCase):
         tool = _Tool()
         fake = _FakePopen(stall_rounds=2, rc=0, out="RESULT")  # 卡 2 轮后正常结束
         with self._patch_locate(tool), \
-             mock.patch("subprocess.Popen", return_value=fake):
+             mock.patch("sentinel_platform.core.process_control.popen", return_value=fake):
             out = tool.run(stdin_lines=["a.com"], cancel_check=lambda: False)
         self.assertEqual(out, ["RESULT"])
 
@@ -100,7 +100,7 @@ class TestCancelPassthrough(unittest.TestCase):
         tool = _Tool()
         completed = mock.Mock(returncode=0, stdout="BLOCK", stderr="")
         with self._patch_locate(tool), \
-             mock.patch("subprocess.run", return_value=completed) as srun:
+             mock.patch("sentinel_platform.core.process_control.run", return_value=completed) as srun:
             out = tool.run(stdin_lines=["a.com"])
         srun.assert_called_once()             # 确认走的是阻塞 subprocess.run
         self.assertEqual(out, ["BLOCK"])

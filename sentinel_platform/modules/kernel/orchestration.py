@@ -270,6 +270,15 @@ class OrchestrationService:
 # 执行器抽象：默认后台线程（web 请求不阻塞）；测试/celery 可 set_executor 注入。无 celery 硬依赖。
 # =============================================================================
 
+_DELIVERY = None
+
+
+def set_delivery(dispatcher) -> None:
+    """Optional persistent runtime transport; default Web/Celery is unchanged."""
+    global _DELIVERY
+    _DELIVERY = dispatcher
+
+
 def _thread_executor(fn: Callable[[], Any]) -> None:
     """默认执行器：后台 daemon 线程跑 fn（web 下发不阻塞；无 celery 也能真跑）。"""
     import threading
@@ -354,6 +363,13 @@ def submit_task(task_id: str, task_doc: Optional[Dict[str, Any]] = None) -> Dict
     if isinstance(task_doc, dict):
         task_type = task_doc.get("task_type", "") or task_doc.get("type", "")
         options = task_doc.get("options")
+    if _DELIVERY is not None:
+        try:
+            job = _DELIVERY("task", task_id, task_type=task_type, options=options)
+            return {"ok": True, "task_id": task_id, "submitted": True, "claimed": True, "via": "native", "job_id": job}
+        except Exception as exc:
+            _rollback_task_claim(task_id, str(exc))
+            return {"ok": False, "task_id": task_id, "submitted": False, "claimed": True, "error": str(exc)}
     delay = globals().get("_celery_delay")
     if callable(delay):
         try:
@@ -417,12 +433,21 @@ def submit_session(session_id: str, from_status: str = "queued") -> Dict[str, An
                 svc.run_session(session_id)
         except Exception as e:
             logger.debug("submit_session run %s degraded: %s", session_id, e)
+    if _DELIVERY is not None:
+        try:
+            job = _DELIVERY("session", session_id)
+            return {"ok": True, "session_id": session_id, "submitted": True, "claimed": True, "via": "native", "job_id": job}
+        except Exception as exc:
+            get_repo().collection("intel_pentest_session").update_one(
+                {"_id": _oid(session_id), "status": "dispatching"},
+                {"$set": {"status": from_status, "dispatch_error": str(exc)[:500]}})
+            return {"ok": False, "session_id": session_id, "submitted": False, "error": str(exc)}
     delay = globals().get("_celery_session_delay")
     if callable(delay):
         try:
             delay(session_id)
             _broker_ok()
-            return {"ok": True, "session_id": session_id, "submitted": True, "claimed": True}
+            return {"ok": True, "session_id": session_id, "submitted": True, "claimed": True, "via": "celery"}
         except Exception as e:
             _broker_fail("session 投递失败: {}".format(str(e)[:80]))
             logger.warning("submit_session %s celery err, fallback thread: %s", session_id, e)
@@ -450,9 +475,11 @@ def _claim_console_session(session_id: str) -> bool:
     在跑的循环下轮消费）。paused_manual 会话不进 scheduler 自动认领，故用独立 console_running 锁，与 auto 零交叉。"""
     try:
         import time
-        r = get_repo().collection("intel_pentest_session").update_one(
-            {"_id": _oid(session_id), "console_running": {"$ne": True}},
-            {"$set": {"console_running": True, "console_dispatch_at": int(time.time())}})
+        from ..ai_pentest.session import console_eligible_query, _now
+        query = dict(console_eligible_query(), _id=_oid(session_id), console_running={"$ne": True},
+                     pending_user_msgs={"$exists": True, "$ne": []})
+        r = get_repo().collection("intel_pentest_session").update_one(query,
+            {"$set": {"console_running": True, "console_dispatch_at": int(time.time()), "console_update": _now()}})
         return bool(getattr(r, "modified_count", 0))
     except Exception:
         return False
@@ -464,15 +491,30 @@ def submit_console_turn(session_id: str) -> Dict[str, Any]:
     if not session_id:
         return {"ok": False, "submitted": False, "reason": "no session_id"}
     if not _claim_console_session(session_id):
-        return {"ok": True, "session_id": session_id, "submitted": False, "already_running": True}
+        current = get_repo().collection("intel_pentest_session").find_one({"_id": _oid(session_id)}) or {}
+        if current.get("console_running"):
+            return {"ok": True, "session_id": session_id, "submitted": False, "already_running": True}
+        return {"ok": False, "session_id": session_id, "submitted": False, "reason": "console claim failed or status changed"}
 
     def _run():
         try:
             svc = get_registry().get(ROLE.PENTEST_DISPATCH)
             if svc and hasattr(svc, "run_console_session"):
                 svc.run_console_session(session_id)
+            else:
+                raise RuntimeError("console execution service unavailable")
         except Exception as e:
             logger.debug("submit_console_turn run %s degraded: %s", session_id, e)
+    if _DELIVERY is not None:
+        try:
+            job = _DELIVERY("console", session_id)
+            return {"ok": True, "session_id": session_id, "submitted": True, "via": "native", "job_id": job}
+        except Exception as exc:
+            get_repo().collection("intel_pentest_session").update_one(
+                {"_id": _oid(session_id)}, {"$set": {"console_running": False, "console_error": str(exc)[:500]}})
+            return {"ok": False, "session_id": session_id, "submitted": False, "error": str(exc)}
+            get_repo().collection("intel_pentest_session").update_one({"_id": _oid(session_id)},
+                {"$set": {"console_running": False, "console_error": "执行服务不可用，请重试"}})
     delay = globals().get("_celery_console_delay")
     if callable(delay):
         try:

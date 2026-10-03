@@ -5,24 +5,26 @@
   故用户隔几天来一次也最多弹一次（除非跨过 24h）。数据源：checkActivation() 的 {activated, remaining_days, expires_at, tz_label}。
 -->
 <template>
-  <a-modal v-model:open="open" title="⏳ 激活即将到期" :footer="null" :width="520" :mask-closable="true" wrap-class-name="lic-expiry">
+  <a-modal v-model:open="open" :title="translate('ui.m_c6406a3b9f13')" :footer="null" :width="520" :mask-closable="true" wrap-class-name="lic-expiry">
     <a-alert :type="days <= 1 ? 'error' : 'warning'" show-icon style="margin-bottom:14px"
-      :message="days <= 0 ? '授权已到期' : `授权剩余 ${days} 天即将到期`"
+      :message="days <= 0 ? translate('ui.m_29317e52918d') : translate('ui.m_cd26df64a1db', { p0: (days) })"
       :description="desc" />
     <div class="lic-info" v-if="expiresAt">
-      <span>失效时间：{{ expiresAt }}</span>
+      <span>{{ translate('ui.m_2ca0ed59cad1') }}{{ expiresAt }}</span>
       <template v-if="tzLabel"><a-divider type="vertical" /><span>（{{ tzLabel }}）</span></template>
     </div>
     <div style="text-align:right;margin-top:18px">
       <a-space>
-        <a-button type="primary" @click="goActivation">去激活设置</a-button>
-        <a-button @click="dismiss">稍后处理</a-button>
+        <a-button type="primary" @click="goActivation">{{ translate('ui.m_d23ab2a84908') }}</a-button>
+        <a-button @click="dismiss">{{ translate('ui.m_bf639a51feec') }}</a-button>
       </a-space>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { checkActivation } from '../api/meta'
@@ -51,8 +53,8 @@ let timer: number | null = null
 let memoryLastShown = 0
 
 const desc = computed(() => days.value <= 0
-  ? '系统授权已到期，部分核心功能将受限。请尽快在「激活设置」更换有效 Key 以恢复完整功能。'
-  : `系统授权将在 ${days.value} 天后到期。请及时在「激活设置」续期，避免到期后核心功能受限。`)
+  ? translate('ui.m_e7ba934abe27')
+  : translate('ui.m_f2c9262423dd', { p0: (days.value) }))
 
 /** 读取上次弹窗时间（localStorage 优先，失败降级内存变量） */
 function getLastShown(): number {

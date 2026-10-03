@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n'
 import { request, toQueryString } from './request'
 import { getToken } from './request'
 import type { ListQuery, ListResult, RowRecord } from './types'
@@ -20,7 +21,7 @@ export const fingerprintApi = {
     if (token) headers.set('Token', token)
     const resp = await fetch(`${base}/upload/`, { method: 'POST', headers, body: form })
     const data = await resp.json().catch(() => ({}))
-    if (!resp.ok || data.code !== 200) throw new Error(data.message || `上传失败：${resp.status}`)
+    if (!resp.ok || data.code !== 200) throw new Error(data.message || translate('ui.m_89251eb410c8', { p0: (resp.status) }))
     return data.data as { error_cnt: number; repeat_cnt: number; success_cnt: number }
   }
 }

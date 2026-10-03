@@ -15,6 +15,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
@@ -44,7 +46,7 @@ const pagination = computed(() => ({
   pageSize: props.size,
   total: props.total,
   showSizeChanger: true,
-  showTotal: (total: number) => `共 ${total} 条`
+  showTotal: (total: number) => translate('ui.m_f292bcb94fe6', { p0: (total) })
 }))
 
 function onChange(pageInfo: { current?: number; pageSize?: number }) {

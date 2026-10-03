@@ -1,23 +1,25 @@
 <template>
-  <a-modal :open="true" title="截图标注" width="1000px" :confirm-loading="saving" :ok-button-props="{ disabled: !ready || !marks.length }"
-    ok-text="保存标注副本" cancel-text="取消" @ok="save" @cancel="$emit('cancel')">
+  <a-modal :open="true" :title="translate('ui.m_147c7e48f1e3')" width="1000px" :confirm-loading="saving" :ok-button-props="{ disabled: !ready || !marks.length }"
+    :ok-text="translate('ui.m_c5acaaf0992f')" :cancel-text="translate('ui.m_2cd0f3be8738')" @ok="save" @cancel="$emit('cancel')">
     <a-space wrap style="margin-bottom:12px">
       <a-radio-group v-model:value="mode" button-style="solid">
-        <a-radio-button value="arrow">箭头</a-radio-button>
-        <a-radio-button value="box">红框</a-radio-button>
-        <a-radio-button value="mask">遮盖脱敏</a-radio-button>
+        <a-radio-button value="arrow">{{ translate('ui.m_83fa01a2d780') }}</a-radio-button>
+        <a-radio-button value="box">{{ translate('ui.m_2e74a84eae0e') }}</a-radio-button>
+        <a-radio-button value="mask">{{ translate('ui.m_0341debcbbd0') }}</a-radio-button>
       </a-radio-group>
-      <a-button :disabled="!marks.length" @click="undo">撤销</a-button>
-      <span class="hint">拖动绘制；保存后替换本报告的图片引用，原图保留。</span>
+      <a-button :disabled="!marks.length" @click="undo">{{ translate('ui.m_926a50b98ece') }}</a-button>
+      <span class="hint">{{ translate('ui.m_215c2727345a') }}</span>
     </a-space>
     <a-alert v-if="error" type="error" :message="error" />
     <div class="canvas-scroll">
-      <canvas ref="canvas" aria-label="截图标注画布" @pointerdown="start" @pointermove="move" @pointerup="finish" @pointercancel="cancelDrag" />
+      <canvas ref="canvas" :aria-label="translate('ui.m_02c7b35dbc31')" @pointerdown="start" @pointermove="move" @pointerup="finish" @pointercancel="cancelDrag" />
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { onMounted, onBeforeUnmount, ref } from 'vue'
 const props = defineProps<{ src: string; saving: boolean }>()
 const emit = defineEmits<{ save: [file: File]; cancel: [] }>()

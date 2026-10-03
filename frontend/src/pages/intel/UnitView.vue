@@ -2,20 +2,20 @@
   <!-- #11 用户 2026-09-15：支持 embedded 嵌入资产视图 Tab——嵌入时用普通 div（不带 PageContainer 标题/边距），
        独立路由访问时仍用 PageContainer。用 component :is 动态切根容器，内容复用不重复。 -->
   <component :is="embedded ? 'div' : PageContainer"
-    v-bind="embedded ? {} : { title: '单位视图', description: '按单位汇总渗透情报,点卡片看该单位的漏洞、子域名、系统、报告与攻击链' }">
+    v-bind="embedded ? {} : { title: translate('ui.m_c0cfb43b13b4'), description: translate('ui.m_9ef649809a7a') }">
     <a-spin :spinning="loading">
       <div style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <a-input-search v-model:value="keyword" placeholder="搜索单位名" allow-clear style="max-width:320px" />
-        <a-segmented v-model:value="sortBy" :options="[{label:'按渗透时间',value:'time'},{label:'按漏洞数',value:'vuln'}]" />
-        <span class="muted">共 {{ filteredUnits.length }} 个单位</span>
+        <a-input-search v-model:value="keyword" :placeholder="translate('ui.m_df95ee84c607')" allow-clear style="max-width:320px" />
+        <a-segmented v-model:value="sortBy" :options="[{label:translate('ui.m_e718ab4b4028'),value:'time'},{label:translate('ui.m_2693a11048b5'),value:'vuln'}]" />
+        <span class="muted">{{ translate('ui.m_76e547a8fa54') }} {{ filteredUnits.length }} {{ translate('ui.m_a5a76ddadbe7') }}</span>
         <!-- 多选批量删除：勾选卡片后出现 -->
-        <a-checkbox :checked="allChecked" :indeterminate="someChecked" @change="toggleAll">全选本页</a-checkbox>
-        <a-popconfirm v-if="selected.length" :title="`确认删除选中的 ${selected.length} 个单位的全部数据？(资产/漏洞/报告/会话/攻击链/线索)`"
-          ok-text="确认删除" cancel-text="取消" @confirm="batchDelete">
-          <a-button danger size="small">批量删除 ({{ selected.length }})</a-button>
+        <a-checkbox :checked="allChecked" :indeterminate="someChecked" @change="toggleAll">{{ translate('ui.m_4cabaad3579b') }}</a-checkbox>
+        <a-popconfirm v-if="selected.length" :title="translate('ui.m_38184b6a20f6', { p0: (selected.length) })"
+          :ok-text="translate('ui.m_a3ea3c17b401')" :cancel-text="translate('ui.m_2cd0f3be8738')" @confirm="batchDelete">
+          <a-button danger size="small">{{ translate('ui.m_a3436403034f') }}{{ selected.length }})</a-button>
         </a-popconfirm>
       </div>
-      <a-empty v-if="!filteredUnits.length" :description="units.length ? '无匹配单位' : '暂无已渗透单位'" />
+      <a-empty v-if="!filteredUnits.length" :description="units.length ? translate('ui.m_5710df22960a') : translate('ui.m_29428a68626b')" />
       <a-row :gutter="[16, 16]">
         <a-col v-for="u in filteredUnits" :key="u.unit" :xs="24" :sm="12" :md="8" :lg="6">
           <a-card hoverable class="unit-card" :class="{ 'unit-checked': selected.includes(u.unit) }" @click="openUnit(u.unit)">
@@ -23,81 +23,81 @@
               <a-checkbox class="unit-check" :checked="selected.includes(u.unit)"
                 @click.stop @change="toggleOne(u.unit)" />
               <span class="unit-name-txt">{{ u.unit }}</span>
-              <a-popconfirm title="确认删除该单位所有数据？(资产/漏洞/报告/渗透会话/攻击链/线索)" ok-text="确认删除" cancel-text="取消" @confirm.stop="deleteUnit(u.unit)">
-                <a-button type="text" danger size="small" class="unit-del-btn" @click.stop>删除</a-button>
+              <a-popconfirm :title="translate('ui.m_f381462cee19')" :ok-text="translate('ui.m_a3ea3c17b401')" :cancel-text="translate('ui.m_2cd0f3be8738')" @confirm.stop="deleteUnit(u.unit)">
+                <a-button type="text" danger size="small" class="unit-del-btn" @click.stop>{{ translate('ui.m_2f9daa828907') }}</a-button>
               </a-popconfirm>
             </div>
             <div class="unit-metrics">
-              <span class="m vuln"><b>{{ u.vuln_count }}</b>漏洞</span>
-              <span class="m"><b>{{ u.subdomain_count }}</b>子域名</span>
-              <span class="m"><b>{{ u.system_count }}</b>系统</span>
+              <span class="m vuln"><b>{{ u.vuln_count }}</b>{{ translate('ui.m_b0475a364bcb') }}</span>
+              <span class="m"><b>{{ u.subdomain_count }}</b>{{ translate('ui.m_4b4788120c34') }}</span>
+              <span class="m"><b>{{ u.system_count }}</b>{{ translate('ui.m_5b50d7c4b595') }}</span>
             </div>
             <div class="unit-metrics">
-              <span class="m"><b>{{ u.report_count }}</b>报告</span>
-              <span class="m"><b>{{ u.chain_count }}</b>攻击链</span>
-              <span class="m" v-if="u.lead_count"><b>{{ u.lead_count }}</b>线索</span>
+              <span class="m"><b>{{ u.report_count }}</b>{{ translate('ui.m_1e8ddd10bafe') }}</span>
+              <span class="m"><b>{{ u.chain_count }}</b>{{ translate('ui.m_31f1f49cdb27') }}</span>
+              <span class="m" v-if="u.lead_count"><b>{{ u.lead_count }}</b>{{ translate('ui.m_bfc935ea3355') }}</span>
             </div>
-            <div class="unit-time">最近渗透:{{ u.last_pentest ? u.last_pentest.slice(0, 10) : '—' }}</div>
+            <div class="unit-time">{{ translate('ui.m_dee61d65c28f') }}{{ u.last_pentest ? u.last_pentest.slice(0, 10) : '—' }}</div>
           </a-card>
         </a-col>
       </a-row>
     </a-spin>
 
-    <a-drawer v-model:open="detailOpen" :title="`单位详情:${cur?.unit || ''}`" width="68%">
+    <a-drawer v-model:open="detailOpen" :title="translate('ui.m_dc61c436af11', { p0: (cur?.unit || '') })" width="68%">
       <a-spin :spinning="detailLoading">
         <template v-if="cur">
           <a-descriptions :column="4" size="small" bordered style="margin-bottom:16px">
-            <a-descriptions-item label="已验证漏洞">{{ cur.vuln_count }}</a-descriptions-item>
-            <a-descriptions-item label="线索">{{ cur.lead_count }}</a-descriptions-item>
-            <a-descriptions-item label="子域名">{{ cur.subdomain_count }}</a-descriptions-item>
-            <a-descriptions-item label="系统">{{ cur.system_count }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_5265572c3a2e')">{{ cur.vuln_count }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_bfc935ea3355')">{{ cur.lead_count }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_4b4788120c34')">{{ cur.subdomain_count }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_5b50d7c4b595')">{{ cur.system_count }}</a-descriptions-item>
           </a-descriptions>
           <a-tabs>
-            <a-tab-pane key="vulns" :tab="`漏洞 (${cur.vulns.length})`">
+            <a-tab-pane key="vulns" :tab="translate('ui.m_fc17f8cc1659', { p0: (cur.vulns.length) })">
               <a-table :data-source="cur.vulns" :columns="vulnCols" row-key="_id" size="small" :pagination="{ pageSize: 10 }">
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key === 'severity'"><StatusTag :status="record.severity" /></template>
                 </template>
               </a-table>
             </a-tab-pane>
-            <a-tab-pane key="reports" :tab="`报告 (${cur.reports.length})`">
+            <a-tab-pane key="reports" :tab="translate('ui.m_ea8b9470cb00', { p0: (cur.reports.length) })">
               <a-table :data-source="cur.reports" :columns="reportCols" row-key="report_id" size="small" :pagination="{ pageSize: 10 }">
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key === 'max_severity'"><StatusTag :status="record.max_severity" /></template>
                 </template>
               </a-table>
             </a-tab-pane>
-            <a-tab-pane key="chains" :tab="`攻击链 (${cur.chains.length})`">
+            <a-tab-pane key="chains" :tab="translate('ui.m_f0649804beca', { p0: (cur.chains.length) })">
               <a-table :data-source="cur.chains" :columns="chainCols" row-key="chain_id" size="small" :pagination="false">
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key === 'max_severity'"><StatusTag :status="record.max_severity" /></template>
                 </template>
               </a-table>
             </a-tab-pane>
-            <a-tab-pane key="subs" :tab="`子域名/系统 (${cur.subdomain_count}/${cur.system_count})`">
+            <a-tab-pane key="subs" :tab="translate('ui.m_3171f225dc09', { p0: (cur.subdomain_count), p1: (cur.system_count) })">
               <a-table :data-source="cur.subdomains" :columns="subCols" row-key="subdomain" size="small" :pagination="{ pageSize: 10 }" />
-              <div style="margin-top:12px"><b>系统:</b> <a-tag v-for="s in cur.systems" :key="s.system_id">{{ s.system_name }}</a-tag></div>
+              <div style="margin-top:12px"><b>{{ translate('ui.m_262d23b8dce1') }}</b> <a-tag v-for="s in cur.systems" :key="s.system_id">{{ s.system_name }}</a-tag></div>
             </a-tab-pane>
-            <a-tab-pane key="intel" :tab="`侦察情报 (${(cur.intel?.fingerprints?.length||0)+(cur.intel?.file_leaks?.length||0)+(cur.intel?.secrets?.length||0)})`">
-              <div class="intel-block"><b>指纹/组件 ({{ cur.intel?.fingerprints?.length || 0 }}):</b>
+            <a-tab-pane key="intel" :tab="translate('ui.m_99d7b8b0ed58', { p0: ((cur.intel?.fingerprints?.length||0)+(cur.intel?.file_leaks?.length||0)+(cur.intel?.secrets?.length||0)) })">
+              <div class="intel-block"><b>{{ translate('ui.m_afeaa9dffd01') }}{{ cur.intel?.fingerprints?.length || 0 }}):</b>
                 <a-tag v-for="f in cur.intel?.fingerprints || []" :key="f" color="blue">{{ f }}</a-tag>
-                <span v-if="!cur.intel?.fingerprints?.length" class="muted">无</span>
+                <span v-if="!cur.intel?.fingerprints?.length" class="muted">{{ translate('ui.m_484d55613910') }}</span>
               </div>
-              <div class="intel-block"><b>敏感信息/密钥 ({{ cur.intel?.secrets?.length || 0 }}):</b>
-                <div v-for="(s,i) in cur.intel?.secrets || []" :key="i" class="intel-row">· [{{ s.type || '密钥' }}] {{ (s.content || s.value || '').toString().slice(0,100) }}</div>
-                <span v-if="!cur.intel?.secrets?.length" class="muted">无</span>
+              <div class="intel-block"><b>{{ translate('ui.m_6a9c3a600d4c') }}{{ cur.intel?.secrets?.length || 0 }}):</b>
+                <div v-for="(s,i) in cur.intel?.secrets || []" :key="i" class="intel-row">· [{{ s.type || translate('ui.m_f67bca8f42bc') }}] {{ (s.content || s.value || '').toString().slice(0,100) }}</div>
+                <span v-if="!cur.intel?.secrets?.length" class="muted">{{ translate('ui.m_484d55613910') }}</span>
               </div>
-              <div class="intel-block"><b>文件泄露 ({{ cur.intel?.file_leaks?.length || 0 }}):</b>
+              <div class="intel-block"><b>{{ translate('ui.m_eea8c519e342') }}{{ cur.intel?.file_leaks?.length || 0 }}):</b>
                 <div v-for="(l,i) in cur.intel?.file_leaks || []" :key="i" class="intel-row">· {{ l.url || l.path }} <span class="muted">[{{ l.status }}]</span></div>
-                <span v-if="!cur.intel?.file_leaks?.length" class="muted">无</span>
+                <span v-if="!cur.intel?.file_leaks?.length" class="muted">{{ translate('ui.m_484d55613910') }}</span>
               </div>
-              <div class="intel-block"><b>关键端点 ({{ cur.intel?.endpoints?.length || 0 }}):</b>
+              <div class="intel-block"><b>{{ translate('ui.m_7dc997d8dadf') }}{{ cur.intel?.endpoints?.length || 0 }}):</b>
                 <div v-for="(e,i) in cur.intel?.endpoints || []" :key="i" class="intel-row">· {{ e.url || e }}</div>
-                <span v-if="!cur.intel?.endpoints?.length" class="muted">无</span>
+                <span v-if="!cur.intel?.endpoints?.length" class="muted">{{ translate('ui.m_484d55613910') }}</span>
               </div>
-              <div class="intel-block"><b>端口服务 ({{ cur.intel?.ports?.length || 0 }}):</b>
+              <div class="intel-block"><b>{{ translate('ui.m_0608e6fe21f3') }}{{ cur.intel?.ports?.length || 0 }}):</b>
                 <a-tag v-for="(p,i) in cur.intel?.ports || []" :key="i">{{ p.port }}/{{ p.service }} {{ p.product }}</a-tag>
-                <span v-if="!cur.intel?.ports?.length" class="muted">无</span>
+                <span v-if="!cur.intel?.ports?.length" class="muted">{{ translate('ui.m_484d55613910') }}</span>
               </div>
             </a-tab-pane>
           </a-tabs>
@@ -107,6 +107,8 @@
   </component>
 </template>
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -134,27 +136,27 @@ const filteredUnits = computed(() => {
 })
 
 const vulnCols = [
-  { title: '类型', dataIndex: 'vuln_type', key: 'vuln_type' },
-  { title: '目标', dataIndex: 'target', key: 'target', ellipsis: true },
-  { title: '等级', dataIndex: 'severity', key: 'severity', width: 90 },
-  { title: '时间', dataIndex: 'save_date', key: 'save_date', width: 160 }
+  { get title() { return translate('ui.m_ba40014ff496') }, dataIndex: 'vuln_type', key: 'vuln_type' },
+  { get title() { return translate('ui.m_57060c88a36b') }, dataIndex: 'target', key: 'target', ellipsis: true },
+  { get title() { return translate('ui.m_337717173807') }, dataIndex: 'severity', key: 'severity', width: 90 },
+  { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date', key: 'save_date', width: 160 }
 ]
 const reportCols = [
-  { title: '标题', dataIndex: 'title', key: 'title', ellipsis: true },
-  { title: '系统', dataIndex: 'system_name', key: 'system_name', width: 140 },
-  { title: '漏洞数', dataIndex: 'vuln_count', key: 'vuln_count', width: 80 },
-  { title: '最高危害', dataIndex: 'max_severity', key: 'max_severity', width: 90 },
-  { title: '有用值', dataIndex: 'useful_count', key: 'useful_count', width: 70 },
-  { title: '时间', dataIndex: 'save_date', key: 'save_date', width: 160 }
+  { get title() { return translate('ui.m_c3405f8c7d9d') }, dataIndex: 'title', key: 'title', ellipsis: true },
+  { get title() { return translate('ui.m_5b50d7c4b595') }, dataIndex: 'system_name', key: 'system_name', width: 140 },
+  { get title() { return translate('ui.m_415760c06b97') }, dataIndex: 'vuln_count', key: 'vuln_count', width: 80 },
+  { get title() { return translate('ui.m_aea0fc420948') }, dataIndex: 'max_severity', key: 'max_severity', width: 90 },
+  { get title() { return translate('ui.m_bd267af71840') }, dataIndex: 'useful_count', key: 'useful_count', width: 70 },
+  { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date', key: 'save_date', width: 160 }
 ]
 const chainCols = [
-  { title: '攻击链', dataIndex: 'title', key: 'title', ellipsis: true },
-  { title: '环节', dataIndex: 'step_count', key: 'step_count', width: 70 },
-  { title: '最高危害', dataIndex: 'max_severity', key: 'max_severity', width: 90 }
+  { get title() { return translate('ui.m_31f1f49cdb27') }, dataIndex: 'title', key: 'title', ellipsis: true },
+  { get title() { return translate('ui.m_28475230f056') }, dataIndex: 'step_count', key: 'step_count', width: 70 },
+  { get title() { return translate('ui.m_aea0fc420948') }, dataIndex: 'max_severity', key: 'max_severity', width: 90 }
 ]
 const subCols = [
-  { title: '子域名', dataIndex: 'subdomain', key: 'subdomain' },
-  { title: '资产数', dataIndex: 'asset_count', key: 'asset_count', width: 90 }
+  { get title() { return translate('ui.m_4b4788120c34') }, dataIndex: 'subdomain', key: 'subdomain' },
+  { get title() { return translate('ui.m_ae4728f08828') }, dataIndex: 'asset_count', key: 'asset_count', width: 90 }
 ]
 
 async function load() {
@@ -173,7 +175,7 @@ async function deleteUnit(unit: string) {
   try {
     const res = await intelApi.deleteUnit(unit)
     const total = Object.values(res.deleted).reduce((a, b) => a + b, 0)
-    message.success(`已删除单位「${unit}」的 ${total} 条数据`)
+    message.success(translate('ui.m_01d374374c09', { p0: (unit), p1: (total) }))
     load()
   } catch (e) { message.error(e instanceof Error ? e.message : String(e)) }
 }
@@ -202,7 +204,7 @@ async function batchDelete() {
       ok++
     } catch { /* 单个失败不中断 */ }
   }
-  message.success(`已删除 ${ok}/${units.length} 个单位，共 ${total} 条数据`)
+  message.success(translate('ui.m_29b3da266df8', { p0: (ok), p1: (units.length), p2: (total) }))
   selected.value = []
   load()
 }

@@ -1,9 +1,9 @@
 <template>
-  <PageContainer title="使用手册" kicker="Manual" description="瞭望塔 Watchtower 面向使用者的操作说明与常见问题。">
+  <PageContainer :title="translate('ui.m_396c685466aa')" kicker="Manual" :description="translate('ui.m_0e788d30ca81')">
     <div class="manual-wrap">
       <!-- 左侧分类导航 -->
       <div class="manual-nav">
-        <a-input v-model:value="keyword" placeholder="搜索手册" allow-clear size="small" style="margin-bottom:10px">
+        <a-input v-model:value="keyword" :placeholder="translate('ui.m_9d61392dc653')" allow-clear size="small" style="margin-bottom:10px">
           <template #prefix><SearchOutlined /></template>
         </a-input>
         <div v-for="sec in filteredSections" :key="sec.key"
@@ -11,7 +11,7 @@
           <component :is="sec.icon" class="nav-icon" />
           <span>{{ sec.title }}</span>
         </div>
-        <a-empty v-if="!filteredSections.length" :image="false" description="无匹配" />
+        <a-empty v-if="!filteredSections.length" :image="false" :description="translate('ui.m_7a54f3fc4716')" />
       </div>
 
       <!-- 右侧正文 -->
@@ -20,7 +20,7 @@
           <h2 class="doc-h1"><component :is="active.icon" /> {{ active.title }}</h2>
           <!-- 免责声明章节：显示服务端签署状态徽标（已签署=淡绿） -->
           <a-tag v-if="activeKey === 'disclaimer' && disc.accepted" color="green" class="disc-signed-tag">
-            <CheckCircleOutlined /> 已签署同意<template v-if="disc.accepted_at"> · {{ disc.accepted_at }}</template>
+            <CheckCircleOutlined /> {{ translate('ui.m_51ae950c5f10') }}<template v-if="disc.accepted_at"> · {{ disc.accepted_at }}</template>
           </a-tag>
           <p class="doc-lead">{{ active.lead }}</p>
           <template v-for="(blk, i) in active.blocks" :key="i">
@@ -57,6 +57,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { ref, computed, reactive, onMounted } from 'vue'
 import {
   SearchOutlined, BulbOutlined, WarningOutlined, RocketOutlined, RadarChartOutlined,
@@ -78,191 +80,191 @@ interface Block { h?: string; p?: string; list?: string[]; steps?: string[]; tip
 interface Section { key: string; title: string; icon: any; lead: string; blocks: Block[] }
 
 // 面向用户的说明（依据 云端/docs 提炼，非内部架构）。纯内置，离线可用。
-const sections: Section[] = [
+const sections = computed<Section[]>(() => [
   {
-    key: 'disclaimer', title: '免责声明', icon: ExclamationCircleOutlined,
-    lead: '使用本系统前请务必阅读。仅限授权范围内使用，一切法律责任由使用者自负。',
+    key: 'disclaimer', get title() { return translate('ui.m_280af617c87f') }, icon: ExclamationCircleOutlined,
+    get lead() { return translate('ui.m_28d2a62baffa') },
     blocks: [
-      ...DISCLAIMER_SECTIONS.map(s => ({ h: s.h, list: s.items })),
-      { warn: '你已在首次登录时确认同意本声明（签署状态已在服务端留存）。继续使用即视为持续接受上述全部条款。' },
+      ...DISCLAIMER_SECTIONS.value.map(s => ({ h: s.h, list: s.items })),
+      { get warn() { return translate('ui.m_123fcbe11173') } },
     ],
   },
   {
-    key: 'quickstart', title: '快速上手', icon: RocketOutlined,
-    lead: '瞭望塔是面向授权安全工作的综合平台：从目标录入到资产侦察、AI 自主渗透、漏洞与情报闭环，一条龙完成。',
+    key: 'quickstart', get title() { return translate('ui.m_bfc47d6b4af9') }, icon: RocketOutlined,
+    get lead() { return translate('ui.m_ac2b148571b4') },
     blocks: [
-      { h: '第一步：激活系统', steps: [
-        '首次使用前，前往「关于系统 → 激活设置」粘贴授权凭证并激活。',
-        '未激活不影响本地已部署功能的运行，但无法获取更新与扩展商店。',
+      { get h() { return translate('ui.m_a115f2034b79') }, steps: [
+        translate('ui.m_d437a895f834'),
+        translate('ui.m_a246a5776e48'),
       ] },
-      { h: '第二步：配置能力', list: [
-        '「系统设置 → API 密钥」：填入 FOFA / Hunter 等测绘源密钥，用于资产收集。',
-        '「AI 配置」：配置 LLM Provider（如 Claude），AI 自主渗透依赖它。',
-        '「代理中心」：需要走代理时导入订阅或节点。',
+      { get h() { return translate('ui.m_be4213292380') }, list: [
+        translate('ui.m_f0df653a9e96'),
+        translate('ui.m_8b1d198bac90'),
+        translate('ui.m_640c5b51e2d5'),
       ] },
-      { h: '第三步：跑通主流程', steps: [
-        '「任务 → 新建任务」录入目标（域名 / IP / 单位名 / FOFA 语句）。',
-        '选择扫描策略后启动，系统自动完成侦察并把资产沉淀到情报中心。',
-        '侦察产出的资产按价值评分自动派发 AI 渗透会话，或手动发起。',
-        '在「漏洞中心」查看产出，在「AI 渗透」查看会话过程与报告。',
+      { get h() { return translate('ui.m_3e83f9c48a51') }, steps: [
+        translate('ui.m_4e66dfac631e'),
+        translate('ui.m_e4ec38af6d35'),
+        translate('ui.m_d10315228561'),
+        translate('ui.m_93d66e9f4870'),
       ] },
-      { tip: '不确定从哪开始，就先建一个单目标任务跑通全链路，再逐步调策略。' },
+      { get tip() { return translate('ui.m_d0bb49e6ec4c') } },
     ],
   },
   {
-    key: 'recon', title: '资产侦察', icon: RadarChartOutlined,
-    lead: '侦察引擎把一个目标展开成完整攻击面：子域名、DNS、端口、站点、证书、爬虫、泄露、指纹、PoC。',
+    key: 'recon', get title() { return translate('ui.m_60d1ef084057') }, icon: RadarChartOutlined,
+    get lead() { return translate('ui.m_6270bbde98c5') },
     blocks: [
-      { h: '收集模式', list: [
-        '单目标（single）：只处理给定目标，不做子域名枚举，最快最省。',
-        '被动（passive）：用测绘源被动收集，不主动爆破。',
-        '爆破（brute）：子域名字典爆破 + 全量侦察，最全但最重。',
+      { get h() { return translate('ui.m_22735e17bbd1') }, list: [
+        translate('ui.m_fbd4142fae30'),
+        translate('ui.m_0270eceab9fc'),
+        translate('ui.m_d0ae72c1605d'),
       ] },
-      { h: '外部数据源', list: [
-        'FOFA / Hunter：资产测绘，直接拉取给定目标的资产，不额外扫端口/子域名。',
-        'crt.sh / ICP：证书透明日志与备案反查，补充关联资产。',
+      { get h() { return translate('ui.m_c6e3c505481a') }, list: [
+        translate('ui.m_3e4f899c485b'),
+        translate('ui.m_815fe802d153'),
       ] },
-      { h: '去重与归集', p: '侦察结果流式归集到情报中心，按物理标识（主机名 / IP+端口）去重，绝不跨单位混合，避免误判。' },
-      { warn: '关闭扫描时（纯导入 FOFA），系统直接探测给定目标，不会主动扩面，符合最小 scope 原则。' },
+      { get h() { return translate('ui.m_f9347b066806') }, get p() { return translate('ui.m_c284007554c5') } },
+      { get warn() { return translate('ui.m_99da50c34854') } },
     ],
   },
   {
-    key: 'pentest', title: 'AI 自主渗透', icon: RobotOutlined,
-    lead: 'AI 按资产自动发起渗透会话：大模型自主选工具、真实发包验证、产出 finding 与攻击链，全程可观察、可接管。',
+    key: 'pentest', get title() { return translate('ui.m_d7de33b42843') }, icon: RobotOutlined,
+    get lead() { return translate('ui.m_9640b68a573a') },
     blocks: [
-      { h: '会话怎么来', list: [
-        '自动派发：侦察归集后，系统按资产价值评分自动创建渗透会话。',
-        '手动发起：在「AI 渗透」对目标资产手动建会话。',
+      { get h() { return translate('ui.m_db4e5ff817af') }, list: [
+        translate('ui.m_ecbea1775d26'),
+        translate('ui.m_c07909e2879e'),
       ] },
-      { h: '实时观察与接管', list: [
-        '运行中会话点「🔴 实时」进入实时观察，SSE 推送工具调用与攻击面。',
-        '「AI 会话台」可对已结束会话按 resume_key 恢复，人工接管继续对话。',
+      { get h() { return translate('ui.m_e975ce9308f8') }, list: [
+        translate('ui.m_16c4f1896e1a'),
+        translate('ui.m_44d3fae745db'),
       ] },
-      { h: 'AI 工作模式（四档，强度由轻到重，在扫描策略里选）', list: [
-        '探测：最轻。匿名视角只过一遍接口（GET/只读 POST），看未授权裸奔的接口和 JS 里泄露的密钥凭证；全程不登录、不注册、不改参越权、不发注入探针、不打 RCE/CVE。适合只想快速摸清目标接口面暴露了什么、且不希望对目标有任何写入或利用动作的场景。',
-        '保守：轻。抓全量 JS 逐接口 GET/POST 跑一遍即止，只读取证、取凭证、抓 JS；不做深度利用链、不动业务数据。适合高敏感目标。',
-        '常规（SRC）：中。标准 SRC 挖洞——越权、注入、逻辑漏洞都测，自注册账号互测越权，闸刀拦高危写操作、放行自证的验证操作。日常评估的默认档。',
-        '红队：重。授权范围内放开完整利用链（登录利用、RCE、提权、后台接管、横向），闸刀仅记录不拦截。仅限充分授权的红队演练目标。',
+      { get h() { return translate('ui.m_833fe661f95a') }, list: [
+        translate('ui.m_d61c63eb5fa4'),
+        translate('ui.m_a24d4f5ff0fc'),
+        translate('ui.m_12b9d18baeb2'),
+        translate('ui.m_52f1004984f5'),
       ] },
-      { h: '安全约束', list: [
-        'scope 闸：会话锁定下发目标，不会越界打同主机的其他端口/站点（全模式生效）。',
-        '监管闸刀：写操作经监管 AI 判定，探测/保守/常规三档各有对应严格度的判定标准；红队不过闸刀仅记录。破坏性操作（删库/清空/批量改他人数据/提权）任何模式都硬拦。',
-        '探测模式最严：闸刀只放行 GET/只读 POST，任何写入/登录/注册/注入/RCE 一律拦。',
+      { get h() { return translate('ui.m_804196aef712') }, list: [
+        translate('ui.m_5dec33d4f038'),
+        translate('ui.m_466302d086ae'),
+        translate('ui.m_491724604e42'),
       ] },
-      { tip: '不确定选哪档：先用「探测」快速看接口面 → 有价值再上「常规」深挖 → 充分授权的演练才用「红队」。高敏目标用「保守」。' },
-      { warn: '仅在授权范围内使用。平台默认产出面向复现与修复的结论，不做无差别破坏。' },
+      { get tip() { return translate('ui.m_c6fa9a24eba8') } },
+      { get warn() { return translate('ui.m_1f4b63e3edff') } },
     ],
   },
   {
-    key: 'vuln', title: '漏洞与情报', icon: BugOutlined,
-    lead: '所有产出在漏洞中心汇聚，情报体系让成果在单位内共享、跨单位借鉴打法。',
+    key: 'vuln', get title() { return translate('ui.m_e84c1409f5a9') }, icon: BugOutlined,
+    get lead() { return translate('ui.m_9952511868d0') },
     blocks: [
-      { h: '漏洞中心', list: [
-        '三来源混排：侦察 PoC、AI 渗透 finding、漏洞情报，统一 CVSS 与处理状态标记。',
-        '支持按单位、关键词、类型筛选，导出报告。',
+      { get h() { return translate('ui.m_756d8eeb32a5') }, list: [
+        translate('ui.m_53684d2d0cca'),
+        translate('ui.m_b376e7628416'),
       ] },
-      { h: '情报中心', list: [
-        '资产情报：任务成果持续富化资产画像。',
-        '单位视图：按单位聚合资产与漏洞，看清一个组织的整体暴露面。',
-        '攻击链情报：AI 渗透产出的利用链路可视化。',
+      { get h() { return translate('ui.m_5938e567a70b') }, list: [
+        translate('ui.m_b6eccd7bb255'),
+        translate('ui.m_792fede7decf'),
+        translate('ui.m_ff2bae64f982'),
       ] },
-      { h: '漏洞情报库', p: '内置漏洞情报源（NVD/CISA 等），可手动刷新或配置定时拉取，为侦察 PoC 提供依据。' },
+      { get h() { return translate('ui.m_0a5366f366d4') }, get p() { return translate('ui.m_60d762b20120') } },
     ],
   },
   {
-    key: 'proxy', title: '代理中心', icon: GlobalOutlined,
-    lead: '代理分两条独立轨道：访问中转站的代理，与攻击出口的代理，互不干扰。',
+    key: 'proxy', get title() { return translate('ui.m_23eae9eefda3') }, icon: GlobalOutlined,
+    get lead() { return translate('ui.m_3af25db097d7') },
     blocks: [
-      { h: '导入节点', steps: [
-        '「代理中心」粘贴订阅链接或导入 YAML 节点配置。',
-        '系统解析后可测速、选组、启停。',
+      { get h() { return translate('ui.m_bd4efd1e6f12') }, steps: [
+        translate('ui.m_b6ecfd374049'),
+        translate('ui.m_30ec0218225f'),
       ] },
-      { h: '两条轨道', list: [
-        '访问代理：访问 LLM 中转站等外部服务用，默认直连，可按 Provider 配置。',
-        '攻击出口代理：AI 渗透 / 扫描流量的出口，由策略的出口代理开关控制。',
+      { get h() { return translate('ui.m_af2ee0ea557a') }, list: [
+        translate('ui.m_f98cad3c82ed'),
+        translate('ui.m_aae0d0e29517'),
       ] },
-      { warn: '扫描流量默认直连，需要隐藏真实出口 IP 时在策略里开启出口代理，否则会暴露本机 IP。' },
+      { get warn() { return translate('ui.m_121e8153667c') } },
     ],
   },
   {
-    key: 'system', title: '系统设置与权限', icon: SafetyOutlined,
-    lead: '用户管理采用 RBAC 角色模型，日志监测覆盖运行报错、访问与闸刀拦截。',
+    key: 'system', get title() { return translate('ui.m_495ee40ac3f4') }, icon: SafetyOutlined,
+    get lead() { return translate('ui.m_8929e7d9d46d') },
     blocks: [
-      { h: '角色权限（RBAC）', list: [
-        'admin：全部权限 + 用户管理，内置不可改。',
-        'operator：任务/资产/漏洞/AI 渗透读写 + 系统更新，无用户管理/密钥/AI 配置写。',
-        'viewer：所有查看权限，无任何写操作。',
+      { get h() { return translate('ui.m_f242860c2f47') }, list: [
+        translate('ui.m_f9ea6e889739'),
+        translate('ui.m_c933cb4743ba'),
+        translate('ui.m_8a1d59b095e8'),
       ] },
-      { h: '日志', list: [
-        '日志监测：各进程 WARNING 及以上报错自动入库，可按级别/进程/关键词筛选。',
-        '访问日志 / 拦截日志：记录访问与监管闸刀的放行/拦截。',
+      { get h() { return translate('ui.m_7dbac1c20f23') }, list: [
+        translate('ui.m_653141ab8b0c'),
+        translate('ui.m_021c69ce3b82'),
       ] },
-      { h: '报错上传', steps: [
-        '在「日志监测」勾选要反馈的报错日志。',
-        '点「上传到云端」，填写问题描述后提交。',
-        '系统会带上你的授权凭证归属、版本与出口 IP，上传到云端供开发方定位。',
+      { get h() { return translate('ui.m_dac54049f5f1') }, steps: [
+        translate('ui.m_52607382f9c1'),
+        translate('ui.m_3ed332880af1'),
+        translate('ui.m_eace3bca618b'),
       ] },
-      { tip: '上传前请确认描述里不含敏感信息；日志正文会原样上传，注意脱敏。' },
+      { get tip() { return translate('ui.m_38c3858b9ff0') } },
     ],
   },
   {
-    key: 'update', title: '更新与激活', icon: CloudSyncOutlined,
-    lead: '瞭望塔支持一键热更新、按版本查看改动、以及回退到历史版本。更新链带凭证校验。',
+    key: 'update', get title() { return translate('ui.m_89bb9156b82c') }, icon: CloudSyncOutlined,
+    get lead() { return translate('ui.m_1e95ca23e1fa') },
     blocks: [
-      { h: '检查与更新', steps: [
-        '「更新检测」点「检查更新」，有新版会列出更新内容。',
-        '点「立即更新」触发热更新，进度实时显示，完成后自动刷新。',
-        '更新过程增量拉取变化文件，不影响现有业务。',
+      { get h() { return translate('ui.m_cf59c9d217f2') }, steps: [
+        translate('ui.m_f0c28e8491be'),
+        translate('ui.m_0945ebfb4fa9'),
+        translate('ui.m_8301beaf65da'),
       ] },
-      { h: '历史版本与回退', list: [
-        '「更新检测」页下方「历史版本」列出所有已发布版本（需相应权限）。',
-        '点「改动」查看某版相对上一版的新增/修改/删除文件清单。',
-        '点「回退」把系统对齐到所选历史版本（含删除新版新增文件）。',
+      { get h() { return translate('ui.m_094f0428c3b4') }, list: [
+        translate('ui.m_6ed1c01edb95'),
+        translate('ui.m_1d0d004504e4'),
+        translate('ui.m_51d300ad95e6'),
       ] },
-      { h: '激活', p: '「激活设置」粘贴授权凭证激活。凭证只控制更新与扩展商店，不锁运行，可由运营方吊销。' },
-      { warn: '回退是高危操作，会重启 worker/scheduler 并影响全站运行代码，仅在新版出现严重问题时使用。' },
+      { get h() { return translate('ui.m_dd1286c29e9b') }, get p() { return translate('ui.m_8e500c452025') } },
+      { get warn() { return translate('ui.m_a11f00ab824e') } },
     ],
   },
   {
-    key: 'faq', title: '常见问题', icon: QuestionCircleOutlined,
-    lead: '高频问题速查。',
+    key: 'faq', get title() { return translate('ui.m_45a6d115fdfb') }, icon: QuestionCircleOutlined,
+    get lead() { return translate('ui.m_5d3f807b9bfd') },
     blocks: [
-      { h: '一直提示有新版本？', p: '通常是浏览器缓存了旧构建。强制刷新（Ctrl+F5）即可；仍不行请确认前端已随新版本重新构建。' },
-      { h: '检查更新报「凭证无效」？', p: '前往「激活设置」重新激活。凭证过期或被吊销都会导致更新链 403。' },
-      { h: 'AI 渗透不出洞 / 空转？', list: [
-        '确认 AI 配置的 Provider 可用、额度充足。',
-        '确认目标资产侦察产出充分（有站点/接口/指纹），侦察太浅会限制渗透深度。',
+      { get h() { return translate('ui.m_b3880b826560') }, get p() { return translate('ui.m_f9bb76440bb8') } },
+      { get h() { return translate('ui.m_b84c18024abf') }, get p() { return translate('ui.m_aad330c944dd') } },
+      { get h() { return translate('ui.m_aa0bea547b2b') }, list: [
+        translate('ui.m_0bb393be4711'),
+        translate('ui.m_20018d7ffe64'),
       ] },
-      { h: '扫描很慢 / 触发目标限速？', p: '同一 IP 的并发会触发目标侧限速，正常现象。跨 IP 并行、同 IP 串行是更稳的打法，可在策略里调并发。' },
-      { h: 'FOFA 语句查不出结果？', p: '常见于从文档复制带入了全角引号/运算符。系统会自动归一化，若仍异常请检查语句语法。' },
+      { get h() { return translate('ui.m_7dba274589f2') }, get p() { return translate('ui.m_e7f184b903f1') } },
+      { get h() { return translate('ui.m_c0307417e063') }, get p() { return translate('ui.m_9919d54086bd') } },
     ],
   },
   {
-    key: 'verse', title: '采桑子·鞭春', icon: ReadOutlined,
+    key: 'verse', get title() { return translate('ui.m_9023a453b025') }, icon: ReadOutlined,
     lead: '',
     blocks: [
       {
         verse: {
-          cipai: '采桑子',
-          title: '鞭春',
+          get cipai() { return translate('ui.m_7133fc1ef44d') },
+          get title() { return translate('ui.m_9c891e614269') },
           stanzas: [
-            ['胥吏追呼昼夜逼，', '荒也吞糠，', '丰也吞糠，', '新苗破土带鞭伤。'],
-            ['天造草昧岁相食，', '秋也杀人，', '冬也杀人，', '春生夏长又一轮。'],
+            [translate('ui.m_11f066c87a5f'), translate('ui.m_465748f4c64c'), translate('ui.m_76f58682138d'), translate('ui.m_b9b14a5318c7')],
+            [translate('ui.m_72fb60147d3a'), translate('ui.m_48e471969301'), translate('ui.m_2f5f1e23236d'), translate('ui.m_589fc1d906ab')],
           ],
-          author: '佚名（现代）',
+          get author() { return translate('ui.m_29c02b956e59') },
         },
       },
     ],
   },
-]
+])
 
 const activeKey = ref('quickstart')
 const keyword = ref('')
-const active = computed(() => sections.find(s => s.key === activeKey.value) || sections[0])
+const active = computed(() => sections.value.find(s => s.key === activeKey.value) || sections.value[0])
 const filteredSections = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return sections
-  return sections.filter(s =>
+  if (!kw) return sections.value
+  return sections.value.filter(s =>
     s.title.toLowerCase().includes(kw) || s.lead.toLowerCase().includes(kw) ||
     JSON.stringify(s.blocks).toLowerCase().includes(kw))
 })

@@ -8,43 +8,45 @@
 -->
 <template>
   <a-modal :open="open" @update:open="(v: boolean) => emit('update:open', v)" :footer="null"
-    :width="620" title="⚠ 检测到同资产已有渗透" :mask-closable="false">
-    <a-alert type="warning" show-icon style="margin-bottom:14px" :message="data?.summary || '该资产已存在渗透记录'" />
+    :width="620" :title="translate('ui.m_2b98f4f90db6')" :mask-closable="false">
+    <a-alert type="warning" show-icon style="margin-bottom:14px" :message="data?.summary || translate('ui.m_13145bb2fa23')" />
 
     <div v-if="data?.scope === 'best_effort'" class="ov-scope">
-      注：目标为域名/单位，检测为<b>尽力范围</b>（扫描前无法精确到每个子资产），可能未覆盖全部关联资产。
+      {{ translate('ui.m_2baa0c0a5b47') }}<b>{{ translate('ui.m_39ddff1a7da9') }}</b>{{ translate('ui.m_12c28c46caf6') }}
     </div>
 
     <div v-if="data?.active_sessions?.length" class="ov-sec">
-      <div class="ov-title">🔴 正在渗透的会话（{{ data.active_sessions.length }}）—— 重复发起会浪费资源</div>
+      <div class="ov-title">{{ translate('ui.m_c0a7b200ab3d') }}{{ data.active_sessions.length }}{{ translate('ui.m_637d178667df') }}</div>
       <div v-for="s in data.active_sessions" :key="s.session_id" class="ov-row">
         <a-tag :color="statusColor(s.status)">{{ statusText(s.status) }}</a-tag>
         <span class="ov-site">{{ s.site }}</span>
         <span v-if="s.unit" class="ov-unit">{{ s.unit }}</span>
-        <span class="ov-ago">最近活动 {{ s.ago }}</span>
+        <span class="ov-ago">{{ translate('ui.m_41f5cada11ed') }} {{ s.ago }}</span>
       </div>
     </div>
 
     <div v-if="data?.last_reports?.length" class="ov-sec">
-      <div class="ov-title">📄 历史渗透报告（{{ data.last_reports.length }}）—— 确定发起可复用报告复验/深入</div>
+      <div class="ov-title">{{ translate('ui.m_b79899bd0b63') }}{{ data.last_reports.length }}{{ translate('ui.m_f58ad124b9bd') }}</div>
       <div v-for="r in data.last_reports" :key="r.report_id" class="ov-row">
         <a-tag :color="sevColor(r.max_severity)">{{ r.max_severity || '—' }}</a-tag>
         <span class="ov-site">{{ r.site }}</span>
-        <span class="ov-vuln">{{ r.vuln_count }} 个漏洞</span>
-        <span class="ov-ago">{{ r.ago }}渗透</span>
+        <span class="ov-vuln">{{ r.vuln_count }} {{ translate('ui.m_1f3ef482e067') }}</span>
+        <span class="ov-ago">{{ r.ago }}{{ translate('ui.m_37c00a48482d') }}</span>
       </div>
     </div>
 
     <div class="ov-actions">
-      <a-button @click="onCancel">取消任务</a-button>
+      <a-button @click="onCancel">{{ translate('ui.m_537d17f1c531') }}</a-button>
       <a-button type="primary" danger @click="onConfirm">
-        我已知晓，确定发起（复用上次报告复验深入）
+        {{ translate('ui.m_10d01f1eeddf') }}
       </a-button>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import type { OverlapResult } from '../api/intel'
 
 defineProps<{ open: boolean; data: OverlapResult | null }>()

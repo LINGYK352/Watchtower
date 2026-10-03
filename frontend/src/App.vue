@@ -1,5 +1,5 @@
 <template>
-  <a-config-provider :theme="antdTheme">
+  <a-config-provider :theme="antdTheme" :locale="componentLocale">
     <router-view />
     <ErrorReportModal />
   </a-config-provider>
@@ -10,6 +10,7 @@ import { computed } from 'vue'
 import { theme } from 'ant-design-vue'
 import { useTheme } from './composables/useTheme'
 import ErrorReportModal from './components/ErrorReportModal.vue'
+import { componentLocale } from './i18n'
 
 const { isDark } = useTheme()
 

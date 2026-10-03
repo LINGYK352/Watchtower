@@ -1,25 +1,25 @@
 <template>
-  <PageContainer title="攻击链情报" kicker="Attack Chains"
-    description="渗透打通的利用链:一环扣一环串成的攻击路径。孤立低危串成链危害拉满,支持跨会话延续。">
-    <template #extra><a-button @click="loadAll">刷新</a-button></template>
+  <PageContainer :title="translate('ui.m_c14a89bcd889')" kicker="Attack Chains"
+    :description="translate('ui.m_513bc8798f81')">
+    <template #extra><a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button></template>
 
     <a-row :gutter="12" style="margin-bottom:16px">
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="攻击链总数" :value="stat.total" :value-style="{ color: '#1677ff' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="跨会话链" :value="stat.cross_session" :value-style="{ color: '#722ed1' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="严重/高危链" :value="(stat.by_severity.critical || 0) + (stat.by_severity.high || 0)" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="中危链" :value="stat.by_severity.medium || 0" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_701b56ace515')" :value="stat.total" :value-style="{ color: '#1677ff' }" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_b1665f71ff5a')" :value="stat.cross_session" :value-style="{ color: '#722ed1' }" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_87b83957c31b')" :value="(stat.by_severity.critical || 0) + (stat.by_severity.high || 0)" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f9a465a5dc89')" :value="stat.by_severity.medium || 0" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
     </a-row>
 
     <SearchBar :model="query" @search="reload" @reset="onReset">
-      <a-form-item label="单位"><a-input v-model:value="query.unit" allow-clear placeholder="单位名" style="width:180px" /></a-form-item>
-      <a-form-item label="状态">
+      <a-form-item :label="translate('ui.m_80b19d68b149')"><a-input v-model:value="query.unit" allow-clear :placeholder="translate('ui.m_702aab59cae9')" style="width:180px" /></a-form-item>
+      <a-form-item :label="translate('ui.m_6320b4a8722a')">
         <a-select v-model:value="query.status" style="width:130px" :options="statusOptions" />
       </a-form-item>
     </SearchBar>
 
     <div style="margin-bottom:8px">
-      <a-popconfirm :title="`确认删除选中的 ${selectedKeys.length} 条攻击链？`" :disabled="!selectedKeys.length" @confirm="batchDelete">
-        <a-button danger :disabled="!selectedKeys.length">批量删除{{ selectedKeys.length ? `(${selectedKeys.length})` : '' }}</a-button>
+      <a-popconfirm :title="translate('ui.m_e7fb57eb7037', { p0: (selectedKeys.length) })" :disabled="!selectedKeys.length" @confirm="batchDelete">
+        <a-button danger :disabled="!selectedKeys.length">{{ translate('ui.m_ddae7a0fc554') }}{{ selectedKeys.length ? `(${selectedKeys.length})` : '' }}</a-button>
       </a-popconfirm>
     </div>
 
@@ -29,7 +29,7 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'title'">
           <a class="chain-title" :title="record.title" @click="showDetail(record)">{{ record.title }}</a>
-          <a-tag v-if="record.cross_session" color="purple" style="margin-left:6px">跨会话</a-tag>
+          <a-tag v-if="record.cross_session" color="purple" style="margin-left:6px">{{ translate('ui.m_385ea2980e24') }}</a-tag>
         </template>
         <template v-else-if="column.key === 'step_count'">
           <a-badge :count="record.step_count" :number-style="{ backgroundColor: '#1677ff' }" />
@@ -38,29 +38,29 @@
           <a-tag :color="sevColor(record.max_severity)">{{ sevLabel(record.max_severity) }}</a-tag>
         </template>
         <template v-else-if="column.key === 'status'">
-          <a-tag :color="record.status === 'done' ? 'green' : 'blue'">{{ record.status === 'done' ? '已完成' : '构建中' }}</a-tag>
+          <a-tag :color="record.status === 'done' ? 'green' : 'blue'">{{ record.status === 'done' ? translate('ui.m_f28461bb49c8') : translate('ui.m_2be422c43f34') }}</a-tag>
         </template>
         <template v-else-if="column.key === 'outline'">
           <span class="outline">{{ chainOutline(record) }}</span>
         </template>
         <template v-else-if="column.key === 'action'">
           <a-space size="small">
-            <a-button type="link" size="small" @click="showDetail(record)">详情</a-button>
-            <ConfirmAction danger title="确认删除该攻击链？" @confirm="removeOne(record)">删除</ConfirmAction>
+            <a-button type="link" size="small" @click="showDetail(record)">{{ translate('ui.m_979a332955c8') }}</a-button>
+            <ConfirmAction danger :title="translate('ui.m_241a4347c96f')" @confirm="removeOne(record)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
           </a-space>
         </template>
       </template>
     </AppTable>
 
-    <a-drawer v-model:open="detailOpen" :title="cur?.title || '攻击链详情'" width="60%">
+    <a-drawer v-model:open="detailOpen" :title="cur?.title || translate('ui.m_bc8f61662367')" width="60%">
       <a-spin :spinning="detailLoading">
         <a-descriptions :column="2" size="small" bordered style="margin-bottom:16px">
-          <a-descriptions-item label="单位">{{ cur?.unit || '—' }}</a-descriptions-item>
-          <a-descriptions-item label="环节数">{{ cur?.step_count || 0 }}</a-descriptions-item>
-          <a-descriptions-item label="最高危害"><a-tag :color="sevColor(cur?.max_severity)">{{ sevLabel(cur?.max_severity) }}</a-tag></a-descriptions-item>
-          <a-descriptions-item label="状态"><a-tag :color="cur?.status === 'done' ? 'green' : 'blue'">{{ cur?.status === 'done' ? '已完成' : '构建中' }}</a-tag></a-descriptions-item>
-          <a-descriptions-item label="跨会话">{{ cur?.cross_session ? `是（${cur?.sessions?.length || 0} 个会话接力）` : '否' }}</a-descriptions-item>
-          <a-descriptions-item label="更新时间">{{ cur?.update_date || '—' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_80b19d68b149')">{{ cur?.unit || '—' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_7d386b3adbf4')">{{ cur?.step_count || 0 }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_aea0fc420948')"><a-tag :color="sevColor(cur?.max_severity)">{{ sevLabel(cur?.max_severity) }}</a-tag></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_6320b4a8722a')"><a-tag :color="cur?.status === 'done' ? 'green' : 'blue'">{{ cur?.status === 'done' ? translate('ui.m_f28461bb49c8') : translate('ui.m_2be422c43f34') }}</a-tag></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_385ea2980e24')">{{ cur?.cross_session ? translate('ui.m_593216259821', { p0: (cur?.sessions?.length || 0) }) : translate('ui.m_0c70665b6eb6') }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_0a5f9a892960')">{{ cur?.update_date || '—' }}</a-descriptions-item>
         </a-descriptions>
 
         <!-- 图形化链路图（赛博风，对齐控制台内网拓扑）：入口→环节1→…→拿下，节点按危害着色，蛇形折行适应任意环节数 -->
@@ -87,7 +87,7 @@
         <a-timeline class="chain-timeline">
           <a-timeline-item v-for="s in (cur?.steps || [])" :key="s.seq" :color="sevColor(s.severity) === 'default' ? 'blue' : sevColor(s.severity)">
             <div class="step-head" :data-step-seq="s.seq">
-              <b>环节 {{ s.seq }}</b>
+              <b>{{ translate('ui.m_28475230f056') }} {{ s.seq }}</b>
               <a-tag v-if="s.vuln_type" :color="sevColor(s.severity)" style="margin-left:6px">{{ s.vuln_type }}</a-tag>
               <span class="step-at">{{ s.at }}</span>
             </div>
@@ -95,12 +95,12 @@
             <div v-if="s.result" class="step-result">→ {{ s.result }}</div>
             <div v-if="s.target" class="step-target"><CopyText :text="s.target" /></div>
             <div v-if="s.finding_ref || s.clue_ref" class="step-ref">
-              <a-tag v-if="s.finding_ref" color="red">漏洞: {{ s.finding_ref }}</a-tag>
-              <a-tag v-if="s.clue_ref" color="cyan">线索: {{ s.clue_ref }}</a-tag>
+              <a-tag v-if="s.finding_ref" color="red">{{ translate('ui.m_8e059ca84801') }} {{ s.finding_ref }}</a-tag>
+              <a-tag v-if="s.clue_ref" color="cyan">{{ translate('ui.m_909ae33dd968') }} {{ s.clue_ref }}</a-tag>
             </div>
           </a-timeline-item>
         </a-timeline>
-        <a-empty v-if="!cur?.steps?.length" description="无环节" />
+        <a-empty v-if="!cur?.steps?.length" :description="translate('ui.m_ba052efe4258')" />
       </a-spin>
     </a-drawer>
   </PageContainer>
@@ -108,6 +108,8 @@
 
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { onMounted, reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -124,14 +126,14 @@ const selectedKeys = ref<string[]>([])
 const stat = reactive<ChainStat>({ total: 0, cross_session: 0, by_severity: {} })
 const query = reactive({ unit: '', status: '', page: 1, size: 20 })
 
-const statusOptions = [{ label: '全部', value: '' }, { label: '构建中', value: 'building' }, { label: '已完成', value: 'done' }]
+const statusOptions = [{ get label() { return translate('ui.m_5c55a67935af') }, value: '' }, { get label() { return translate('ui.m_2be422c43f34') }, value: 'building' }, { get label() { return translate('ui.m_f28461bb49c8') }, value: 'done' }]
 const columns = [
-  { title: '攻击链', key: 'title' },
-  { title: '环节', key: 'step_count', width: 70 },
-  { title: '最高危害', key: 'max_severity', width: 100 },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '路径概览', key: 'outline' },
-  { title: '操作', key: 'action', width: 120 }
+  { get title() { return translate('ui.m_31f1f49cdb27') }, key: 'title' },
+  { get title() { return translate('ui.m_28475230f056') }, key: 'step_count', width: 70 },
+  { get title() { return translate('ui.m_aea0fc420948') }, key: 'max_severity', width: 100 },
+  { get title() { return translate('ui.m_6320b4a8722a') }, key: 'status', width: 90 },
+  { get title() { return translate('ui.m_a1038bbab8b4') }, key: 'outline' },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 120 }
 ]
 
 const detailOpen = ref(false)
@@ -174,14 +176,14 @@ const graphNodes = computed(() => {
   const steps = cur.value?.steps || []
   if (!steps.length) return [] as Array<{ key: string; seq: number; x: number; y: number; sev: string; label: string; sub: string; subFull: string }>
   const items: Array<{ seq: number; sev: string; label: string; sub: string; subFull: string }> = []
-  const entryFull = cur.value?.unit || '目标'
-  items.push({ seq: 0, sev: 'entry', label: '🎯 入口', sub: _clip(entryFull), subFull: entryFull })
+  const entryFull = cur.value?.unit || translate('ui.m_57060c88a36b')
+  items.push({ seq: 0, sev: 'entry', get label() { return translate('ui.m_1fecdc2933e3') }, sub: _clip(entryFull), subFull: entryFull })
   for (const s of steps) {
     const sf = (s.vuln_type || s.action || '') || '—'
-    items.push({ seq: s.seq, sev: normSev(s.severity), label: '环节 ' + s.seq,
+    items.push({ seq: s.seq, sev: normSev(s.severity), label: translate('ui.m_28475230f056') + s.seq,
       sub: _clip(sf), subFull: sf })
   }
-  if (cur.value?.status === 'done') { const df = sevLabel(cur.value?.max_severity); items.push({ seq: -1, sev: cur.value?.max_severity ? normSev(cur.value.max_severity) : 'high', label: '✅ 拿下', sub: _clip(df), subFull: df }) }
+  if (cur.value?.status === 'done') { const df = sevLabel(cur.value?.max_severity); items.push({ seq: -1, sev: cur.value?.max_severity ? normSev(cur.value.max_severity) : 'high', get label() { return translate('ui.m_d1c26cea235b') }, sub: _clip(df), subFull: df }) }
   return items.map((it, i) => {
     const row = Math.floor(i / _PER_ROW)
     const colRaw = i % _PER_ROW
@@ -242,7 +244,7 @@ async function batchDelete() {
   if (!selectedKeys.value.length) return
   try {
     const res = await intelApi.chainDelete(selectedKeys.value)
-    message.success(`已删除 ${res.deleted ?? selectedKeys.value.length} 条`)
+    message.success(translate('ui.m_925464646d44', { p0: (res.deleted ?? selectedKeys.value.length) }))
     loadAll()
   } catch (e) { message.error((e as Error).message) }
 }
@@ -256,7 +258,7 @@ async function showDetail(r: AttackChain) {
   try { cur.value = await intelApi.chainDetail(r._id) } catch (e) { message.error((e as Error).message) } finally { detailLoading.value = false }
 }
 async function removeOne(r: AttackChain) {
-  try { await intelApi.chainDelete(r._id); message.success('已删除'); loadAll() } catch (e) { message.error((e as Error).message) }
+  try { await intelApi.chainDelete(r._id); message.success(translate('ui.m_077a6d37719a')); loadAll() } catch (e) { message.error((e as Error).message) }
 }
 
 onMounted(loadAll)

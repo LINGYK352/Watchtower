@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n'
 import { request, getToken } from './request'
 
 const base = '/api/probe'
@@ -61,7 +62,7 @@ export const probeApi = {
     const resp = await fetch(`${base}/download/${probeId}`, {
       headers: { 'Token': getToken() },
     })
-    if (!resp.ok) throw new Error('下载失败')
+    if (!resp.ok) throw new Error(translate('ui.m_8a03e35ad323'))
     const blob = await resp.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -94,7 +95,7 @@ export const probeApi = {
     const resp = await fetch(`${base}/agent/download/${agentId}`, {
       headers: { 'Token': getToken() },
     })
-    if (!resp.ok) throw new Error('下载失败')
+    if (!resp.ok) throw new Error(translate('ui.m_8a03e35ad323'))
     const blob = await resp.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

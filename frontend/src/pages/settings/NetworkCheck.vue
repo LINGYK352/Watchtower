@@ -1,115 +1,115 @@
 <template>
-  <PageContainer title="网络检测" kicker="Network" description="检测服务器网络连通性，配置 DNS 服务器。">
-    <a-card title="DNS 服务器" :bordered="false" style="margin-bottom: 16px">
+  <PageContainer :title="translate('ui.m_e67f6bb5fb9e')" kicker="Network" :description="translate('ui.m_1d67b7883d04')">
+    <a-card :title="translate('ui.m_0b3ee5cb9232')" :bordered="false" style="margin-bottom: 16px">
       <template #extra>
         <a-space>
-          <span v-if="dirty" style="color:#d48806;font-size:12px;font-weight:600">● 有未保存修改</span>
-          <a-button type="primary" size="small" :loading="dnsSaving" @click="saveDns">保存自定义</a-button>
+          <span v-if="dirty" style="color:#d48806;font-size:12px;font-weight:600">{{ translate('ui.m_e08bdc3722e2') }}</span>
+          <a-button type="primary" size="small" :loading="dnsSaving" @click="saveDns">{{ translate('ui.m_5e6d3759fecc') }}</a-button>
         </a-space>
       </template>
       <!-- 自定义 DNS：用户可加/改/删（平台自身 Ping/解析优先用）——列表式 -->
       <div class="dns-block">
-        <div class="dns-h">自定义 DNS <span class="muted">（可增删改，平台 Ping/域名解析优先使用）</span></div>
+        <div class="dns-h">{{ translate('ui.m_4c7428aca8c3') }} <span class="muted">{{ translate('ui.m_aff47c0eecac') }}</span></div>
         <div v-for="(d, i) in customDns" :key="i" class="dns-row">
-          <a-input v-model:value="customDns[i]" placeholder="如 8.8.8.8" style="width: 260px" size="small" />
-          <a-button type="text" danger size="small" @click="customDns.splice(i, 1)">删除</a-button>
+          <a-input v-model:value="customDns[i]" :placeholder="translate('ui.m_8c79d25a337d')" style="width: 260px" size="small" />
+          <a-button type="text" danger size="small" @click="customDns.splice(i, 1)">{{ translate('ui.m_2f9daa828907') }}</a-button>
         </div>
-        <a-button size="small" type="dashed" style="margin-top:6px" @click="customDns.push('')">+ 添加 DNS</a-button>
-        <div v-if="!customDns.length" class="muted" style="margin-top:4px">未配置自定义 DNS，将依次尝试系统 DNS → 内置 DNS 表。</div>
+        <a-button size="small" type="dashed" style="margin-top:6px" @click="customDns.push('')">{{ translate('ui.m_e670c5ede9d4') }}</a-button>
+        <div v-if="!customDns.length" class="muted" style="margin-top:4px">{{ translate('ui.m_965e671d1cdd') }}</div>
       </div>
       <!-- 内置 DNS 表：dnsserver.txt（侦察 dnsx/massdns 用 + 探活轮换），只读，折叠 -->
       <a-collapse ghost style="margin-top:10px">
         <a-collapse-panel key="builtin">
           <template #header>
-            <span class="dns-h">内置 DNS 解析器表 <span class="muted">（{{ builtinDns.length }} 个 · 侦察工具用 · 自动探活轮换 · 只读）</span></span>
+            <span class="dns-h">{{ translate('ui.m_4d77113a8bab') }} <span class="muted">（{{ builtinDns.length }} {{ translate('ui.m_aa79bc634f9b') }}</span></span>
           </template>
           <div class="dns-builtin-list">
             <a-tag v-for="s in builtinDns" :key="s" color="blue">{{ s }}</a-tag>
-            <span v-if="!builtinDns.length" class="muted">（未加载）</span>
+            <span v-if="!builtinDns.length" class="muted">{{ translate('ui.m_3308b1fcfb11') }}</span>
           </div>
           <div class="muted" style="margin-top:6px;font-size:12px">
-            这是随代码分发的内置解析器表，侦察扫描时自动探测可用性、剔除不通的、轮换使用。如需修改请走版本更新（不在此编辑）。
+            {{ translate('ui.m_f8f0d0d53f3a') }}
           </div>
         </a-collapse-panel>
       </a-collapse>
     </a-card>
 
     <!-- 网络质量体检：一键诊断"网络为什么差"（丢包抖动/出网稳定/DNS健康/依赖可达/代理出口）-->
-    <a-card title="网络质量体检" :bordered="false" style="margin-bottom: 16px">
+    <a-card :title="translate('ui.m_938a81b3dbab')" :bordered="false" style="margin-bottom: 16px">
       <template #extra>
-        <a-button type="primary" size="small" :loading="qLoading" @click="runQuality">一键体检</a-button>
+        <a-button type="primary" size="small" :loading="qLoading" @click="runQuality">{{ translate('ui.m_3be9381d0914') }}</a-button>
       </template>
       <div style="margin-bottom:12px;color:#888;font-size:12px">
-        诊断宿主机网络环境：链路丢包/抖动、国内外出网稳定性、DNS 健康、平台关键依赖(LLM/更新源/情报源)可达性、代理出口质量。
-        <span style="margin-left:8px">系统每 30 分钟自动监测一次。</span>
-        <span v-if="checkedAt" style="color:#52c41a">最近检测：{{ checkedAt }}</span>
+        {{ translate('ui.m_8fa4abe061b4') }}
+        <span style="margin-left:8px">{{ translate('ui.m_acef7aaf1009') }}</span>
+        <span v-if="checkedAt" style="color:#52c41a">{{ translate('ui.m_755b69eb6bc3') }}{{ checkedAt }}</span>
       </div>
-      <a-empty v-if="!q && !qLoading" description="点击「一键体检」开始全面检测（约需 20~40 秒）" />
-      <a-spin v-if="qLoading" tip="正在体检，请稍候…" style="display:block;padding:24px 0" />
+      <a-empty v-if="!q && !qLoading" :description="translate('ui.m_1a89874c57a2')" />
+      <a-spin v-if="qLoading" :tip="translate('ui.m_62d28b984e89')" style="display:block;padding:24px 0" />
       <!-- 总评横幅：大号评级 + 总分 + 一句诊断 -->
       <div v-if="q && assess" class="q-overall" :class="'ov-' + assess.level">
         <div class="ov-badge">
           <div class="ov-level">{{ assess.level_text }}</div>
-          <div class="ov-score">{{ assess.score }}<span>分</span></div>
+          <div class="ov-score">{{ assess.score }}<span>{{ translate('ui.m_b6a993c256ef') }}</span></div>
         </div>
         <div class="ov-body">
-          <div class="ov-title">网络环境总评</div>
+          <div class="ov-title">{{ translate('ui.m_9f940632f7de') }}</div>
           <div class="ov-summary">{{ assess.summary }}</div>
         </div>
       </div>
       <!-- 5项详情默认展开：网络体检是"专程来看细节"的页面，进页即见全部（链路/出网/DNS/依赖/代理出口）；保留可折叠壳，想收起仍可点。 -->
       <a-collapse v-if="q" ghost :default-active-key="['detail']">
         <a-collapse-panel key="detail">
-          <template #header><span style="font-weight:600">体检详情（链路 / 出网 / DNS / 依赖 / 代理出口）</span></template>
+          <template #header><span style="font-weight:600">{{ translate('ui.m_7200e591a246') }}</span></template>
       <div class="q-wrap">
         <!-- ① 链路质量 -->
-        <div class="q-sec"><span class="q-h">① 链路质量（{{ qHost }}）</span>
+        <div class="q-sec"><span class="q-h">{{ translate('ui.m_047830b917f5') }}{{ qHost }}）</span>
           <a-tag v-if="q.ping" :color="gradeColor(q.ping.grade)">{{ gradeText(q.ping.grade) }}</a-tag>
-          <span v-if="q.ping && !q.ping.error" class="q-metric">丢包 {{ q.ping.loss_pct }}% · 延迟 {{ q.ping.avg_ms }}ms(min {{ q.ping.min_ms }}/max {{ q.ping.max_ms }}) · 抖动 {{ q.ping.jitter_ms }}ms</span>
+          <span v-if="q.ping && !q.ping.error" class="q-metric">{{ translate('ui.m_b3d0b57da702') }} {{ q.ping.loss_pct }}{{ translate('ui.m_f006e08a1f70') }} {{ q.ping.avg_ms }}ms(min {{ q.ping.min_ms }}/max {{ q.ping.max_ms }}{{ translate('ui.m_82b62162a091') }} {{ q.ping.jitter_ms }}ms</span>
           <span v-if="q.ping && q.ping.error" class="q-err">{{ q.ping.error }}</span>
         </div>
         <!-- ② 出网稳定性 -->
-        <div class="q-sec"><span class="q-h">② 出网稳定性</span>
+        <div class="q-sec"><span class="q-h">{{ translate('ui.m_48246869a516') }}</span>
           <div v-for="t in (q.stability && q.stability.targets) || []" :key="t.url" class="q-row">
             <a-tag :color="gradeColor(t.grade)">{{ gradeText(t.grade) }}</a-tag>
             <span class="q-name">{{ t.name }}</span>
-            <span class="q-metric">成功率 {{ t.success_rate }}%（{{ t.success }}/{{ t.rounds }}）· 均延迟 {{ t.avg_ms }}ms</span>
+            <span class="q-metric">{{ translate('ui.m_47d2ca135212') }} {{ t.success_rate }}%（{{ t.success }}/{{ t.rounds }}{{ translate('ui.m_11a0193f4c98') }} {{ t.avg_ms }}ms</span>
           </div>
         </div>
         <!-- ③ DNS 健康 -->
-        <div class="q-sec"><span class="q-h">③ DNS 健康</span>
-          <a-tag v-if="q.dns" :color="gradeColor(q.dns.grade)">{{ q.dns.ok_count }}/{{ q.dns.total }} 可用</a-tag>
+        <div class="q-sec"><span class="q-h">{{ translate('ui.m_20e4f5a18eb8') }}</span>
+          <a-tag v-if="q.dns" :color="gradeColor(q.dns.grade)">{{ q.dns.ok_count }}/{{ q.dns.total }} {{ translate('ui.m_4d99c976beb8') }}</a-tag>
           <div v-for="d in (q.dns && q.dns.servers) || []" :key="d.server" class="q-row">
             <a-tag :color="d.ok ? 'green' : 'red'">{{ d.ok ? '✓' : '✗' }}</a-tag>
             <span class="q-name">{{ d.server }}</span>
-            <span class="q-metric">{{ d.ok ? (d.ip + ' · ' + d.ms + 'ms') : '解析失败/超时' }}</span>
+            <span class="q-metric">{{ d.ok ? (d.ip + ' · ' + d.ms + 'ms') : translate('ui.m_b3ff4d8c13b5') }}</span>
           </div>
         </div>
         <!-- ④ 关键依赖体检（通/慢/断三态：慢=连得上但延迟高，能用但体验差，会拉低总评） -->
-        <div class="q-sec"><span class="q-h">④ 平台关键依赖</span>
-          <a-tag v-if="q.deps" :color="q.deps.down_count ? 'red' : (q.deps.slow_count ? 'gold' : 'green')">{{ q.deps.total - q.deps.down_count }}/{{ q.deps.total }} 可达<template v-if="q.deps.slow_count">（{{ q.deps.slow_count }} 慢）</template></a-tag>
+        <div class="q-sec"><span class="q-h">{{ translate('ui.m_a787b1391558') }}</span>
+          <a-tag v-if="q.deps" :color="q.deps.down_count ? 'red' : (q.deps.slow_count ? 'gold' : 'green')">{{ q.deps.total - q.deps.down_count }}/{{ q.deps.total }} {{ translate('ui.m_1e3106255275') }}<template v-if="q.deps.slow_count">（{{ q.deps.slow_count }} {{ translate('ui.m_08cc297308b5') }}</template></a-tag>
           <div v-for="d in (q.deps && q.deps.deps) || []" :key="d.name" class="q-row">
-            <a-tag :color="!d.reachable ? 'red' : (d.slow ? 'gold' : 'green')">{{ !d.reachable ? '断' : (d.slow ? '慢' : '通') }}</a-tag>
+            <a-tag :color="!d.reachable ? 'red' : (d.slow ? 'gold' : 'green')">{{ !d.reachable ? translate('ui.m_df9ac46e7b5a') : (d.slow ? translate('ui.m_42269e2627f4') : translate('ui.m_fc2d4ab36f05')) }}</a-tag>
             <span class="q-name">{{ d.name }}</span>
-            <span class="q-metric">{{ d.reachable ? ('HTTP ' + d.status + ' · ' + d.ms + 'ms' + (d.slow ? '（延迟偏高）' : '')) : ('不可达 ' + (d.err || '')) }}</span>
+            <span class="q-metric">{{ d.reachable ? ('HTTP ' + d.status + ' · ' + d.ms + 'ms' + (d.slow ? translate('ui.m_84372038ee66') : '')) : (translate('ui.m_8d7c03019f1d') + (d.err || '')) }}</span>
           </div>
         </div>
         <!-- ⑤ 代理出口质量 -->
-        <div class="q-sec"><span class="q-h">⑤ 代理出口</span>
+        <div class="q-sec"><span class="q-h">{{ translate('ui.m_bf1300d74acf') }}</span>
           <a-tag v-if="q.proxy" :color="gradeColor(q.proxy.grade)">{{ gradeText(q.proxy.grade) }}</a-tag>
-          <span v-if="q.proxy" class="q-metric">{{ q.proxy.note }}<template v-if="q.proxy.proxy_ip">（代理出口 {{ q.proxy.proxy_ip }} / 直连 {{ q.proxy.direct_ip }}）</template></span>
+          <span v-if="q.proxy" class="q-metric">{{ q.proxy.note }}<template v-if="q.proxy.proxy_ip">{{ translate('ui.m_ddc199056db2') }} {{ q.proxy.proxy_ip }} {{ translate('ui.m_17a855adc7c7') }} {{ q.proxy.direct_ip }}）</template></span>
         </div>
       </div>
         </a-collapse-panel>
       </a-collapse>
     </a-card>
 
-    <a-card title="Ping 检测" :bordered="false">
+    <a-card :title="translate('ui.m_df59d202685f')" :bordered="false">
       <a-form layout="inline" style="margin-bottom: 16px">
-        <a-form-item label="目标主机">
+        <a-form-item :label="translate('ui.m_252e26071ac9')">
           <a-input v-model:value="host" placeholder="baidu.com" style="width: 260px" @pressEnter="doPing" />
         </a-form-item>
-        <a-form-item label="次数">
+        <a-form-item :label="translate('ui.m_05c518eb94a0')">
           <a-input-number v-model:value="count" :min="1" :max="20" style="width: 80px" />
         </a-form-item>
         <a-form-item>
@@ -117,13 +117,15 @@
         </a-form-item>
       </a-form>
       <div class="terminal-box">
-        <pre class="terminal-output">{{ output || '点击 Ping 开始检测...' }}</pre>
+        <pre class="terminal-output">{{ output || translate('ui.m_40eba6a98935') }}</pre>
       </div>
     </a-card>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
@@ -137,7 +139,7 @@ const dnsSaving = ref(false)
 
 // 未保存提示（问题4）：自定义 DNS 改了没点保存就切走会丢失（只跟踪 customDns，builtinDns 只读）。
 const { dirty, markSaved } = useUnsavedGuard(() => JSON.stringify(customDns.value),
-  { content: '自定义 DNS 尚未保存，直接离开将丢失这些修改。确定要离开吗？' })
+  { get content() { return translate('ui.m_92dc07c7571d') } })
 
 async function loadDns() {
   try {
@@ -158,7 +160,7 @@ async function saveDns() {
     await request('/api/network/dns', { method: 'POST', body: JSON.stringify({ servers }) })
     customDns.value = servers   // 回填去空后的
     markSaved()                 // 保存成功后重置基线
-    message.success('自定义 DNS 已保存')
+    message.success(translate('ui.m_d343236d2b74'))
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
   } finally {
@@ -173,7 +175,7 @@ const assess = ref<Record<string, any> | null>(null)
 const checkedAt = ref('')          // 最近检测时间（缓存结果或本次体检）
 const qHost = 'scanme.nmap.org'
 function gradeColor(g: string) { return ({ good: 'green', fair: 'gold', poor: 'orange', dead: 'red', na: 'default' } as Record<string, string>)[g] || 'default' }
-function gradeText(g: string) { return ({ good: '良好', fair: '一般', poor: '较差', dead: '不通', na: '未启用' } as Record<string, string>)[g] || g }
+function gradeText(g: string) { return ({ get good() { return translate('ui.m_cfea0dce5c5d') }, get fair() { return translate('ui.m_91e25f4ddc6f') }, get poor() { return translate('ui.m_895dcef3f1bd') }, get dead() { return translate('ui.m_7badfabc6ef1') }, get na() { return translate('ui.m_f95ea7f4c063') } } as Record<string, string>)[g] || g }
 // 进页读最新缓存结果（定时监测产出）——无需每次进页都现跑
 async function loadLatestQuality() {
   try {
@@ -217,7 +219,7 @@ const loading = ref(false)
 const output = ref('')
 
 async function doPing() {
-  if (!host.value.trim()) return message.warning('请输入目标主机')
+  if (!host.value.trim()) return message.warning(translate('ui.m_41408748ac10'))
   loading.value = true
   output.value = `PING ${host.value} ...\n`
   try {

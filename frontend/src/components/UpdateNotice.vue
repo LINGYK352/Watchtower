@@ -2,14 +2,14 @@
   <a-modal :open="showModal" :closable="true" :maskClosable="false" :footer="null" centered width="500px" @cancel="dismiss">
     <div class="update-wrap">
       <div class="update-header">
-        <h2>发现新版本</h2>
+        <h2>{{ translate('ui.m_ac217e4d1ca4') }}</h2>
         <a-tag color="blue" class="update-ver">{{ latestVersion }}</a-tag>
       </div>
-      <a-tag color="green" class="update-badge">热更新 · 不影响现有业务</a-tag>
+      <a-tag color="green" class="update-badge">{{ translate('ui.m_432bb30c280d') }}</a-tag>
 
       <div class="update-changelog" v-if="changelogs.length">
         <div class="changelog-title">
-          将直接升级到最新版 {{ latestVersion }}<span v-if="changelogs.length > 1">（一次到位，涵盖以下 {{ changelogs.length }} 个版本的更新内容）</span>
+          {{ translate('ui.m_00d640b1490e') }} {{ latestVersion }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
         </div>
         <div class="changelog-item" v-for="item in changelogs" :key="item.ver">
           <span class="changelog-ver">{{ item.ver }}</span>
@@ -25,22 +25,24 @@
 
       <!-- Actions -->
       <div class="update-actions" v-if="!updating && !updateDone && !updateError">
-        <a-button type="primary" block size="large" @click="startUpdate">立即更新</a-button>
-        <a-button block size="large" class="btn-later" @click="dismiss">稍后提醒</a-button>
+        <a-button type="primary" block size="large" @click="startUpdate">{{ translate('ui.m_12487befb4ba') }}</a-button>
+        <a-button block size="large" class="btn-later" @click="dismiss">{{ translate('ui.m_879d8543c3f3') }}</a-button>
       </div>
       <div v-if="updateDone" class="update-done">
-        <p style="color:#3fb950;font-weight:600;margin-bottom:12px">更新完成</p>
-        <a-button type="primary" block @click="reload">刷新页面</a-button>
+        <p style="color:#3fb950;font-weight:600;margin-bottom:12px">{{ translate('ui.m_d5e461beff13') }}</p>
+        <a-button type="primary" block @click="reload">{{ translate('ui.m_9366e1784dec') }}</a-button>
       </div>
       <div v-if="updateError" class="update-error">
-        <p style="color:#f85149;margin-bottom:8px">更新失败：{{ updateError }}</p>
-        <a-button block @click="resetState">重试</a-button>
+        <p style="color:#f85149;margin-bottom:8px">{{ translate('ui.m_4f2e8a8d4cb3') }}{{ updateError }}</p>
+        <a-button block @click="resetState">{{ translate('ui.m_b8784c8dd563') }}</a-button>
       </div>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { APP_VERSION } from '../config/brand'
 import { request } from '../api/request'
@@ -66,7 +68,7 @@ const progressMsg = computed(() => {
   const msg = progress.value.msg
   if (msg) { prevMsg.value = msg; return msg }
   // msg 为空时不回退到"准备中"，保持上一条有效消息
-  return prevMsg.value || '准备中...'
+  return prevMsg.value || translate('ui.m_c68d88d6f41e')
 })
 const prevMsg = ref('')
 

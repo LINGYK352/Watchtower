@@ -1,21 +1,22 @@
 <template>
-  <PageContainer title="指纹管理" kicker="Fingerprint" description="自定义 Web 指纹规则库（开发中）。">
-    <a-result status="info" title="指纹管理 · 功能开发中">
+  <PageContainer :title="translate('ui.m_3b451ca9ab06')" kicker="Fingerprint" :description="translate('ui.m_03a1449acf0d')">
+    <a-result status="info" :title="translate('ui.m_007dc6d91cc2')">
       <template #subTitle>
         <div style="max-width: 640px; margin: 0 auto; text-align: left; line-height: 1.9">
-          手动指纹规则库的<b>识别接入</b>正在开发中（规则暂不参与扫描识别），本功能已冻结。<br />
-          瞭望塔扫描<b>自主学习</b>的指纹（httpx 识别 + AI 渗透确认纠错后沉淀到系统身份）已在运行，
-          可在 <a @click="goIntel">情报中心 → 系统知识</a> 查看、检索、按指纹反查资产。
+          {{ translate('ui.m_27cda90f95fe') }}<b>{{ translate('ui.m_f046f2772e8d') }}</b>{{ translate('ui.m_3ed92a375c8b') }}<br />
+          {{ translate('ui.m_c4462b00c2a1') }}<b>{{ translate('ui.m_b352b5d478e3') }}</b>{{ translate('ui.m_d329e1067585') }} <a @click="goIntel">{{ translate('ui.m_28d436380de4') }}</a> {{ translate('ui.m_3ecd6b4bf5ff') }}
         </div>
       </template>
       <template #extra>
-        <a-button type="primary" @click="goIntel">前往情报中心</a-button>
+        <a-button type="primary" @click="goIntel">{{ translate('ui.m_c6cea77a2359') }}</a-button>
       </template>
     </a-result>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { useRouter } from 'vue-router'
 import PageContainer from '../../layouts/PageContainer.vue'
 

@@ -5,11 +5,11 @@
     </SearchBar>
     <a-card :bordered="false">
       <a-space style="margin-bottom: 12px">
-        <a-button @click="ctx.exportCurrent">导出</a-button>
-        <a-button v-if="ctx.total.value > 0 && !allSelected" @click="selectAll">全选全部 ({{ ctx.total.value }})</a-button>
-        <a-button v-if="allSelected" @click="ctx.selectedRowKeys.value = []">取消全选</a-button>
-        <ConfirmAction v-if="ctx.selectedRowKeys.value.length" danger type="primary" title="确认删除选中资产？" @confirm="ctx.removeSelected">
-          删除选中 ({{ ctx.selectedRowKeys.value.length }})
+        <a-button @click="ctx.exportCurrent">{{ translate('ui.m_76420433f22d') }}</a-button>
+        <a-button v-if="ctx.total.value > 0 && !allSelected" @click="selectAll">{{ translate('ui.m_fb581b30118e') }}{{ ctx.total.value }})</a-button>
+        <a-button v-if="allSelected" @click="ctx.selectedRowKeys.value = []">{{ translate('ui.m_f4d4bae588c4') }}</a-button>
+        <ConfirmAction v-if="ctx.selectedRowKeys.value.length" danger type="primary" :title="translate('ui.m_af96f361fe7b')" @confirm="ctx.removeSelected">
+          {{ translate('ui.m_b2a2890c8d6e') }}{{ ctx.selectedRowKeys.value.length }})
         </ConfirmAction>
         <slot name="toolbar" />
       </a-space>
@@ -33,6 +33,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed } from 'vue'
 import { message } from 'ant-design-vue'
 import SearchBar from '../../components/SearchBar.vue'
@@ -53,9 +55,9 @@ async function selectAll() {
     const data = await collectionApi.list(props.ctx.namespace, query)
     const allIds = (data.items || []).map((r: any) => String(r._id))
     props.ctx.selectedRowKeys.value = allIds
-    message.success(`已全选 ${allIds.length} 条`)
+    message.success(translate('ui.m_98b8a4c3f7c2', { p0: (allIds.length) }))
   } catch (e) {
-    message.error('全选失败: ' + (e instanceof Error ? e.message : String(e)))
+    message.error(translate('ui.m_e2d6fd6c718a') + (e instanceof Error ? e.message : String(e)))
   }
 }
 </script>

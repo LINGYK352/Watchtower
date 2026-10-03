@@ -1,28 +1,28 @@
 <template>
-  <PageContainer title="PoC 信息" kicker="PoC" description="PoC 插件库，可从源同步或清空。">
+  <PageContainer :title="translate('ui.m_45f84bbf818e')" kicker="PoC" :description="translate('ui.m_da020cd5ec55')">
     <template #extra>
       <a-space>
         <a-upload :before-upload="beforeImport" :show-upload-list="false" accept=".py">
-          <a-button type="primary" :loading="importing">导入 POC</a-button>
+          <a-button type="primary" :loading="importing">{{ translate('ui.m_791685dda5ef') }}</a-button>
         </a-upload>
         <a-upload :before-upload="beforeBatch" :show-upload-list="false" accept=".zip">
-          <a-button :loading="batching">批量导入(zip)</a-button>
+          <a-button :loading="batching">{{ translate('ui.m_d3d5271575f3') }}</a-button>
         </a-upload>
-        <a-button @click="downloadTemplate">下载模板</a-button>
-        <ConfirmAction type="default" title="确认从源同步内置 PoC？" @confirm="sync">同步 PoC</ConfirmAction>
-        <ConfirmAction danger type="default" title="确认清空全部 PoC？" @confirm="clearAll">清空</ConfirmAction>
+        <a-button @click="downloadTemplate">{{ translate('ui.m_4d920f6e3b9f') }}</a-button>
+        <ConfirmAction type="default" :title="translate('ui.m_2224d13a3181')" @confirm="sync">{{ translate('ui.m_415cf936e93c') }}</ConfirmAction>
+        <ConfirmAction danger type="default" :title="translate('ui.m_19b4ffabad43')" @confirm="clearAll">{{ translate('ui.m_1ef3de06b32e') }}</ConfirmAction>
       </a-space>
     </template>
     <a-alert type="warning" show-icon style="margin-bottom: 12px"
-      message="导入的 POC 为 .py 脚本：npoc 结构(class Plugin(BasePlugin))自动进内核扫描执行，其他脚本供 AI 渗透 query_poc 检索/read_poc 读取。POC 会被真实执行，仅导入可信来源。" />
+      :message="translate('ui.m_1d714761d9ec')" />
     <a-space style="margin-bottom: 12px" v-if="selectedRowKeys.length">
-      <ConfirmAction danger type="primary" title="确认删除选中的导入 POC(含物理文件)？" @confirm="removeSelected">删除选中 ({{ selectedRowKeys.length }})</ConfirmAction>
+      <ConfirmAction danger type="primary" :title="translate('ui.m_399d04574666')" @confirm="removeSelected">{{ translate('ui.m_b2a2890c8d6e') }}{{ selectedRowKeys.length }})</ConfirmAction>
     </a-space>
     <SearchBar :model="query" @search="load" @reset="reset">
-      <a-form-item label="插件名"><a-input v-model:value="query.plugin_name" allow-clear placeholder="plugin id" /></a-form-item>
-      <a-form-item label="应用名"><a-input v-model:value="query.app_name" allow-clear placeholder="应用名" /></a-form-item>
-      <a-form-item label="漏洞名"><a-input v-model:value="query.vul_name" allow-clear placeholder="漏洞名称" /></a-form-item>
-      <a-form-item label="类别"><a-select v-model:value="query.plugin_type" allow-clear style="width: 120px" :options="typeOptions" /></a-form-item>
+      <a-form-item :label="translate('ui.m_86a03bd28b9c')"><a-input v-model:value="query.plugin_name" allow-clear placeholder="plugin id" /></a-form-item>
+      <a-form-item :label="translate('ui.m_c131777b2f34')"><a-input v-model:value="query.app_name" allow-clear :placeholder="translate('ui.m_c131777b2f34')" /></a-form-item>
+      <a-form-item :label="translate('ui.m_cb1049ef7a06')"><a-input v-model:value="query.vul_name" allow-clear :placeholder="translate('ui.m_f9d4d157ae40')" /></a-form-item>
+      <a-form-item :label="translate('ui.m_0d12cbd6562b')"><a-select v-model:value="query.plugin_type" allow-clear style="width: 120px" :options="typeOptions" /></a-form-item>
     </SearchBar>
     <a-card :bordered="false">
       <AppTable :columns="columns" :data="items" :loading="loading" :page="query.page" :size="query.size" :total="total" @change="changePage"
@@ -31,10 +31,10 @@
           <template v-if="column.key === 'plugin_name'"><CopyText :text="String(record.plugin_name || '')" /></template>
           <template v-else-if="column.key === 'plugin_type'"><a-tag :color="record.plugin_type === 'brute' ? 'orange' : 'blue'">{{ record.plugin_type || '-' }}</a-tag></template>
           <template v-else-if="column.key === 'source'">
-            <a-tag :color="record.source === 'imported' ? 'green' : 'default'">{{ record.source === 'imported' ? '导入' : '内置' }}</a-tag>
+            <a-tag :color="record.source === 'imported' ? 'green' : 'default'">{{ record.source === 'imported' ? translate('ui.m_576d81bb0631') : translate('ui.m_95e35aabd9a9') }}</a-tag>
             <a-tag v-if="record.poc_format" :color="record.poc_format === 'npoc' ? 'blue' : 'purple'" style="margin-left:4px">{{ record.poc_format }}</a-tag>
           </template>
-          <template v-else-if="column.key === 'action'"><a-button type="link" size="small" @click="showDetail(record)">详情</a-button></template>
+          <template v-else-if="column.key === 'action'"><a-button type="link" size="small" @click="showDetail(record)">{{ translate('ui.m_979a332955c8') }}</a-button></template>
         </template>
       </AppTable>
     </a-card>
@@ -43,6 +43,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -66,17 +68,17 @@ const query = reactive({ page: 1, size: 10, order: '-_id', plugin_name: '', app_
 
 const typeOptions = [
   { label: 'PoC', value: 'poc' },
-  { label: '爆破', value: 'brute' }
+  { get label() { return translate('ui.m_caeca5ec8eeb') }, value: 'brute' }
 ]
 const columns = [
-  { title: '插件名', key: 'plugin_name', ellipsis: true },
-  { title: '应用名', dataIndex: 'app_name', key: 'app_name', width: 150, ellipsis: true },
-  { title: '协议', dataIndex: 'scheme', key: 'scheme', width: 120 },
-  { title: '漏洞名', dataIndex: 'vul_name', key: 'vul_name', ellipsis: true },
-  { title: '类别', key: 'plugin_type', width: 90 },
-  { title: '来源', key: 'source', width: 130 },
-  { title: '更新时间', dataIndex: 'update_date', key: 'update_date', width: 170 },
-  { title: '操作', key: 'action', width: 80 }
+  { get title() { return translate('ui.m_86a03bd28b9c') }, key: 'plugin_name', ellipsis: true },
+  { get title() { return translate('ui.m_c131777b2f34') }, dataIndex: 'app_name', key: 'app_name', width: 150, ellipsis: true },
+  { get title() { return translate('ui.m_ab2f31f30acf') }, dataIndex: 'scheme', key: 'scheme', width: 120 },
+  { get title() { return translate('ui.m_cb1049ef7a06') }, dataIndex: 'vul_name', key: 'vul_name', ellipsis: true },
+  { get title() { return translate('ui.m_0d12cbd6562b') }, key: 'plugin_type', width: 90 },
+  { get title() { return translate('ui.m_a488e93d69cc') }, key: 'source', width: 130 },
+  { get title() { return translate('ui.m_0a5f9a892960') }, dataIndex: 'update_date', key: 'update_date', width: 170 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 80 }
 ]
 
 async function load() {
@@ -95,11 +97,11 @@ function reset() { query.plugin_name = ''; query.app_name = ''; query.vul_name =
 function changePage(page: number, size: number) { query.page = page; query.size = size; load() }
 function showDetail(record: RowRecord) { current.value = record; detailOpen.value = true }
 async function sync() {
-  try { const r = await pocApi.sync(); message.success(`同步完成，共 ${r.plugin_cnt} 个插件`); load() }
+  try { const r = await pocApi.sync(); message.success(translate('ui.m_5ac1d0946bbf', { p0: (r.plugin_cnt) })); load() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
 }
 async function clearAll() {
-  try { const r = await pocApi.clear(); message.success(`已清空 ${r.delete_cnt} 个插件`); load() }
+  try { const r = await pocApi.clear(); message.success(translate('ui.m_883fad515312', { p0: (r.delete_cnt) })); load() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
 }
 function onSelectChange(keys: (string | number)[]) { selectedRowKeys.value = keys.map(String) }
@@ -107,8 +109,8 @@ function beforeImport(file: File) {
   importing.value = true
   pocApi.importFile(file)
     .then((r: any) => {
-      if (r.code === 200) message.success(`已导入 ${r.data?.plugin_name}（${r.data?.poc_format === 'npoc' ? 'npoc 结构，进内核扫描' : '脚本，供 AI 检索'}）`)
-      else message.error(r.message || '导入失败')
+      if (r.code === 200) message.success(translate('ui.m_e01c9a2bc5e5', { p0: (r.data?.plugin_name), p1: (r.data?.poc_format === 'npoc' ? 'npoc 结构，进内核扫描' : '脚本，供 AI 检索') }))
+      else message.error(r.message || translate('ui.m_01aaebc96af1'))
       load()
     })
     .catch(e => message.error(String(e)))
@@ -119,8 +121,8 @@ function beforeBatch(file: File) {
   batching.value = true
   pocApi.batchImport(file)
     .then((r: any) => {
-      if (r.code === 200) message.success(`批量导入完成：成功 ${r.data?.success}，跳过 ${r.data?.skipped}，失败 ${r.data?.failed}`)
-      else message.error(r.message || '批量导入失败')
+      if (r.code === 200) message.success(translate('ui.m_834b0edb9c18', { p0: (r.data?.success), p1: (r.data?.skipped), p2: (r.data?.failed) }))
+      else message.error(r.message || translate('ui.m_61e969d9d07d'))
       load()
     })
     .catch(e => message.error(String(e)))
@@ -129,7 +131,7 @@ function beforeBatch(file: File) {
 }
 function downloadTemplate() { window.open(pocApi.templateUrl(), '_blank') }
 async function removeSelected() {
-  try { const r = await pocApi.remove(selectedRowKeys.value); message.success(`已删除 ${r.deleted} 个`); selectedRowKeys.value = []; load() }
+  try { const r = await pocApi.remove(selectedRowKeys.value); message.success(translate('ui.m_61053369b9c0', { p0: (r.deleted) })); selectedRowKeys.value = []; load() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
 }
 onMounted(load)

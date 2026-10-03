@@ -1,208 +1,204 @@
 <template>
-  <PageContainer title="新建任务" kicker="Create Task" description="选择扫描策略下发任务。策略决定扫描项、PoC、指纹、弱口令等全部能力(在「策略」页维护)。可选填目标来源(补天/360 等),带来源则扫描结果自动归档到该来源。">
+  <PageContainer :title="translate('ui.m_6bee2372805a')" kicker="Create Task" :description="translate('ui.m_2ed2113990f5')">
     <a-card :bordered="false">
       <a-form layout="vertical" :model="form" @finish="submit">
         <a-row :gutter="16">
           <a-col :xs="24" :md="12">
-            <a-form-item label="任务名称" required>
+            <a-form-item :label="translate('ui.m_2479560deb33')" required>
               <a-input v-model:value="form.name"
-                :placeholder="form.target_type === 'unit' ? '给这批活起个名(如「六月政府专项」),单位是下一级' : '请输入任务名称'" />
+                :placeholder="form.target_type === 'unit' ? translate('ui.m_8abd535b2ab9') : translate('ui.m_1f01b74c3464')" />
             </a-form-item>
           </a-col>
           <a-col :xs="24" :md="12">
-            <a-form-item label="扫描策略" required>
-              <a-select v-model:value="form.policy_id" :options="policyOptions" placeholder="选择扫描策略"
+            <a-form-item :label="translate('ui.m_4064b1b6e5f6')" required>
+              <a-select v-model:value="form.policy_id" :options="policyOptions" :placeholder="translate('ui.m_ae88804e2014')"
                 show-search :filter-option="filterPolicy" :loading="policyLoading" />
-              <div class="muted">策略决定扫描项 / PoC / 指纹 / 弱口令爆破。需自定义请到「策略」页新建/编辑。</div>
+              <div class="muted">{{ translate('ui.m_5c2cd186a84b') }}</div>
             </a-form-item>
           </a-col>
         </a-row>
-        <a-form-item label="目标类型">
+        <a-form-item :label="translate('ui.m_d04da2799b60')">
           <a-radio-group v-model:value="form.target_type" button-style="solid">
-            <a-radio-button value="normal">域名/IP</a-radio-button>
-            <a-radio-button value="fofa">源查询</a-radio-button>
-            <a-radio-button value="unit">单位名</a-radio-button>
+            <a-radio-button value="normal">{{ translate('ui.m_ee1f158b2356') }}</a-radio-button>
+            <a-radio-button value="fofa">{{ translate('ui.m_6518c904a840') }}</a-radio-button>
+            <a-radio-button value="unit">{{ translate('ui.m_702aab59cae9') }}</a-radio-button>
           </a-radio-group>
-          <span v-if="form.target_type === 'fofa'" class="muted" style="margin-left:8px">源查询:多测绘源各写各语法,结果去重互补(域名按主机名/纯IP按IP+端口)</span>
-          <span v-else-if="form.target_type === 'unit'" class="muted" style="margin-left:8px">单位名:填单位全称(一行一个,可多单位),优先按 ICP 官方备案反查权威域名/IP(查不到降级鹰图/FOFA)→ 每单位建一个任务</span>
+          <span v-if="form.target_type === 'fofa'" class="muted" style="margin-left:8px">{{ translate('ui.m_cd0c80268b80') }}</span>
+          <span v-else-if="form.target_type === 'unit'" class="muted" style="margin-left:8px">{{ translate('ui.m_ceb85691e354') }}</span>
         </a-form-item>
         <!-- 普通目标 / 单位名：共用文本框 -->
         <a-form-item v-if="form.target_type !== 'fofa'"
-          :label="form.target_type === 'unit' ? '单位全称(一行一个)' : '任务目标'" required>
+          :label="form.target_type === 'unit' ? translate('ui.m_926e0936f410') : translate('ui.m_f617beed33b0')" required>
           <a-textarea v-model:value="form.target" :rows="3"
-            :placeholder="form.target_type === 'unit' ? '单位 ICP 备案全称,一行一个(带「有限公司」等全称命中率高)。如:\n北京某某科技有限公司\n某某市人民政府' : '支持域名、IP、IP段；多目标换行'" />
+            :placeholder="form.target_type === 'unit' ? translate('ui.m_2cb4feacb0ff') : translate('ui.m_06a4b644d6ba')" />
         </a-form-item>
 
         <!-- 源查询：多测绘源各写各语法，去重互补 -->
-        <a-form-item v-else label="源查询" required>
-          <div v-if="!sources.length" class="muted">加载可用测绘源中…</div>
+        <a-form-item v-else :label="translate('ui.m_6518c904a840')" required>
+          <div v-if="!sources.length" class="muted">{{ translate('ui.m_d72e1f5c60cf') }}</div>
           <div class="src-grid">
             <div v-for="s in sources" :key="s.id" class="src-block">
               <div class="src-head">
                 <span :class="s.available ? 'src-ok' : 'src-off'">{{ s.available ? '✓' : '✗' }} {{ s.name }}</span>
-                <span v-if="!s.available" class="muted">（未配 key）</span>
+                <span v-if="!s.available" class="muted">{{ translate('ui.m_72d8e42e04f1') }}</span>
                 <span v-if="srcEst[s.id]" class="src-est"
                   :style="{ color: srcEst[s.id].error ? '#cf1322' : '#52c41a' }">
-                  {{ srcEst[s.id].error ? ('错误: ' + srcEst[s.id].errmsg) : ('命中约 ' + srcEst[s.id].size + ' 条') }}
+                  {{ srcEst[s.id].error ? (translate('ui.m_867ea0e13287') + srcEst[s.id].errmsg) : (translate('ui.m_4e6f78cbbec7') + srcEst[s.id].size + translate('ui.m_f004f1d84cf9')) }}
                 </span>
                 <!-- 数量限制：抵到来源行右侧对齐，默认空=无限制，填正整数则限制抓取条数 -->
                 <a-input-number v-model:value="srcLimits[s.id]" :min="1" :precision="0" size="small"
                   class="src-limit" :class="{ 'src-limit-first': !srcEst[s.id] }"
-                  :disabled="!s.available" placeholder="无限制" title="抓取数量限制（留空=无限制，填正整数则限制该源抓取条数）" />
+                  :disabled="!s.available" :placeholder="translate('ui.m_9ee3c076a148')" :title="translate('ui.m_ff09dc036470')" />
               </div>
               <a-textarea v-model:value="srcQueries[s.id]" :rows="2" :disabled="!s.available"
                 :placeholder="s.placeholder" />
             </div>
           </div>
           <div style="margin-top:6px">
-            <a-button type="link" size="small" :loading="fofaTesting" @click="testSources">测试查询(各源预估)</a-button>
+            <a-button type="link" size="small" :loading="fofaTesting" @click="testSources">{{ translate('ui.m_683b99a7175f') }}</a-button>
             <span v-if="mergedTip" class="muted">{{ mergedTip }}</span>
           </div>
         </a-form-item>
 
-        <a-form-item label="任务优先级">
+        <a-form-item :label="translate('ui.m_a10abc806ce4')">
           <a-radio-group v-model:value="form.priority" button-style="solid">
             <a-radio-button :value="0">T0</a-radio-button>
             <a-radio-button :value="1">T1</a-radio-button>
             <a-radio-button :value="2">T2</a-radio-button>
           </a-radio-group>
-          <div class="muted">高优先级会中断正在跑的低优扫描并让其排队续扫。</div>
+          <div class="muted">{{ translate('ui.m_f4c7796640b6') }}</div>
         </a-form-item>
 
         <!-- 渗透相关选项：仅当所选策略勾了「扫描后自动 AI 渗透」才显示（避免填了没人消费的矛盾）。 -->
         <template v-if="pentestEnabled">
-          <a-divider style="margin:8px 0">AI 渗透（当前策略已启用）</a-divider>
+          <a-divider style="margin:8px 0">{{ translate('ui.m_fb5d9045edd7') }}</a-divider>
 
-          <a-form-item label="首要模型">
+          <a-form-item :label="translate('ui.m_fec95897fa0a')">
             <a-select v-model:value="form.pentest_provider_id" :options="providerOptions" allow-clear
-              style="max-width:360px" :placeholder="`跟随全局默认：${globalDefaultName}`" />
+              style="max-width:360px" :placeholder="translate('ui.m_8b6340d797b6', { p0: (globalDefaultName) })" />
             <div v-if="!form.pentest_provider_id" class="default-hint">
-              <BulbOutlined /> 留空将跟随全局默认 AI：<b>{{ globalDefaultName }}</b>
+              <BulbOutlined /> {{ translate('ui.m_dd87bdfbdeef') }}<b>{{ globalDefaultName }}</b>
             </div>
-            <div class="muted">锁定本任务派发的渗透会话所用 AI 模型，全程不受后续全局默认切换影响。留空=跟随全局默认（如上）。切换限同协议（OpenAI 系互切 / Claude 系互切），跨协议需新开会话。</div>
+            <div class="muted">{{ translate('ui.m_c74262b83e29') }}</div>
           </a-form-item>
 
-          <a-form-item label="备用模型">
+          <a-form-item :label="translate('ui.m_ffb131c6cb5f')">
             <a-select v-model:value="form.pentest_backup_provider_id" :options="backupProviderOptions"
-              style="max-width:360px" placeholder="不指定" />
+              style="max-width:360px" :placeholder="translate('ui.m_70d9626ae2fb')" />
             <div class="muted">
-              默认不指定。只有首要模型完成自身重试与同服务故障转移后仍不可用，才自动切换到备用模型；
-              为保证会话历史兼容，只能选择与首要模型相同协议的其他模型。
+              {{ translate('ui.m_5c36c2400245') }}
             </div>
           </a-form-item>
 
-          <a-form-item label="AI 攻击出口">
+          <a-form-item :label="translate('ui.m_4568f2dbe40b')">
             <a-radio-group v-model:value="form.pentest_egress_mode" button-style="solid" size="small">
-              <a-radio-button value="direct">直连</a-radio-button>
+              <a-radio-button value="direct">{{ translate('ui.m_b06325c5660f') }}</a-radio-button>
               <a-tooltip :title="egressOpts.global && !egressOpts.global.available ? egressOpts.global.reason : ''">
-                <a-radio-button value="global" :disabled="egressOpts.global && !egressOpts.global.available">全局</a-radio-button>
+                <a-radio-button value="global" :disabled="egressOpts.global && !egressOpts.global.available">{{ translate('ui.m_63d6b47116de') }}</a-radio-button>
               </a-tooltip>
               <a-tooltip :title="egressOpts.smart && !egressOpts.smart.available ? egressOpts.smart.reason : ''">
-                <a-radio-button value="smart" :disabled="egressOpts.smart && !egressOpts.smart.available">智能</a-radio-button>
+                <a-radio-button value="smart" :disabled="egressOpts.smart && !egressOpts.smart.available">{{ translate('ui.m_8fffc40833fb') }}</a-radio-button>
               </a-tooltip>
             </a-radio-group>
-            <div class="muted">AI 渗透打目标的出口。直连=不走代理;全局=走代理中心「全局代理」绑定的源;智能=代理可达走代理、不可达自动降级直连(推荐)。未绑定代理源的模式已置灰(去代理中心配置)。留空跟随所选策略默认。</div>
+            <div class="muted">{{ translate('ui.m_a6ced89f4266') }}</div>
           </a-form-item>
 
-          <a-form-item label="AI 封禁备用出口">
+          <a-form-item :label="translate('ui.m_953b36326f84')">
             <a-radio-group v-model:value="form.pentest_fallback_egress_mode" button-style="solid" size="small">
-              <a-radio-button value="direct">直连</a-radio-button>
+              <a-radio-button value="direct">{{ translate('ui.m_b06325c5660f') }}</a-radio-button>
               <a-tooltip :title="egressOpts.global && !egressOpts.global.available ? egressOpts.global.reason : ''">
-                <a-radio-button value="global" :disabled="egressOpts.global && !egressOpts.global.available">全局</a-radio-button>
+                <a-radio-button value="global" :disabled="egressOpts.global && !egressOpts.global.available">{{ translate('ui.m_63d6b47116de') }}</a-radio-button>
               </a-tooltip>
               <a-tooltip :title="egressOpts.smart && !egressOpts.smart.available ? egressOpts.smart.reason : ''">
-                <a-radio-button value="smart" :disabled="egressOpts.smart && !egressOpts.smart.available">智能</a-radio-button>
+                <a-radio-button value="smart" :disabled="egressOpts.smart && !egressOpts.smart.available">{{ translate('ui.m_8fffc40833fb') }}</a-radio-button>
               </a-tooltip>
             </a-radio-group>
-            <div class="muted">主出口被目标封禁(整站拦截/CDN Forbid)时，AI 可<b>自主</b>切到此备用出口继续打，而非直接放弃。也按模式选，默认直连。用不用由 AI 判断——相当于多给它一个出口选项。</div>
+            <div class="muted">{{ translate('ui.m_70984b7ac625') }}<b>{{ translate('ui.m_d0441ae44c31') }}</b>{{ translate('ui.m_feb9c4e23b28') }}</div>
           </a-form-item>
 
-          <a-form-item label="单会话上下文上限">
+          <a-form-item :label="translate('ui.m_d741ea4eb0ab')">
             <div class="ctx-slider">
               <a-slider :value="ctxPos" @change="onCtxSlide" :min="0" :max="CTX_MAX_POS" :step="1"
                 :marks="ctxMarks" :tip-formatter="() => ctxLabel" />
               <div class="ctx-cur">
-                <span>当前：<b>{{ ctxLabel }}</b></span>
+                <span>{{ translate('ui.m_660648805666') }}<b>{{ ctxLabel }}</b></span>
                 <!-- 拉满名称后小输入框：滑块封顶 512K，够不到的大值（如 900k）直接输入。单位 k。 -->
-                <span class="ctx-kbox">精确值
+                <span class="ctx-kbox">{{ translate('ui.m_e4b1f1e922c5') }}
                   <a-input-number v-model:value="ctxKInput" :min="0" :step="8" size="small"
                     :disabled="ctxNative" style="width:96px" addon-after="k" />
                 </span>
-                <a-checkbox v-model:checked="ctxNative" class="ctx-native-ck">拉满（原生上限）</a-checkbox>
+                <a-checkbox v-model:checked="ctxNative" class="ctx-native-ck">{{ translate('ui.m_fe4a231a26db') }}</a-checkbox>
               </div>
             </div>
-            <div class="muted">拖动长条设置本任务每个渗透会话的上下文窗口上限（达上限 90% 即强制收尾）。最左=<b>跟随全局默认</b>（用 AI 配置里的全局值，0k）；中段=自定义 token（可拖到 1000K）；更大值（如 1200k）在右侧<b>精确值</b>框直接输入。勾<b>拉满</b>=按所选模型原生最大上下文（如 Claude 1M 版本自动识别），不设人为上限。此项仅对本任务生效，不改全局/策略。</div>
+            <div class="muted">{{ translate('ui.m_9df752ffdb6d') }}<b>{{ translate('ui.m_804fede622ee') }}</b>{{ translate('ui.m_b12c858565e8') }}<b>{{ translate('ui.m_e4b1f1e922c5') }}</b>{{ translate('ui.m_a416d3fee209') }}<b>{{ translate('ui.m_50817637b499') }}</b>{{ translate('ui.m_25b579b31ed2') }}</div>
           </a-form-item>
 
-          <a-form-item label="监督者">
+          <a-form-item :label="translate('ui.m_a087fd2af4ba')">
             <a-switch v-model:checked="form.observer_enabled" checked-children="启用" un-checked-children="关闭" />
             <div class="muted">
-              独立的旁路「监督者」AI，在主渗透 AI 每跑若干轮后回看其最近轨迹，做<b>语义判断</b>——
-              发现方向跑偏、打在 WAF/蜜罐假象上、证据不实、低质量重复、该收尾却磨蹭时，注入一句纠偏建议（仅供参考，主 AI 自行实测确认）。
-              内置冷却+去重防刷屏。<b>默认关闭</b>；开启会额外消耗少量 token（建议给监督者选便宜模型）。
+              {{ translate('ui.m_4cf034a0641a') }}<b>{{ translate('ui.m_da3b6574b935') }}</b>{{ translate('ui.m_4027c42c889f') }}<b>{{ translate('ui.m_0ab592475486') }}</b>{{ translate('ui.m_551d30e7d702') }}
             </div>
             <div v-if="form.observer_enabled" style="margin-top:10px">
               <a-select v-model:value="form.observer_provider_id" :options="providerOptions" allow-clear
-                style="max-width:360px" :placeholder="`跟随全局默认：${globalDefaultName}`" />
+                style="max-width:360px" :placeholder="translate('ui.m_8b6340d797b6', { p0: (globalDefaultName) })" />
               <div v-if="!form.observer_provider_id" class="default-hint">
-                <BulbOutlined /> 留空将跟随全局默认 AI：<b>{{ globalDefaultName }}</b>
+                <BulbOutlined /> {{ translate('ui.m_dd87bdfbdeef') }}<b>{{ globalDefaultName }}</b>
               </div>
-              <div class="muted">监督者用的 AI 模型。它只做轻量审查，可单独选一个便宜/快速的模型省成本，与主渗透 AI 互不影响。留空=跟随全局默认。</div>
+              <div class="muted">{{ translate('ui.m_8ef3da8bd39b') }}</div>
             </div>
           </a-form-item>
 
-          <a-form-item label="禁渗透白名单">
+          <a-form-item :label="translate('ui.m_cec77f7bc5e2')">
             <a-textarea v-model:value="form.pentest_whitelist" :rows="2"
-              placeholder="暂不允许渗透的域名,多个换行/逗号分隔。完整子域名如 oa.example.com 精确匹配;主域用 *.example.com 通配(含其所有子域)" />
-            <div class="muted">扫描照常进行,但自动派发 AI 渗透时跳过命中白名单的站点。</div>
+              :placeholder="translate('ui.m_92f58e4f2833')" />
+            <div class="muted">{{ translate('ui.m_f9f80d9cf3f7') }}</div>
           </a-form-item>
 
-          <a-form-item label="临时情报">
+          <a-form-item :label="translate('ui.m_4535073de85b')">
             <div class="muted" style="margin-bottom:6px">
-              授权方交代的自由情报(账号密码/后台位置/工号规则/WAF类型/内网可达/测试重点),按提示词注入 AI 渗透会话开局。
-              作用范围:留空=整个任务;填单位=只该单位资产;填目标=只该域名/host。
+              {{ translate('ui.m_105722581e4c') }}
             </div>
             <div v-for="(mi, idx) in missionIntel" :key="idx" class="mi-row">
               <a-select v-model:value="mi.scope" :options="miScopeOptions" style="width:110px"
                 @change="() => onScopeChange(mi)" />
-              <a-input v-if="mi.scope==='unit'" v-model:value="mi.scopeVal" placeholder="单位全称" style="width:160px" />
-              <a-input v-else-if="mi.scope==='target'" v-model:value="mi.scopeVal" placeholder="域名/host 如 oa.x.com" style="width:180px" />
+              <a-input v-if="mi.scope==='unit'" v-model:value="mi.scopeVal" :placeholder="translate('ui.m_ca13790801eb')" style="width:160px" />
+              <a-input v-else-if="mi.scope==='target'" v-model:value="mi.scopeVal" :placeholder="translate('ui.m_6399654e3013')" style="width:180px" />
               <a-textarea v-model:value="mi.text" :rows="1" :auto-size="{minRows:1,maxRows:4}"
-                placeholder="如:账号 admin/Passw0rd 登录 /admin;重点测支付模块;WAF 是安恒" style="flex:1" />
+                :placeholder="translate('ui.m_08c588d556eb')" style="flex:1" />
               <a-button type="text" danger @click="removeMi(idx)"><template #icon><DeleteOutlined /></template></a-button>
             </div>
             <a-button type="dashed" size="small" @click="addMi" style="margin-top:4px">
-              <template #icon><PlusOutlined /></template>添加一条临时情报
+              <template #icon><PlusOutlined /></template>{{ translate('ui.m_cd85fc8fbbde') }}
             </a-button>
           </a-form-item>
         </template>
         <!-- 选了策略但未启用 AI 渗透：明确告知，避免用户找不到渗透选项 -->
         <a-alert v-else-if="form.policy_id" type="info" show-icon style="margin:8px 0"
-          message="当前策略未启用「扫描后自动 AI 渗透」"
-          description="如需为本任务配置 AI 模型/临时情报/禁渗透白名单,请到「策略」页勾选该策略的「扫描完成后自动 AI 渗透」。" />
+          :message="translate('ui.m_a04ac0a8ca0f')"
+          :description="translate('ui.m_a182699c71ea')" />
 
-        <a-divider style="margin:8px 0">批量导入</a-divider>
+        <a-divider style="margin:8px 0">{{ translate('ui.m_fd7719273970') }}</a-divider>
         <a-form-item>
           <a-space wrap>
-            <a-button @click="downloadTemplate"><template #icon><DownloadOutlined /></template>下载 CSV 模板</a-button>
+            <a-button @click="downloadTemplate"><template #icon><DownloadOutlined /></template>{{ translate('ui.m_e9b35c4ab08a') }}</a-button>
             <a-upload :before-upload="handleCsvUpload" :show-upload-list="false" accept=".csv">
-              <a-button type="dashed"><template #icon><UploadOutlined /></template>上传 CSV 批量建任务</a-button>
+              <a-button type="dashed"><template #icon><UploadOutlined /></template>{{ translate('ui.m_c3a654bd3919') }}</a-button>
             </a-upload>
-            <span class="muted">按模板填写后上传,每行一个任务(共用上方所选策略)。目标必填,任务名/优先级可留空。</span>
+            <span class="muted">{{ translate('ui.m_68393190b1e5') }}</span>
           </a-space>
         </a-form-item>
 
-        <a-divider style="margin:8px 0">目标归属(可选)</a-divider>
+        <a-divider style="margin:8px 0">{{ translate('ui.m_3d7dcb8a326d') }}</a-divider>
         <a-row :gutter="16">
           <a-col :xs="24" :md="8">
-            <a-form-item label="单位"><a-input v-model:value="form['source.unit']" placeholder="厂商/单位名" /></a-form-item>
+            <a-form-item :label="translate('ui.m_80b19d68b149')"><a-input v-model:value="form['source.unit']" :placeholder="translate('ui.m_e967e8a3a79a')" /></a-form-item>
           </a-col>
         </a-row>
 
         <a-form-item>
           <a-space>
-            <a-button type="primary" html-type="submit" :loading="loading">提交任务</a-button>
-            <a-button @click="router.push('/tasks')">返回列表</a-button>
+            <a-button type="primary" html-type="submit" :loading="loading">{{ translate('ui.m_36d5f450ffc8') }}</a-button>
+            <a-button @click="router.push('/tasks')">{{ translate('ui.m_e9d5ca6c1406') }}</a-button>
           </a-space>
         </a-form-item>
       </a-form>
@@ -213,6 +209,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -262,7 +260,7 @@ const selectedPolicy = computed(() => policyRaw.value.find(p => String(p._id) ==
 const pentestEnabled = computed(() => !!(selectedPolicy.value?.policy as RowRecord | undefined)?.auto_pentest)
 // 可选模型选项：仅已启用 provider（带协议标注，便于识别）
 const providerOptions = computed(() => providers.value.filter(p => p.enabled).map(p => ({
-  label: `${p.name}（${p.protocol === 'claude' ? 'Claude' : 'OpenAI'}协议）`, value: p._id,
+  label: translate('ui.m_2996e5d20567', { p0: (p.name), p1: (p.protocol === 'claude' ? 'Claude' : 'OpenAI') }), value: p._id,
 })))
 const effectivePrimaryProvider = computed(() => {
   const id = form.pentest_provider_id || globalDefaultId.value
@@ -278,13 +276,13 @@ const backupProviderOptions = computed(() => {
     const isPrimary = String(p._id) === String(primary?._id || '')
     const cross = !!baseProto && proto !== baseProto
     const bad = isPrimary || cross
-    const note = isPrimary ? ' · 已作首要' : (cross ? ' · 跨协议不可选' : '')
+    const note = isPrimary ? translate('ui.m_f12e2d1fb302') : (cross ? translate('ui.m_9162ded82b3f') : '')
     return {
-      label: `${p.name}（${proto === 'claude' ? 'Claude' : 'OpenAI'}协议）${note}`,
+      label: translate('ui.m_016fb7ebb1ea', { p0: (p.name), p1: (proto === 'claude' ? 'Claude' : 'OpenAI'), p2: (note) }),
       value: p._id, disabled: bad,
     }
   })
-  return [{ label: '不指定', value: '', disabled: false }, ...options]
+  return [{ get label() { return translate('ui.m_70d9626ae2fb') }, value: '', disabled: false }, ...options]
 })
 watch([() => form.pentest_provider_id, globalDefaultId, providers], () => {
   // 首要变化后若已选备用变得不合规（跨协议/成了首要自身=选项 disabled 或不在列表）→ 清空
@@ -296,7 +294,7 @@ watch([() => form.pentest_provider_id, globalDefaultId, providers], () => {
 // 全局默认 AI 的展示名（留空时告诉用户实际会跟随哪个模型）；取不到默认配置时退化提示
 const globalDefaultName = computed(() => {
   const p = providers.value.find(x => String(x._id) === String(globalDefaultId.value))
-  return p ? `${p.name}（${p.protocol === 'claude' ? 'Claude' : 'OpenAI'}协议）` : '未设置全局默认 AI（请先到「AI 配置」设置）'
+  return p ? translate('ui.m_2996e5d20567', { p0: (p.name), p1: (p.protocol === 'claude' ? 'Claude' : 'OpenAI') }) : translate('ui.m_a10f648b9e1a')
 })
 const fofaTesting = ref(false)
 const fofaSize = ref<number | null>(null)
@@ -314,9 +312,9 @@ type MiScope = 'task' | 'unit' | 'target'
 interface MiRow { scope: MiScope; scopeVal: string; text: string }
 const missionIntel = reactive<MiRow[]>([])
 const miScopeOptions = [
-  { label: '整个任务', value: 'task' },
-  { label: '指定单位', value: 'unit' },
-  { label: '指定目标', value: 'target' }
+  { get label() { return translate('ui.m_35a56845d620') }, value: 'task' },
+  { get label() { return translate('ui.m_cb1e7dbe149f') }, value: 'unit' },
+  { get label() { return translate('ui.m_e9ee1592478a') }, value: 'target' }
 ]
 function addMi() { missionIntel.push({ scope: 'task', scopeVal: '', text: '' }) }
 function removeMi(i: number) { missionIntel.splice(i, 1) }
@@ -362,13 +360,13 @@ const ctxNative = computed<boolean>({
 })
 const ctxLabel = computed(() => {
   const t = form.ctx_tokens
-  if (t < 0) return '拉满 · 模型原生上限'
-  if (t === 0) return '跟随全局默认（0k）'
+  if (t < 0) return translate('ui.m_ed5c7ea56a5b')
+  if (t === 0) return translate('ui.m_648d5731ecf5')
   return `${Math.round(t / 1000)}K tokens`
 })
 // 节点标记：最左「默认」、中段刻度、最右「1000K」（1000K 以上走输入框）
 const ctxMarks = {
-  0: '默认',
+  get 0() { return translate('ui.m_844b8cc8dff7') },
   31: '250K',
   62: '500K',
   94: '750K',
@@ -393,7 +391,7 @@ async function loadPolicies() {
     policyRaw.value = (data.items || []) as RowRecord[]   // 存完整对象，选策略后本地读 auto_pentest
     policyOptions.value = policyRaw.value.map(p => ({ label: String(p.name), value: String(p._id) }))
   } catch (e) {
-    message.error((e as Error).message || '加载策略失败')
+    message.error((e as Error).message || translate('ui.m_06125f4aa7bd'))
   } finally {
     policyLoading.value = false
   }
@@ -429,12 +427,12 @@ function parseCsvRow(line: string) {
 }
 
 function handleCsvUpload(file: File) {
-  if (!form.policy_id) { message.warning('请先选择扫描策略,批量任务共用该策略'); return false }
+  if (!form.policy_id) { message.warning(translate('ui.m_1a92fa902de6')); return false }
   const reader = new FileReader()
   reader.onload = () => {
     const text = String(reader.result || '').replace(/\r/g, '')
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-    if (!lines.length) { message.warning('文件为空'); return }
+    if (!lines.length) { message.warning(translate('ui.m_bf8962d5e84b')); return }
     // 跳过表头(首行含“目标”视为表头)
     const rows = lines[0].includes('目标') ? lines.slice(1) : lines
     const items = rows.map(parseCsvRow).filter(c => c[0]).map(c => ({
@@ -442,7 +440,7 @@ function handleCsvUpload(file: File) {
       name: c[1] || `批量-${c[0]}`,
       priority: c[2] !== undefined && c[2] !== '' ? Number(c[2]) : form.priority
     }))
-    if (!items.length) { message.warning('未解析到有效目标'); return }
+    if (!items.length) { message.warning(translate('ui.m_c858ebe0eef0')); return }
     submitBatch(items)
   }
   reader.readAsText(file, 'utf-8')
@@ -472,13 +470,13 @@ async function submitBatch(items: Array<{ target: string; name: string; priority
     } catch { fail++ }
   }
   loading.value = false
-  message.success(`批量提交完成:成功 ${ok} 个${fail ? `,失败 ${fail} 个` : ''}`)
+  message.success(translate('ui.m_47d77414a9f4', { p0: (ok), p1: (fail ? `,失败 ${fail} 个` : '') }))
   if (ok) router.push('/tasks')
 }
 
 
 async function testFofa() {
-  if (!form.target) return message.warning('请先填写 FOFA 查询语句')
+  if (!form.target) return message.warning(translate('ui.m_32628ba0bdba'))
   fofaTesting.value = true
   fofaSize.value = null
   fofaErr.value = ''
@@ -530,7 +528,7 @@ function collectLimits(queries: Record<string, string>): Record<string, number> 
 
 async function testSources() {
   const queries = collectQueries()
-  if (!Object.keys(queries).length) return message.warning('请至少填写一个可用源的查询语句')
+  if (!Object.keys(queries).length) return message.warning(translate('ui.m_9e2ac9a31a23'))
   fofaTesting.value = true
   mergedTip.value = ''
   for (const k of Object.keys(srcEst)) delete srcEst[k]
@@ -552,16 +550,16 @@ async function submit() {
   // unit 模式:任务名(第一级)+ 单位全称(第二级,多行)都要;其余模式需任务名+目标
   let srcQ: Record<string, string> = {}
   if (form.target_type === 'unit') {
-    if (!form.name) return message.warning('请填写任务名称')
-    if (!form.target) return message.warning('请填写单位全称(一行一个)')
+    if (!form.name) return message.warning(translate('ui.m_dd9d9d3542ba'))
+    if (!form.target) return message.warning(translate('ui.m_a8cd04de6005'))
   } else if (form.target_type === 'fofa') {
-    if (!form.name) return message.warning('请填写任务名称')
+    if (!form.name) return message.warning(translate('ui.m_dd9d9d3542ba'))
     srcQ = collectQueries()
-    if (!Object.keys(srcQ).length) return message.warning('请至少填写一个可用源的查询语句')
+    if (!Object.keys(srcQ).length) return message.warning(translate('ui.m_9e2ac9a31a23'))
   } else if (!form.name || !form.target) {
-    return message.warning('请填写任务名称和目标')
+    return message.warning(translate('ui.m_3abc138ec5a6'))
   }
-  if (!form.policy_id) return message.warning('请选择扫描策略')
+  if (!form.policy_id) return message.warning(translate('ui.m_13a8bd6a155b'))
   // 发起前检测同资产是否已有渗透会话/历史报告（仅当策略启用了 AI 渗透才有意义）。
   // best-effort：检测失败不阻断，直接提交。命中则弹确认框，用户确定后走 doSubmit。
   if (pentestEnabled.value) {
@@ -586,7 +584,7 @@ async function submit() {
 const overlapOpen = ref(false)
 const overlapData = ref<OverlapResult | null>(null)
 function onOverlapConfirm() { doSubmit() }
-function onOverlapCancel() { message.info('已取消任务') }
+function onOverlapCancel() { message.info(translate('ui.m_4454cee2320e')) }
 
 async function doSubmit() {
   const srcQ: Record<string, string> = form.target_type === 'fofa' ? collectQueries() : {}
@@ -610,7 +608,7 @@ async function doSubmit() {
         observer_enabled: pentestEnabled.value ? form.observer_enabled : false,
         observer_provider_id: (pentestEnabled.value && form.observer_enabled) ? (form.observer_provider_id || '') : '',
       })
-      message.success(`任务「${form.name}」已建(${res.unit_count} 个单位,后台反查中)`)
+      message.success(translate('ui.m_86f0d0b02c27', { p0: (form.name), p1: (res.unit_count) }))
       router.push('/tasks')
       return
     }
@@ -653,7 +651,7 @@ async function doSubmit() {
         'source.unit': form['source.unit'],
       })
     }
-    message.success('任务已提交')
+    message.success(translate('ui.m_20bd8551be46'))
     router.push('/tasks')
   } catch (error) {
     message.error(error instanceof Error ? error.message : String(error))

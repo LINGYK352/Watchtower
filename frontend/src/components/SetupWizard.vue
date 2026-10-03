@@ -6,29 +6,29 @@
         <ClockCircleOutlined v-if="expired" style="font-size: 40px; color: #fa8c16" />
         <LockOutlined v-else style="font-size: 40px; color: var(--dt-primary, #1677ff)" />
       </div>
-      <h2 class="setup-title">{{ expired ? '授权已过期' : '系统激活' }}</h2>
+      <h2 class="setup-title">{{ expired ? translate('ui.m_956ef6fafa63') : translate('ui.m_41504b9054e1') }}</h2>
       <p class="setup-desc">
         <template v-if="expired">
-          您的更新授权 Key 已过期（有效期 60 天），请重新免费获取新 Key。
-          <br /><span v-if="expiresAt" class="setup-exp">过期时间：{{ expiresAt }}</span>
+          {{ translate('ui.m_154a3d59d516') }}
+          <br /><span v-if="expiresAt" class="setup-exp">{{ translate('ui.m_c4c1ad8ce3ab') }}{{ expiresAt }}</span>
         </template>
         <template v-else>
-          请输入更新授权 Key 以激活系统。Key 免费获取，用于接收自动更新。
+          {{ translate('ui.m_0e291e979a4d') }}
         </template>
       </p>
       <div class="setup-link">
-        <a :href="sourceUrl" target="_blank" rel="noopener noreferrer">前往获取 →</a>
-        <a-tag color="green" class="setup-badge">免费</a-tag>
+        <a :href="sourceUrl" target="_blank" rel="noopener noreferrer">{{ translate('ui.m_44750486ac06') }}</a>
+        <a-tag color="green" class="setup-badge">{{ translate('ui.m_649a0fc7237e') }}</a-tag>
       </div>
       <a-input-password
         v-model:value="keyInput"
-        placeholder="请粘贴授权 Key（JWT 格式）"
+        :placeholder="translate('ui.m_7d30d5a59f58')"
         size="large"
         class="setup-input"
         @pressEnter="handleActivate"
       />
       <a-button type="primary" block size="large" :loading="activateLoading" class="setup-btn" @click="handleActivate">
-        {{ expired ? '重新激活' : '激活' }}
+        {{ expired ? translate('ui.m_2036369fe36f') : translate('ui.m_dd1286c29e9b') }}
       </a-button>
     </div>
   </a-modal>
@@ -39,14 +39,13 @@
       <div class="setup-icon">
         <RobotOutlined style="font-size: 40px; color: var(--dt-primary, #1677ff)" />
       </div>
-      <h2 class="setup-title">配置 AI 模型</h2>
+      <h2 class="setup-title">{{ translate('ui.m_31518ba7999a') }}</h2>
       <p class="setup-desc">
-        AI 渗透功能需要配置至少一个 LLM 提供商（如 DeepSeek、OpenAI、Claude 等）。
-        配置后即可使用智能渗透测试、代码审计等 AI 驱动功能。
+        {{ translate('ui.m_1fae1539a7f1') }}
       </p>
       <div class="setup-actions">
-        <a-button type="primary" block size="large" @click="goAiConfig">前往配置</a-button>
-        <a-button block size="large" class="setup-btn-later" @click="dismissAi">稍后配置</a-button>
+        <a-button type="primary" block size="large" @click="goAiConfig">{{ translate('ui.m_a34d0b8031af') }}</a-button>
+        <a-button block size="large" class="setup-btn-later" @click="dismissAi">{{ translate('ui.m_c34ec1390c3e') }}</a-button>
       </div>
     </div>
   </a-modal>
@@ -57,20 +56,21 @@
       <div class="setup-icon">
         <KeyOutlined style="font-size: 40px; color: var(--dt-primary, #1677ff)" />
       </div>
-      <h2 class="setup-title">配置 API 密钥</h2>
+      <h2 class="setup-title">{{ translate('ui.m_31115d26df65') }}</h2>
       <p class="setup-desc">
-        资产测绘功能需要配置 FOFA 或鹰图（Hunter）等平台的 API Key。
-        配置后即可使用资产发现、子域名收集等测绘能力。
+        {{ translate('ui.m_f5555854f6aa') }}
       </p>
       <div class="setup-actions">
-        <a-button type="primary" block size="large" @click="goKeysConfig">前往配置</a-button>
-        <a-button block size="large" class="setup-btn-later" @click="dismissKeys">稍后配置</a-button>
+        <a-button type="primary" block size="large" @click="goKeysConfig">{{ translate('ui.m_a34d0b8031af') }}</a-button>
+        <a-button block size="large" class="setup-btn-later" @click="dismissKeys">{{ translate('ui.m_c34ec1390c3e') }}</a-button>
       </div>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -141,14 +141,14 @@ onMounted(async () => {
 // Step 1 handlers
 async function handleActivate() {
   const key = keyInput.value.trim()
-  if (!key) return message.warning('请输入授权 Key')
+  if (!key) return message.warning(translate('ui.m_9c04fe5c2eec'))
   if (!key.startsWith('eyJ') || key.split('.').length !== 3) {
-    return message.warning('请输入有效的 JWT 格式 Key（从注册页获取）')
+    return message.warning(translate('ui.m_ea863f345852'))
   }
   activateLoading.value = true
   try {
     await submitActivation(key)
-    message.success('激活成功')
+    message.success(translate('ui.m_66dcb20e4a76'))
     showActivation.value = false
     window.location.reload()
   } catch (e) {
@@ -166,7 +166,7 @@ function goAiConfig() {
 
 function dismissAi() {
   showAiPrompt.value = false
-  message.warning('不配置将无法使用 AI 渗透功能')
+  message.warning(translate('ui.m_54d94f6eb74c'))
   sessionStorage.setItem(DISMISS_KEY, '1')
   // Check step 3 after dismissing step 2
   getSetupStatus().then(res => {
@@ -184,7 +184,7 @@ function goKeysConfig() {
 
 function dismissKeys() {
   showKeysPrompt.value = false
-  message.warning('不配置将无法使用资产测绘功能')
+  message.warning(translate('ui.m_e4753cef23a2'))
   sessionStorage.setItem(DISMISS_KEY, '1')
 }
 </script>

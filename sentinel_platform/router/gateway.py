@@ -169,7 +169,7 @@ def install_gateway(app: Any) -> None:
         path = request.path or ""
         method = (request.method or "GET").upper()
         g._alog_start = _time.time()   # 计时起点（供 after_request 审计算 elapsed_ms）
-        if not path.startswith("/api") or method == "OPTIONS":
+        if not (path == "/api" or path.startswith("/api/")) or method == "OPTIONS":
             return None
         # 攻击告警 IP 封禁拦截（**最前置，在 public 判断之前**：被封 IP 连探活/登录等 public 端点也一律 403，
         # 不给任何可乘之机）。取真实客户端 IP 用 X-Real-IP（nginx 反代时 remote_addr 是 nginx 内网 IP）。

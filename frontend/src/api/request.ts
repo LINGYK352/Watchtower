@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n'
 import type { ApiEnvelope } from './types'
 import { captureError } from '../composables/useErrorReport'
 
@@ -62,7 +63,7 @@ export function toQueryString(query: Record<string, unknown> = {}) {
 
 function normalizeError(data: ApiEnvelope, status: number) {
   const detail = data?.data && typeof data.data === 'object' ? JSON.stringify(data.data) : ''
-  return data.message || detail || `请求失败：${status}`
+  return data.message || detail || translate('ui.m_47245f9bc28a', { p0: (status) })
 }
 
 // 上报接口自身/鉴权类不触发捕获（防环、防噪声）
@@ -123,7 +124,7 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   if (!contentType.includes('application/json')) {
     if (!response.ok) {
       _maybeCapture(path, options, response.status, undefined, `请求失败：${response.status}`)
-      throw new Error(`请求失败：${response.status}`)
+      throw new Error(translate('ui.m_47245f9bc28a', { p0: (response.status) }))
     }
     return response as unknown as T
   }
@@ -134,17 +135,17 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     if (!location.pathname.startsWith('/login')) {
       location.href = `/login?redirect=${encodeURIComponent(location.pathname + location.search)}`
     }
-    throw new Error(data.message || '登录已失效')
+    throw new Error(data.message || translate('ui.m_0759032719bf'))
   }
   if (response.status === 402 || data.code === 402) {
     // 系统未激活/激活过期:核心业务端点被网关硬拦。不跳登录(登录态正常),抛错让页面提示去激活。
     // 触发全局事件,由 AppLayout 弹激活向导(与首登弹窗同一入口)。
     try { window.dispatchEvent(new CustomEvent('sentinel:activation-required', { detail: { path } })) } catch { /* SSR/无 window 降级 */ }
-    throw new Error(data.message || '系统未激活或激活已过期，请先激活后再使用该功能')
+    throw new Error(data.message || translate('ui.m_ec42ebd430df'))
   }
   if (data.code === 403) {
     // 无权限:不跳登录,只抛错让页面提示(后端网关拦截)
-    throw new Error(data.message || '无权限执行此操作')
+    throw new Error(data.message || translate('ui.m_ae9422ab59f6'))
   }
   if (!response.ok || data.code !== 200) {
     const msg = normalizeError(data, response.status)

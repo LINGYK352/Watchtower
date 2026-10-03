@@ -78,9 +78,9 @@ export function getVersionChanges(version: string) {
 }
 
 /** 回退到指定历史版本（高危，需 system:update 权限） */
-export function rollbackTo(version: string) {
+export function rollbackTo(version: string, full = false) {
   return request<{ started: boolean; target_version?: string; msg?: string }>(
-    '/api/about/rollback', { method: 'POST', body: JSON.stringify({ version }) })
+    '/api/about/rollback', { method: 'POST', body: JSON.stringify({ version, full }) })
 }
 
 /** 上传报错到云端分发系统（选中日志 + 描述） */

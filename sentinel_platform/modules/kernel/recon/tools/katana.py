@@ -27,8 +27,8 @@ class Katana(ExternalTool):
     adapter = "katana"
 
     def build_argv(self, concurrency: int = 10, crawl_js: bool = True, depth: int = 0, **kwargs: Any) -> List[str]:
-        # -silent 只出结果 / -json 结构化 / -jc 爬 JS 内链接 / -c 并发 / -d 深度(0=用katana默认不写死)
-        argv = ["-silent", "-json", "-c", str(_to_int(concurrency) or 10)]
+        # -silent 只出结果 / -jsonl 结构化 / -jc 爬 JS 内链接 / -c 并发 / -d 深度(0=用katana默认不写死)
+        argv = ["-silent", "-jsonl", "-c", str(_to_int(concurrency) or 10)]
         if crawl_js:
             argv.append("-jc")
         d = _to_int(depth)

@@ -21,6 +21,7 @@ import time
 import py_compile
 import re
 import urllib.error
+from contextlib import contextmanager
 from urllib.request import Request, urlopen
 from urllib.parse import quote
 
@@ -424,16 +425,33 @@ def _apply_restart(current_root: str, backend_changed: bool, compose_changed: bo
             subprocess.run(["systemctl", "reload", "sentinel-web"], timeout=15, capture_output=True)
 
 
+def _validate_release_path(path, sha):
+    if (not isinstance(path, str) or "\\" in path or ":" in path
+            or any(p in ("", ".", "..") for p in path.split("/"))
+            or not (path in _TRACK_FILES or any(path.startswith(d + "/") for d in _TRACK_DIRS + ["runtime_libs"]))
+            or any(p in {".git", ".update_backup", ".hotupdate_backup", "shared", "logs", ".venv", "__pycache__"} for p in path.split("/"))
+            or (not path.startswith("runtime_libs/") and (
+                re.search(r"(?:^|/)(?:config\.ya?ml|\.activation[^/]*|\.app_platform_key|\.disclaimer_accepted)$", path, re.I)
+                or path.lower().endswith((".key", ".pem", ".db", ".sqlite", ".sqlite3"))))
+            or path.lower().endswith((".pyc", ".pyo"))
+            or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)):
+        raise ValueError("invalid release file entry")
+
+
+def _release_file(current_root, path):
+    root = os.path.realpath(current_root)
+    full = os.path.join(root, *path.split("/"))
+    if os.path.commonpath([root, os.path.realpath(full)]) != root:
+        raise ValueError("release path escapes installation root")
+    return full
+
+
 def _download_candidates(data, local_version):
     full = data.get("manifest", {})
     if not isinstance(full, dict) or not full:
         raise ValueError("invalid release manifest")
     for path, sha in full.items():
-        if (not isinstance(path, str) or "\\" in path or ":" in path
-                or any(p in ("", ".", "..") for p in path.split("/"))
-                or not (path in _TRACK_FILES or any(path.startswith(d + "/") for d in _TRACK_DIRS + ["runtime_libs"]))
-                or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)):
-            raise ValueError("invalid release file entry")
+        _validate_release_path(path, sha)
     if data.get("download_mode") != "delta" or data.get("base_version") != local_version:
         return full
     selected = data.get("download_manifest")
@@ -442,8 +460,71 @@ def _download_candidates(data, local_version):
     return selected
 
 
+def _removed_candidates(data, local_version):
+    """仅接受版本仓声明的旧发布文件，不按目录扫描删除用户自加文件。"""
+    if data.get("base_version") != local_version or "remove_manifest" not in data:
+        return []
+    removed = data["remove_manifest"]
+    if not isinstance(removed, dict):
+        raise ValueError("invalid release removal plan")
+    for path, sha in removed.items():
+        _validate_release_path(path, sha)
+        if path in data.get("manifest", {}):
+            raise ValueError("removal overlaps release inventory")
+    return sorted(removed)
+
+
+def _frontend_removed(current_root, manifest):
+    """构建 assets 是专用生成目录；它的旧产物仍可独立清理。"""
+    folder = os.path.join(current_root, "docker/frontend/assets")
+    if not os.path.isdir(folder):
+        return []
+    return ["docker/frontend/assets/" + name for name in os.listdir(folder)
+            if "docker/frontend/assets/" + name not in manifest
+            and os.path.isfile(os.path.join(folder, name))]
+
+
+@contextmanager
+def _apply_lock(current_root):
+    """OS 文件锁跨 worker/进程共享，进程退出自动释放，无 TTL 抢锁窗口。"""
+    folder = os.path.join(current_root, ".update_stage")
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, ".apply.lock"), "a+b") as lock:
+        if os.fstat(lock.fileno()).st_size == 0:
+            lock.write(b"0"); lock.flush()
+        lock.seek(0)
+        acquired = False
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquired = True
+        except OSError:
+            pass
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                if os.name == "nt":
+                    lock.seek(0); msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 def run_update(source_url: str, key: str, current_root: str, target_version: str = "",
-               chain_hop: bool = False, chain_final: bool = False):
+               chain_hop: bool = False, chain_final: bool = False, full: bool = False):
+    with _apply_lock(current_root) as acquired:
+        if not acquired:
+            _log("另一个更新进程正在应用；保留其进度，不启动第二个提交")
+            return
+        return _run_update_impl(source_url, key, current_root, target_version, chain_hop, chain_final, full)
+
+
+def _run_update_impl(source_url: str, key: str, current_root: str, target_version: str = "",
+               chain_hop: bool = False, chain_final: bool = False, full: bool = False):
     """独立进程执行热更新：fetch manifest → diff → 逐文件(下载+校验+写入)。
     进度持久化到 PROGRESS_FILE，前端轮询。因是独立进程，gunicorn worker reload 杀不到它。
 
@@ -461,6 +542,8 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
                      else "正在获取版本 {} 清单...".format(target_version))
         headers = _auth_headers(key, current_root)
         headers["X-Update-Protocol"] = "2"
+        if full:
+            headers["X-Update-Mode"] = "full"
 
         manifest_url = source_url + "/manifest"
         if is_rollback:
@@ -497,11 +580,23 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
 
         # 保留完整目标目录供回滚/前端清理；正常升级只核验服务端指定的变更候选。
         candidates = _download_candidates(data, headers["X-Client-Version"])
+        # 仅 stat 未变更文件，不读几千个依赖内容；缺文件也必须恢复，不能由增量计划掩盖。
+        candidates = dict(candidates)
+        for rel, sha in remote_manifest.items():
+            fp = _release_file(current_root, rel)
+            if not os.path.isfile(fp):
+                candidates[rel] = sha
+        removed = _removed_candidates(data, headers["X-Client-Version"])
+        removed = sorted(set(removed + _frontend_removed(current_root, remote_manifest)))
+        for rel in removed:
+            _release_file(current_root, rel)
         set_progress("checking", total=len(candidates),
-                     msg="核验更新计划中的 {} 个文件".format(len(candidates)))
+                     msg="{}核验 {} 个文件（库存 {}，清理 {}）".format(
+                         "增量" if data.get("download_mode") == "delta" else "完整",
+                         len(candidates), len(remote_manifest), len(removed)))
         local_manifest = {}
         for rel in candidates:
-            fp = os.path.join(current_root, rel)
+            fp = _release_file(current_root, rel)
             if os.path.isfile(fp):
                 h = hashlib.sha256()
                 with open(fp, "rb") as f:
@@ -510,7 +605,6 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
                 local_manifest[rel] = h.hexdigest()
 
         changed = [r for r, h in candidates.items() if local_manifest.get(r) != h]
-        removed = _rollback_removed_files(current_root, set(remote_manifest.keys())) if is_rollback else []
         if not changed and not removed:
             set_progress("done", msg="已是最新，无需更新" if not is_rollback
                          else "本地已与版本 {} 一致".format(target_version))
@@ -519,7 +613,8 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
         changed.sort(key=lambda rel: (1, rel) if rel.startswith("external/bin/") else (0, rel))
         total = len(changed)
         set_progress("downloading", total=total, done=0, msg="更新 0/{}".format(total))
-        backup_dir = os.path.join(current_root, ".update_backup", time.strftime("%Y%m%d-%H%M%S"))
+        import uuid
+        backup_dir = os.path.join(current_root, ".update_backup", time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
 
         # ===== 事务化更新（AUD-04 + AUD-12）：先全部下载到独立 staging 区并逐个校验哈希/编译，
         #        全部通过后才一次性提交替换（备份+os.replace）；任一步失败则不动/回滚已替换的运行文件。=====
@@ -608,9 +703,10 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
         # ---- Phase 2：全部通过 → 一次性提交（备份旧文件 + 原子替换）；提交中任一失败则回滚已替换的。----
         set_progress("downloading", total=total, done=total, msg="校验通过，正在提交 {} 个文件…".format(total))
         committed = []   # [(dst, had_old)]
+        deleted = []
         try:
             for rel, spath in staged:
-                dst = os.path.join(current_root, rel)
+                dst = _release_file(current_root, rel)
                 had_old = os.path.isfile(dst)
                 if had_old:
                     bpath = os.path.join(backup_dir, rel)
@@ -618,11 +714,25 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
                     shutil.copy2(dst, bpath)
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 os.replace(spath, dst)                 # 原子替换（staging→正式）
+                committed.append((rel, dst, had_old))
                 if "/bin/" in rel and not rel.endswith((".py", ".txt", ".json", ".yaml", ".yml")):
                     os.chmod(dst, 0o755)
-                committed.append((rel, dst, had_old))
+            for rel in removed:
+                dst = _release_file(current_root, rel)
+                if os.path.isfile(dst):
+                    bpath = os.path.join(backup_dir, rel)
+                    os.makedirs(os.path.dirname(bpath), exist_ok=True)
+                    # 原子移入备份，删除失败也必须撤销本轮代码替换。
+                    os.replace(dst, bpath)
+                    deleted.append((rel, dst, bpath))
         except Exception as exc:
             # 提交阶段失败（磁盘满/权限等）→ 回滚已替换文件到备份，恢复到更新前状态
+            restore_errors = []
+            for rel, dst, bpath in reversed(deleted):
+                try:
+                    os.replace(bpath, dst)
+                except OSError:
+                    restore_errors.append(rel)
             for rel, dst, had_old in reversed(committed):
                 try:
                     if had_old:
@@ -630,34 +740,23 @@ def run_update(source_url: str, key: str, current_root: str, target_version: str
                     elif os.path.isfile(dst):
                         os.remove(dst)   # 更新前不存在=新增文件，回滚即删除
                 except OSError:
-                    pass
+                    restore_errors.append(rel)
             _cleanup_stage()
             set_progress("error", total=total, done=total,
-                         error="提交替换失败: {}。已回滚到更新前版本（备份见 {}）。".format(
-                             str(exc)[:120], os.path.relpath(backup_dir, current_root)))
+                         error="提交替换/清理失败: {}。{}（备份见 {}）。".format(
+                             str(exc)[:120], "恢复失败: " + ", ".join(restore_errors) if restore_errors else "已恢复更新前文件",
+                             os.path.relpath(backup_dir, current_root)))
             return
         _cleanup_stage()
 
-        for rel in removed:
-            dst = os.path.join(current_root, rel)
-            if os.path.isfile(dst):
-                bpath = os.path.join(backup_dir, rel)
-                os.makedirs(os.path.dirname(bpath), exist_ok=True)
-                shutil.copy2(dst, bpath)
-                try:
-                    os.remove(dst)
-                except OSError:
-                    pass
-
-        # 清理前端旧 hash 产物（更新/回退都清，保持目录精确=当前版本，无残留堆积）
-        pruned = _prune_frontend_assets(current_root, remote_manifest, backup_dir)
+        pruned = len(deleted)
 
         if remote_version:
             with open(os.path.join(current_root, "version.txt"), "w", encoding="utf-8") as f:
                 f.write(remote_version)
 
-        backend_changed = any(rel.endswith(".py") and not rel.startswith("docker/") for rel in changed)
-        compose_changed = any(rel.endswith(("docker-compose.yml", "nginx.conf")) for rel in changed)
+        backend_changed = any(rel.endswith(".py") and not rel.startswith("docker/") for rel in changed + removed)
+        compose_changed = any(rel.endswith(("docker-compose.yml", "nginx.conf")) for rel in changed + removed)
 
         # —— 一级一级更新·每一级：本级已完整提交 + version.txt 已写成本级 → 强制重启让本级代码真正跑起来 ——
         # 规则（用户要求）：每一级的代码必须确实运行起来，才允许拉取下一级。故：
@@ -1062,4 +1161,4 @@ if __name__ == "__main__":
     elif _target == "__chain_step__":
         _chain_apply_next_step(_source_url, _key, _current_root)
     else:
-        run_update(_source_url, _key, _current_root, _target)
+        run_update(_source_url, _key, _current_root, _target, full="--full" in sys.argv[5:])

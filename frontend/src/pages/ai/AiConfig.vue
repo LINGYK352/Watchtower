@@ -1,67 +1,67 @@
 <template>
-  <PageContainer title="AI 配置中心" kicker="AI Config" description="配置 AI 渗透所需的大模型接入、提示词模板与全局参数。">
+  <PageContainer :title="translate('ui.m_234f4428e0ea')" kicker="AI Config" :description="translate('ui.m_f8c40caa5acd')">
     <template #extra>
-      <a-button @click="loadAll">刷新</a-button>
+      <a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button>
     </template>
 
     <!-- 全局参数 -->
-    <a-card class="page-card" title="全局参数" size="small">
+    <a-card class="page-card" :title="translate('ui.m_c49aa5cd5e39')" size="small">
       <a-form layout="vertical">
         <a-row :gutter="16">
           <a-col :span="8">
-            <a-form-item label="默认 AI">
-              <a-select v-model:value="config.active_provider_id" allow-clear :options="providerOptions" placeholder="任务环节未单独绑定 AI 时回退用它" />
+            <a-form-item :label="translate('ui.m_ff75a04c666b')">
+              <a-select v-model:value="config.active_provider_id" allow-clear :options="providerOptions" :placeholder="translate('ui.m_24da1d202ee0')" />
             </a-form-item>
           </a-col>
-          <a-col :span="6"><a-form-item label="超时(秒)"><a-input-number v-model:value="config.timeout" :min="1" style="width: 100%" /></a-form-item></a-col>
+          <a-col :span="6"><a-form-item :label="translate('ui.m_4e99705e0137')"><a-input-number v-model:value="config.timeout" :min="1" style="width: 100%" /></a-form-item></a-col>
           <!-- 问题18：删全局「出口走代理」开关。入口代理下沉到每个 provider 的「入口代理」（新增/编辑里选具体自定义代理条目）。 -->
         </a-row>
-        <a-form-item label="代码审计源码落地目录">
-          <a-input v-model:value="config.source_code_dir" placeholder="开源系统拉取源码的服务器根目录" />
+        <a-form-item :label="translate('ui.m_af32f1346f76')">
+          <a-input v-model:value="config.source_code_dir" :placeholder="translate('ui.m_2aec072f5156')" />
         </a-form-item>
-        <a-form-item label="AI 渗透会话并发上限">
+        <a-form-item :label="translate('ui.m_ab79241df410')">
           <a-row :gutter="12" align="middle">
             <a-col :span="8">
               <a-input-number v-model:value="config.max_concurrent_sessions" :min="0" style="width: 100%"
-                :placeholder="`0=自动推荐(${config.recommend_concurrency || '-'})`" />
+                :placeholder="translate('ui.m_a8752c5e47db', { p0: (config.recommend_concurrency || '-') })" />
             </a-col>
             <a-col :span="16">
-              <span class="hint">同时运行的 AI 渗透会话数上限。<b>0 = 按服务器资源自动推荐(当前推荐 {{ config.recommend_concurrency ?? '-' }})</b>;当前生效 {{ config.effective_concurrency ?? '-' }}。超限的会话进排队,有空位自动放行。</span>
+              <span class="hint">{{ translate('ui.m_03dc1d1e84f1') }}<b>{{ translate('ui.m_13661d7fdc60') }} {{ config.recommend_concurrency ?? '-' }})</b>{{ translate('ui.m_5095f0748579') }} {{ config.effective_concurrency ?? '-' }}{{ translate('ui.m_b47156c4b7b9') }}</span>
             </a-col>
           </a-row>
         </a-form-item>
-        <a-button type="primary" :loading="loading" @click="saveConfig">保存全局参数</a-button>
+        <a-button type="primary" :loading="loading" @click="saveConfig">{{ translate('ui.m_bcc5da2cf6c1') }}</a-button>
       </a-form>
     </a-card>
 
     <!-- Token 消耗仪表盘 -->
-    <a-card class="page-card" title="Token 消耗仪表盘" size="small">
-      <template #extra><a-button size="small" @click="loadUsage">刷新</a-button></template>
+    <a-card class="page-card" :title="translate('ui.m_8cf9282cd067')" size="small">
+      <template #extra><a-button size="small" @click="loadUsage">{{ translate('ui.m_aee887434131') }}</a-button></template>
       <a-row :gutter="16" style="margin-bottom: 12px">
-        <a-col :span="6"><a-statistic title="总调用次数" :value="usage.overall.calls" /></a-col>
-        <a-col :span="6"><a-statistic title="总 Token" :value="usage.overall.total" /></a-col>
-        <a-col :span="6"><a-statistic title="输入 / 输出" :value="usage.overall.prompt" :suffix="`/ ${usage.overall.completion}`" /></a-col>
-        <a-col :span="6"><a-statistic title="失败调用" :value="usage.overall.fail_calls" :value-style="{ color: usage.overall.fail_calls ? '#cf1322' : undefined }" /></a-col>
+        <a-col :span="6"><a-statistic :title="translate('ui.m_e3716dc029bc')" :value="usage.overall.calls" /></a-col>
+        <a-col :span="6"><a-statistic :title="translate('ui.m_9638021caee5')" :value="usage.overall.total" /></a-col>
+        <a-col :span="6"><a-statistic :title="translate('ui.m_ef899af5d2c2')" :value="usage.overall.prompt" :suffix="`/ ${usage.overall.completion}`" /></a-col>
+        <a-col :span="6"><a-statistic :title="translate('ui.m_73b3bb0ff90c')" :value="usage.overall.fail_calls" :value-style="{ color: usage.overall.fail_calls ? '#cf1322' : undefined }" /></a-col>
       </a-row>
       <a-row :gutter="16">
         <a-col :span="12">
-          <p style="margin:4px 0"><b>按 Provider</b></p>
+          <p style="margin:4px 0"><b>{{ translate('ui.m_7b7a9c815742') }}</b></p>
           <a-table :columns="usageCols" :data-source="usage.by_provider" :pagination="false" size="small" row-key="name" bordered>
-            <template #emptyText>暂无调用记录(AI 引擎接入后自动统计)</template>
+            <template #emptyText>{{ translate('ui.m_4ed5091ab695') }}</template>
           </a-table>
         </a-col>
         <a-col :span="12">
-          <p style="margin:4px 0"><b>按任务环节</b></p>
+          <p style="margin:4px 0"><b>{{ translate('ui.m_0d71724b0cc2') }}</b></p>
           <a-table :columns="usageCols" :data-source="usage.by_scene" :pagination="false" size="small" row-key="name" bordered>
-            <template #emptyText>暂无调用记录</template>
+            <template #emptyText>{{ translate('ui.m_a380125a40e0') }}</template>
           </a-table>
         </a-col>
       </a-row>
     </a-card>
 
     <!-- Provider -->
-    <a-card class="page-card" title="大模型接入" size="small">
-      <template #extra><a-button type="primary" size="small" @click="openProvider()">新增 Provider</a-button></template>
+    <a-card class="page-card" :title="translate('ui.m_ec4d10343b70')" size="small">
+      <template #extra><a-button type="primary" size="small" @click="openProvider()">{{ translate('ui.m_7add78b882c2') }}</a-button></template>
       <a-table :columns="providerColumns" :data-source="providers" :loading="loading" row-key="_id"
         :pagination="false" size="middle" bordered :scroll="{ x: 1200 }" :row-class-name="(r: any) => r.enabled ? 'row-enabled' : ''">
         <template #bodyCell="{ column, record }">
@@ -73,7 +73,7 @@
           </template>
           <template v-else-if="column.key === 'enabled'">
             <a-badge v-if="record.enabled" status="success" text="已启用" />
-            <a-tag v-else color="default">停用</a-tag>
+            <a-tag v-else color="default">{{ translate('ui.m_4e6fd0e28c55') }}</a-tag>
           </template>
           <template v-else-if="column.key === 'proxy_id'">
             <!-- 问题18：入口代理列。按 proxy_id 在已加载自定义代理列表里查名字，空/查不到=直连 -->
@@ -81,9 +81,9 @@
           </template>
           <template v-else-if="column.key === 'action'">
             <a-space>
-              <a-button type="link" size="small" @click="openTest(record as AIProvider)">测试</a-button>
-              <a-button type="link" size="small" @click="openProvider(record as AIProvider)">编辑</a-button>
-              <ConfirmAction danger type="link" size="small" title="确认删除该 Provider？" @confirm="removeProvider(String(record._id))">删除</ConfirmAction>
+              <a-button type="link" size="small" @click="openTest(record as AIProvider)">{{ translate('ui.m_6aa8f49cc992') }}</a-button>
+              <a-button type="link" size="small" @click="openProvider(record as AIProvider)">{{ translate('ui.m_051836569928') }}</a-button>
+              <ConfirmAction danger type="link" size="small" :title="translate('ui.m_d56c71c888b9')" @confirm="removeProvider(String(record._id))">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
             </a-space>
           </template>
         </template>
@@ -91,46 +91,46 @@
     </a-card>
 
     <!-- AI 测试面板:选已配 AI(绿色=已启用)→ 输入(默认你好)→ 看回复 -->
-    <a-card class="page-card" title="AI 测试" size="small">
+    <a-card class="page-card" :title="translate('ui.m_47cefd711383')" size="small">
       <a-row :gutter="12" align="bottom">
         <a-col :span="9">
-          <div class="t-label">选择 AI</div>
-          <a-select v-model:value="testId" style="width:100%" placeholder="选一个已配置的 AI" :options="testOptions">
+          <div class="t-label">{{ translate('ui.m_352d74a36760') }}</div>
+          <a-select v-model:value="testId" style="width:100%" :placeholder="translate('ui.m_9e12968953cd')" :options="testOptions">
             <template #option="{ label, enabled }">
               <span><a-badge :status="enabled ? 'success' : 'default'" /> {{ label }}</span>
             </template>
           </a-select>
         </a-col>
         <a-col :span="10">
-          <div class="t-label">测试输入</div>
-          <a-input v-model:value="testMsg" placeholder="你好" @press-enter="runTest" />
+          <div class="t-label">{{ translate('ui.m_d8f6a43cde83') }}</div>
+          <a-input v-model:value="testMsg" :placeholder="translate('ui.m_670d9743542c')" @press-enter="runTest" />
         </a-col>
         <a-col :span="5">
-          <a-button type="primary" block :loading="testing" :disabled="!testId" @click="runTest">发送测试</a-button>
+          <a-button type="primary" block :loading="testing" :disabled="!testId" @click="runTest">{{ translate('ui.m_a49d32136de1') }}</a-button>
         </a-col>
       </a-row>
       <div v-if="testResult" class="t-result" :class="testResult.ok ? 'ok' : 'fail'">
         <div class="t-meta">
-          <a-tag :color="testResult.ok ? 'green' : 'red'">{{ testResult.ok ? '成功' : '失败' }}</a-tag>
-          <span v-if="testResult.model">模型 {{ testResult.model }}</span>
+          <a-tag :color="testResult.ok ? 'green' : 'red'">{{ testResult.ok ? translate('ui.m_053461ce86d2') : translate('ui.m_28384d7afd2e') }}</a-tag>
+          <span v-if="testResult.model">{{ translate('ui.m_c98e118e0a43') }} {{ testResult.model }}</span>
           <span v-if="testResult.total_tokens">· {{ testResult.total_tokens }} tokens</span>
-          <span>· {{ testResult.proxy_enabled ? '经代理' : '直连' }}</span>
+          <span>· {{ testResult.proxy_enabled ? translate('ui.m_c49b87cc96bc') : translate('ui.m_b06325c5660f') }}</span>
         </div>
         <pre class="t-reply">{{ testResult.ok ? testResult.content : testResult.error }}</pre>
       </div>
     </a-card>
 
     <!-- Prompt -->
-    <a-card class="page-card" title="AI 任务环节" size="small">
-      <template #extra><a-button type="primary" size="small" @click="openPrompt()">新增环节</a-button></template>
+    <a-card class="page-card" :title="translate('ui.m_5dbfa8f40be0')" size="small">
+      <template #extra><a-button type="primary" size="small" @click="openPrompt()">{{ translate('ui.m_6e0894828d03') }}</a-button></template>
       <a-alert type="info" show-icon style="margin-bottom: 12px"
-        message="每个环节可单独勾选启用、编辑该环节专属提示词。AI 模型已改在「新建任务」时按任务选择，环节「绑定 AI」已冻结（存量绑定仍生效，未绑定回退上方“默认 AI”）。" />
+        :message="translate('ui.m_afdc4588e6dc')" />
       <a-table :columns="sceneColumns" :data-source="prompts" :loading="loading" row-key="_id"
         :pagination="false" size="middle" bordered>
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'enabled'">
             <!-- 内置环节属系统核心，启用开关变灰强制启用不可关（防误关坏渗透/审查链路）；自定义环节可自由启停 -->
-            <a-tooltip v-if="(record as AIPrompt).builtin" title="内置环节属系统核心，强制启用不可关闭">
+            <a-tooltip v-if="(record as AIPrompt).builtin" :title="translate('ui.m_19f27e5badc3')">
               <a-switch :checked="true" size="small" disabled />
             </a-tooltip>
             <a-switch v-else :checked="record.enabled" size="small" @change="(v: any) => toggleScene(record as AIPrompt, !!v)" />
@@ -144,28 +144,28 @@
           <template v-else-if="column.key === 'provider'">
             <!-- v1.21.157-47 冻结：模型改在「新建任务」按任务选（pentest_provider_id 等），scene 绑定已废弃。
                  只读展示已绑定值(存量保留可解析)，不允许改。 -->
-            <a-tooltip title="已改为在「新建任务」时按任务选择 AI 模型，此处不再绑定">
+            <a-tooltip :title="translate('ui.m_cb03e918971a')">
               <a-tag :color="(record as AIPrompt).provider_id ? 'blue' : 'default'">
-                {{ (record as AIPrompt).provider_name || '默认 AI (兜底)' }}
+                {{ (record as AIPrompt).provider_name || translate('ui.m_877d315f3402') }}
               </a-tag>
             </a-tooltip>
           </template>
           <template v-else-if="column.key === 'content'">
-            <a-tooltip v-if="(record as AIPrompt).builtin" title="内置提示词,不可编辑(防误改坏渗透/审查质量)">
-              <a-tag color="blue">内置</a-tag>
+            <a-tooltip v-if="(record as AIPrompt).builtin" :title="translate('ui.m_a9291a8bdf9c')">
+              <a-tag color="blue">{{ translate('ui.m_95e35aabd9a9') }}</a-tag>
             </a-tooltip>
-            <a-tag v-else-if="!record.content" color="orange">未填写</a-tag>
+            <a-tag v-else-if="!record.content" color="orange">{{ translate('ui.m_7f05190592e5') }}</a-tag>
             <span v-else class="content-snippet">{{ String(record.content).slice(0, 40) }}…</span>
           </template>
           <template v-else-if="column.key === 'action'">
             <a-space>
-              <a-tooltip v-if="(record as AIPrompt).builtin" title="内置提示词不可编辑(防误改)；AI 模型改在「新建任务」按任务选">
-                <a-button type="link" size="small" disabled>编辑提示词</a-button>
+              <a-tooltip v-if="(record as AIPrompt).builtin" :title="translate('ui.m_c634aa6e9297')">
+                <a-button type="link" size="small" disabled>{{ translate('ui.m_b52f59e63937') }}</a-button>
               </a-tooltip>
-              <a-button v-else type="link" size="small" @click="openPrompt(record as AIPrompt)">编辑提示词</a-button>
-              <ConfirmAction v-if="!(record as AIPrompt).builtin" danger type="link" size="small" title="确认删除该环节？" @confirm="removePrompt(record._id as string)">删除</ConfirmAction>
-              <a-tooltip v-else title="内置环节属系统核心，只能停用不可删除">
-                <a-tag color="blue">内置</a-tag>
+              <a-button v-else type="link" size="small" @click="openPrompt(record as AIPrompt)">{{ translate('ui.m_b52f59e63937') }}</a-button>
+              <ConfirmAction v-if="!(record as AIPrompt).builtin" danger type="link" size="small" :title="translate('ui.m_a2f3324d913a')" @confirm="removePrompt(record._id as string)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
+              <a-tooltip v-else :title="translate('ui.m_111c26cf5bf6')">
+                <a-tag color="blue">{{ translate('ui.m_95e35aabd9a9') }}</a-tag>
               </a-tooltip>
             </a-space>
           </template>
@@ -177,16 +177,16 @@
     <a-modal :open="validating" :footer="null" :closable="false" :mask-closable="false" width="360" centered>
       <div style="text-align:center;padding:16px 0">
         <a-spin size="large" />
-        <p style="margin-top:16px;color:#555">正在校验模型有效性（连通性 + 密钥）…<br/>校验通过后才会存档</p>
+        <p style="margin-top:16px;color:#555">{{ translate('ui.m_5175d77acf69') }}<br/>{{ translate('ui.m_868571ca7166') }}</p>
       </div>
     </a-modal>
 
     <!-- Provider 编辑弹窗:选厂商 → 生成原生 JSON → 改 key/base_url → 提交 -->
-    <a-modal v-model:open="providerOpen" :title="editingId ? '编辑 Provider' : '新增 Provider'" :confirm-loading="loading" width="640" @ok="saveProvider">
+    <a-modal v-model:open="providerOpen" :title="editingId ? translate('ui.m_2610596303f5') : translate('ui.m_7add78b882c2')" :confirm-loading="loading" width="640" @ok="saveProvider">
       <a-form layout="vertical">
         <a-row :gutter="12" align="bottom">
           <a-col :span="16">
-            <a-form-item label="厂商" style="margin-bottom:8px">
+            <a-form-item :label="translate('ui.m_2e10281b39c0')" style="margin-bottom:8px">
               <a-select v-model:value="cfgType" :options="typeOptions" @change="(v: any) => applyTemplate(String(v))">
                 <template #option="{ value: v, label }">
                   <span class="provider-opt">
@@ -199,67 +199,69 @@
           </a-col>
           <a-col :span="8">
             <a-form-item style="margin-bottom:8px">
-              <a-button block @click="resetTemplate">重置为该厂商模板</a-button>
+              <a-button block @click="resetTemplate">{{ translate('ui.m_20212e1b72e2') }}</a-button>
             </a-form-item>
           </a-col>
         </a-row>
         <!-- 问题18：入口代理选择——调用 AI(访问中转站/LLM)的入口代理，选具体自定义代理条目，默认直连。
              与任务发起时的攻击出口(AI→目标)彻底双轨分离。选中即写入下方 JSON 的 proxy_id(JSON 仍是提交源)。 -->
-        <a-form-item label="入口代理（访问中转站/LLM 出网）">
+        <a-form-item :label="translate('ui.m_bec10871e163')">
           <a-select v-model:value="ingressProxyId" :options="ingressProxyOptions" style="width:100%"
-            placeholder="默认直连；可选一条已启用的自定义代理" />
-          <span class="hint">仅用于平台调用 AI 时的出网（境外中转站可选代理连通）。与「任务发起→AI 攻击目标」的出口代理是两回事，互不影响。可选条目来自「代理中心 · 自定义代理」（仅列已启用）。</span>
+            :placeholder="translate('ui.m_b2905b610811')" />
+          <span class="hint">{{ translate('ui.m_a16d6315091e') }}</span>
         </a-form-item>
-        <a-form-item label="配置">
+        <a-form-item :label="translate('ui.m_148d195e21b0')">
           <a-alert v-if="editingId" type="info" style="margin-bottom:8px" show-icon
-            message="api_key 留空保持原值，输入新值覆盖。base_url 可直接修改。" />
+            :message="translate('ui.m_beac9b863d57')" />
           <a-textarea v-model:value="cfgText" :rows="14" spellcheck="false"
             style="font-family: monospace; font-size: 13px"
-            placeholder='选厂商自动生成模板,在此填 api_key、按需改 base_url/model/reasoning_effort' />
+            :placeholder="translate('ui.m_86f000a63190')" />
           <div class="field-guide">
-            <div class="fg-title">各字段说明（直接编辑上方 JSON）：</div>
-            <div class="fg-item"><b>base_url</b>：接口地址。填 AI 服务/中转站的 API 根地址（如 <code>https://api.openai.com/v1</code>、<code>https://api.deepseek.com</code>；本地部署填 <code>http://localhost:11434/v1</code> 等 OpenAI 兼容地址）。选厂商已自动填好，用中转站才需改。</div>
-            <div class="fg-item"><b>api_key</b>：你的密钥。填 AI 服务商或中转站给你的 API Key（<code>sk-...</code> 之类）。<span v-if="editingId">编辑时留空=保留原 key。</span></div>
-            <div class="fg-item"><b>model</b>：模型名。填要用的模型标识（如 <code>gpt-4o</code>、<code>claude-opus-4-8</code>、<code>deepseek-chat</code>）。以服务商文档为准，选厂商已带默认。</div>
-            <div class="fg-item"><b>reasoning_effort</b>：思考程度（推理投入）。<b>默认 high（高）</b>——想更快/更省可改 <code>medium</code>/<code>low</code>；Claude 系可填数字 thinking budget；DeepSeek 等不支持的填空串 <code>""</code>。</div>
-            <div class="fg-item"><b>protocol</b>：调用协议。<code>openai</code>（OpenAI 兼容）或 <code>claude</code>（Anthropic），决定按哪种格式调用，选厂商已自动定。</div>
-            <div class="fg-note">也支持直接粘贴 Claude Code 的 settings.json（含 env.ANTHROPIC_*）。</div>
+            <div class="fg-title">{{ translate('ui.m_0c0e2813d013') }}</div>
+            <div class="fg-item"><b>base_url</b>{{ translate('ui.m_c09e014d8eb8') }} <code>https://api.openai.com/v1</code>、<code>https://api.deepseek.com</code>{{ translate('ui.m_90fb670e966a') }} <code>http://localhost:11434/v1</code> {{ translate('ui.m_6c4c949ca8fe') }}</div>
+            <div class="fg-item"><b>api_key</b>{{ translate('ui.m_040800e2d6b2') }}<code>sk-...</code> {{ translate('ui.m_da5fd7787056') }}<span v-if="editingId">{{ translate('ui.m_6c84a55ca127') }}</span></div>
+            <div class="fg-item"><b>model</b>{{ translate('ui.m_b927b3285993') }} <code>gpt-4o</code>、<code>claude-opus-4-8</code>、<code>deepseek-chat</code>{{ translate('ui.m_49631f1acbd5') }}</div>
+            <div class="fg-item"><b>reasoning_effort</b>{{ translate('ui.m_d80b2d77d882') }}<b>{{ translate('ui.m_a54ae376ff80') }}</b>{{ translate('ui.m_2e85422136a2') }} <code>medium</code>/<code>low</code>{{ translate('ui.m_9a1bf9331a0b') }} <code>""</code>。</div>
+            <div class="fg-item"><b>protocol</b>{{ translate('ui.m_4c496a63e41f') }}<code>openai</code>{{ translate('ui.m_23d2d62a0a04') }} <code>claude</code>{{ translate('ui.m_422fd7aa0925') }}</div>
+            <div class="fg-note">{{ translate('ui.m_e8f92affe31b') }}</div>
           </div>
         </a-form-item>
       </a-form>
     </a-modal>
 
     <!-- Prompt 编辑弹窗 -->
-    <a-modal v-model:open="promptOpen" :title="promptForm._id ? '编辑任务环节' : '新增任务环节'" :confirm-loading="loading" width="760" @ok="savePrompt">
+    <a-modal v-model:open="promptOpen" :title="promptForm._id ? translate('ui.m_f758056d328a') : translate('ui.m_5d25920d5682')" :confirm-loading="loading" width="760" @ok="savePrompt">
       <a-form layout="vertical">
         <a-row :gutter="16">
           <a-col :span="8">
-            <a-form-item label="场景">
+            <a-form-item :label="translate('ui.m_7f72f06a8877')">
               <a-select v-model:value="promptForm.scene" :options="sceneOptions" />
             </a-form-item>
           </a-col>
-          <a-col :span="8"><a-form-item label="环节名"><a-input v-model:value="promptForm.name" /></a-form-item></a-col>
+          <a-col :span="8"><a-form-item :label="translate('ui.m_b55134fb6456')"><a-input v-model:value="promptForm.name" /></a-form-item></a-col>
           <a-col :span="8">
-            <a-form-item label="绑定 AI">
+            <a-form-item :label="translate('ui.m_2797f5c06fe8')">
               <!-- v1.21.157-47 冻结：改在「新建任务」按任务选 AI 模型；此处只读展示，不再绑定 -->
-              <a-select v-model:value="promptForm.provider_id" disabled placeholder="默认 AI (兜底)">
-                <a-select-option value="">默认 AI (兜底)</a-select-option>
+              <a-select v-model:value="promptForm.provider_id" disabled :placeholder="translate('ui.m_877d315f3402')">
+                <a-select-option value="">{{ translate('ui.m_877d315f3402') }}</a-select-option>
                 <a-select-option v-for="p in providers" :key="p._id" :value="p._id">{{ p.name }}</a-select-option>
               </a-select>
-              <div class="hint">模型已改在「新建任务」时按任务选择，此处不再绑定。</div>
+              <div class="hint">{{ translate('ui.m_756578a7f081') }}</div>
             </a-form-item>
           </a-col>
         </a-row>
-        <a-form-item label="提示词内容">
-          <a-textarea v-model:value="promptForm.content" :rows="14" placeholder="按该环节绑定的 AI 特性编写系统提示词,例如 Claude 用 XML 结构、推理模型避免手把手分解步骤..." />
+        <a-form-item :label="translate('ui.m_cc1ab53aea16')">
+          <a-textarea v-model:value="promptForm.content" :rows="14" :placeholder="translate('ui.m_f5c468a5adc5')" />
         </a-form-item>
-        <a-space><span>启用该环节</span><a-switch v-model:checked="promptForm.enabled" /></a-space>
+        <a-space><span>{{ translate('ui.m_1769c58bedc4') }}</span><a-switch v-model:checked="promptForm.enabled" /></a-space>
       </a-form>
     </a-modal>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -271,8 +273,8 @@ import { providerIcon } from '../../config/providerIcons'
 const loading = ref(false)
 
 const usageCols = [
-  { title: '名称', dataIndex: 'name', ellipsis: true },
-  { title: '调用', dataIndex: 'calls', width: 80 },
+  { get title() { return translate('ui.m_d44e9b3d3b31') }, dataIndex: 'name', ellipsis: true },
+  { get title() { return translate('ui.m_653b123c956d') }, dataIndex: 'calls', width: 80 },
   { title: 'Token', dataIndex: 'total', width: 100 }
 ]
 const usage = ref<UsageStat>({ overall: { calls: 0, prompt: 0, completion: 0, total: 0, fail_calls: 0 }, by_provider: [], by_scene: [] })
@@ -285,13 +287,13 @@ const config = reactive<AIConfig>({
 const customProxies = ref<CustomProxy[]>([])
 // 入口代理下拉选项：默认「直连」(value='')，其后是各 enabled 自定义代理
 const ingressProxyOptions = computed(() => [
-  { label: '直连（不走代理）', value: '' },
+  { get label() { return translate('ui.m_93aa13174271') }, value: '' },
   ...customProxies.value.map(c => ({ label: c.name || c.url, value: c._id }))
 ])
 // 按 proxy_id 查代理名（供列表列展示），空/查不到=直连
 function proxyName(id?: string): string {
-  if (!id) return '直连'
-  return customProxies.value.find(c => c._id === id)?.name || '直连'
+  if (!id) return translate('ui.m_b06325c5660f')
+  return customProxies.value.find(c => c._id === id)?.name || translate('ui.m_b06325c5660f')
 }
 const providers = ref<AIProvider[]>([])
 const presets = ref<AIPreset[]>([])
@@ -304,36 +306,36 @@ const presetMap = computed<Record<string, AIPreset>>(() =>
 const typeLabel = (t: string) => presetMap.value[t]?.label || t
 const iconKey = (t: string) => presetMap.value[t]?.icon || t || 'custom'
 const sceneOptions = [
-  { label: '渗透执行(探测模式)', value: 'pentest_exec_detect' },
-  { label: '渗透执行(保守模式)', value: 'pentest_exec_conservative' },
-  { label: '渗透执行(常规模式)', value: 'pentest_exec' },
-  { label: '渗透执行(红队模式)', value: 'pentest_exec_redteam' },
-  { label: '安全闸刀·标准(常规模式)', value: 'guard' },
-  { label: '安全闸刀·保守(保守模式)', value: 'guard_conservative' },
-  { label: '安全闸刀·探测(探测模式)', value: 'guard_detect' },
-  { label: '代码审计', value: 'code_audit' },
-  { label: '自定义', value: 'custom' }
+  { get label() { return translate('ui.m_779c969ce9de') }, value: 'pentest_exec_detect' },
+  { get label() { return translate('ui.m_d21f22ecd734') }, value: 'pentest_exec_conservative' },
+  { get label() { return translate('ui.m_95a8ac01594a') }, value: 'pentest_exec' },
+  { get label() { return translate('ui.m_64772a7b6938') }, value: 'pentest_exec_redteam' },
+  { get label() { return translate('ui.m_a94a7511a1e9') }, value: 'guard' },
+  { get label() { return translate('ui.m_aa6e44a6f822') }, value: 'guard_conservative' },
+  { get label() { return translate('ui.m_b3a34f2bc2a6') }, value: 'guard_detect' },
+  { get label() { return translate('ui.m_3dad33aa3b74') }, value: 'code_audit' },
+  { get label() { return translate('ui.m_4eafa9e925b3') }, value: 'custom' }
 ]
 
 const providerOptions = computed(() => providers.value.map(p => ({ label: `${p.name} (${p.model || p.type})`, value: p._id })))
 
 const providerColumns = [
-  { title: '名称', dataIndex: 'name', width: 150, ellipsis: true },
-  { title: '类型', key: 'type', width: 160 },
-  { title: '模型', dataIndex: 'model', width: 180, ellipsis: true },
-  { title: '接口地址', dataIndex: 'base_url', width: 200, ellipsis: true },
+  { get title() { return translate('ui.m_d44e9b3d3b31') }, dataIndex: 'name', width: 150, ellipsis: true },
+  { get title() { return translate('ui.m_ba40014ff496') }, key: 'type', width: 160 },
+  { get title() { return translate('ui.m_c98e118e0a43') }, dataIndex: 'model', width: 180, ellipsis: true },
+  { get title() { return translate('ui.m_03b11112dc97') }, dataIndex: 'base_url', width: 200, ellipsis: true },
   { title: 'API Key', dataIndex: 'api_key', width: 160, ellipsis: true },
-  { title: '状态', key: 'enabled', width: 84 },
-  { title: '代理', key: 'proxy_id', width: 120 },
-  { title: '操作', key: 'action', width: 180, fixed: 'right' }
+  { get title() { return translate('ui.m_6320b4a8722a') }, key: 'enabled', width: 84 },
+  { get title() { return translate('ui.m_5e84ea61e838') }, key: 'proxy_id', width: 120 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 180, fixed: 'right' }
 ]
 
 const sceneColumns = [
-  { title: '启用', key: 'enabled', width: 70 },
-  { title: '任务环节', key: 'scene', width: 260 },
-  { title: '绑定 AI', key: 'provider', width: 220 },
-  { title: '提示词', key: 'content', ellipsis: true },
-  { title: '操作', key: 'action', width: 180 }
+  { get title() { return translate('ui.m_f4f0ead1116b') }, key: 'enabled', width: 70 },
+  { get title() { return translate('ui.m_cede383a35ed') }, key: 'scene', width: 260 },
+  { get title() { return translate('ui.m_2797f5c06fe8') }, key: 'provider', width: 220 },
+  { get title() { return translate('ui.m_4b47dbae97ba') }, key: 'content', ellipsis: true },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 180 }
 ]
 
 async function loadConfig() {
@@ -382,7 +384,7 @@ const testMsg = ref('你好')
 const testing = ref(false)
 const testResult = ref<{ ok: boolean; content: string; model: string; total_tokens: number; proxy_enabled: boolean; error: string } | null>(null)
 const testOptions = computed(() => providers.value.map(p => ({
-  label: `${p.name} (${p.model || p.type})${p.enabled ? '' : ' [停用]'}`, value: p._id, enabled: p.enabled
+  label: `${p.name} (${p.model || p.type})${p.enabled ? '' : translate('ui.m_d2bd0f4a5529')}`, value: p._id, enabled: p.enabled
 })))
 function openTest(record: AIProvider) {
   testId.value = record._id
@@ -391,7 +393,7 @@ function openTest(record: AIProvider) {
   setTimeout(() => document.querySelector('.t-result, .t-label')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
 }
 async function runTest() {
-  if (!testId.value) return message.warning('请选择一个 AI')
+  if (!testId.value) return message.warning(translate('ui.m_ff0f2d4f4c78'))
   testing.value = true
   testResult.value = null
   try {
@@ -410,7 +412,7 @@ async function saveConfig() {
       max_concurrent_sessions: config.max_concurrent_sessions, timeout: config.timeout,
       source_code_dir: config.source_code_dir
     }))
-    message.success('已保存')
+    message.success(translate('ui.m_1bd91a7d0c53'))
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }
 
@@ -463,7 +465,7 @@ function applyTemplate(t: string) {
 }
 function resetTemplate() {
   cfgText.value = templateFor(cfgType.value)
-  message.success('已重置为该厂商模板')
+  message.success(translate('ui.m_22cb090aff39'))
 }
 function openProvider(record?: AIProvider) {
   if (record) {
@@ -483,7 +485,7 @@ function openProvider(record?: AIProvider) {
   providerOpen.value = true
 }
 async function saveProvider() {
-  try { JSON.parse(cfgText.value) } catch { return message.error('JSON 格式错误,请检查') }
+  try { JSON.parse(cfgText.value) } catch { return message.error(translate('ui.m_492b2d911474')) }
   loading.value = true
   try {
     // 保存前先校验模型有效性（连通性+key），通过才存档；校验期间弹窗提示
@@ -493,17 +495,17 @@ async function saveProvider() {
       vr = await aiConfigApi.testProviderConfig(cfgText.value, cfgType.value)
     } finally { validating.value = false }
     if (!vr.ok) {
-      return message.error(`模型校验未通过，未存档：${vr.error || '连通失败'}`)
+      return message.error(translate('ui.m_d8a6611758de', { p0: (vr.error || '连通失败') }))
     }
-    message.success(`模型校验通过（${vr.model || ''}），正在存档`)
+    message.success(translate('ui.m_4e6685e0f3e6', { p0: (vr.model || '') }))
     const payload = { config: cfgText.value, type: cfgType.value }
     if (editingId.value) await aiConfigApi.updateProvider(editingId.value, payload)
     else await aiConfigApi.addProvider(payload)
-    message.success('已保存'); providerOpen.value = false; loadProviders()
+    message.success(translate('ui.m_1bd91a7d0c53')); providerOpen.value = false; loadProviders()
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }
 async function removeProvider(id: string) {
-  try { await aiConfigApi.deleteProvider(id); message.success('已删除'); loadProviders(); loadConfig() }
+  try { await aiConfigApi.deleteProvider(id); message.success(translate('ui.m_077a6d37719a')); loadProviders(); loadConfig() }
   catch (e) { message.error((e as Error).message) }
 }
 
@@ -520,7 +522,7 @@ async function savePrompt() {
   try {
     if (promptForm._id) await aiConfigApi.updatePrompt(promptForm._id, promptForm)
     else await aiConfigApi.addPrompt(promptForm)
-    message.success('已保存'); promptOpen.value = false; loadPrompts()
+    message.success(translate('ui.m_1bd91a7d0c53')); promptOpen.value = false; loadPrompts()
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }
 // 行内快捷:切换启用 / 绑定 AI(不进编辑弹窗)
@@ -530,7 +532,7 @@ async function toggleScene(record: AIPrompt, enabled: boolean) {
 }
 // bindScene 已随「绑定 AI」冻结移除（v1.21.157-47，模型改在新建任务按任务选）。
 async function removePrompt(id: string) {
-  try { await aiConfigApi.deletePrompt(id); message.success('已删除'); loadPrompts() }
+  try { await aiConfigApi.deletePrompt(id); message.success(translate('ui.m_077a6d37719a')); loadPrompts() }
   catch (e) { message.error((e as Error).message) }
 }
 onMounted(loadAll)

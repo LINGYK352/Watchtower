@@ -84,7 +84,7 @@ def _read_update_key() -> str:
 
 # 与分发系统 _update_common.TRACK_DIRS 对齐（不 import 分发系统——主平台零耦合，本地内联一份）。
 # 回退时据此扫描本地跟踪目录，识别"目标版不存在但本地有"的多余文件。
-def _launch_updater(source_url: str, key: str, current_root: str, target_version: str = ""):
+def _launch_updater(source_url: str, key: str, current_root: str, target_version: str = "", full: bool = False):
     """以**独立子进程**启动更新执行器（_updater），免疫 gunicorn --reload 杀线程。
     根因：daemon 线程逐文件写后端 .py 触发 --reload 重启 worker→线程被杀→进度冻结（VM 实测卡 143/153）。
     子进程 detached（Linux setsid / Windows DETACHED），随本 worker 重启也不受影响；进度照旧写文件。"""
@@ -94,6 +94,8 @@ def _launch_updater(source_url: str, key: str, current_root: str, target_version
             source_url, key, current_root]
     if target_version:
         args.append(target_version)
+    if full:
+        args.append("--full")
     kwargs = {"cwd": current_root, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if os.name == "posix":
         kwargs["start_new_session"] = True          # setsid：脱离 worker 进程组，reload 杀不到
@@ -208,6 +210,9 @@ class _Rollback(Resource):
         from flask import request as _rq
         body = _rq.get_json(silent=True) or {}
         target = (body.get("version") or "").strip()
+        full = body.get("full", False)
+        if not isinstance(full, bool):
+            return err(CODE_ERROR, "full 必须为布尔值")
         if not target:
             return err(CODE_ERROR, "version 必填")
         p = _get_progress()
@@ -217,7 +222,7 @@ class _Rollback(Resource):
         if not key:
             return err(CODE_ERROR, "未激活，请先激活系统获取授权凭证")
         current_root = _project_root()
-        _launch_updater(_source_url(), key, current_root, target)   # 独立子进程，免疫 --reload
+        _launch_updater(_source_url(), key, current_root, target, full=full)
         return ok({"started": True, "target_version": target})
 
 
@@ -284,18 +289,9 @@ class _Changelog(Resource):
     def get(self):
         """更新日志：优先读本地 changelog.json（权威、离线可用、随版本部署即最新），
         读不到再转发分发源兜底。根治「前端硬编码列表卡在旧版本」——前端统一调本接口。"""
-        import json
-        try:
-            p = os.path.join(_project_root(), "changelog.json")
-            if os.path.exists(p):
-                with open(p, "r", encoding="utf-8") as f:
-                    local = json.load(f)
-                if isinstance(local, list) and local:
-                    return ok(local)
-        except Exception:
-            pass   # 本地读失败降级转发分发源
-        data, _ = _forward_get("/changelog", timeout=10)
-        return ok(data if data is not None else [])
+        from sentinel_platform.modules.about import _changelog
+        return ok(_changelog.current(_project_root(),
+                  lambda: _forward_get("/changelog", timeout=10)[0]))
 
 
 @ns.route("/announcements")
@@ -310,4 +306,3 @@ class _Announcements(Resource):
         偶发超时经 _forward_get 重试自愈，不因单次抖动漏掉生效中的通告。"""
         data, _ = _forward_get("/announcements", timeout=10)
         return ok(data if data is not None else {"announcements": []})
-

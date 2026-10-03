@@ -7,38 +7,40 @@
   纯前端消费既有端点，数据源：resourceAlert() 的 {level,mem,cpu,disk,dims[],ts}。
 -->
 <template>
-  <a-modal v-model:open="open" title="⚠ 系统资源告警" :footer="null" :width="600" :mask-closable="false" wrap-class-name="res-alert">
+  <a-modal v-model:open="open" :title="translate('ui.m_78ba00a8c645')" :footer="null" :width="600" :mask-closable="false" wrap-class-name="res-alert">
     <a-alert type="error" show-icon style="margin-bottom:14px"
-      :message="`系统资源水位已达「严重」，可能导致任务卡死或服务中断`"
+      :message="translate('ui.m_c3333ed59191')"
       :description="summary" />
     <div class="res-dims" v-if="dims.length">
-      <div class="res-sub">超标资源项：</div>
+      <div class="res-sub">{{ translate('ui.m_8bfdf37f6584') }}</div>
       <a-tag v-for="d in dims" :key="d.key" :color="d.level==='critical' ? 'red' : 'orange'">
-        {{ d.label }}：{{ d.value }}%（{{ d.level==='critical' ? '严重' : '偏高' }}）
+        {{ d.label }}：{{ d.value }}%（{{ d.level==='critical' ? translate('ui.m_73eb0e14e307') : translate('ui.m_cde6311d914f') }}）
       </a-tag>
     </div>
     <div class="res-snapshot">
-      <span>内存 {{ fmt(mem) }}</span>
+      <span>{{ translate('ui.m_7d8f8c37ec78') }} {{ fmt(mem) }}</span>
       <a-divider type="vertical" />
       <span>CPU {{ fmt(cpu) }}</span>
       <a-divider type="vertical" />
-      <span>磁盘 {{ fmt(disk) }}</span>
+      <span>{{ translate('ui.m_de7b72a3f852') }} {{ fmt(disk) }}</span>
     </div>
-    <div class="res-time" v-if="alertTime">告警时间：{{ alertTime }}</div>
-    <div class="res-sub" style="margin-top:14px">建议排查：</div>
+    <div class="res-time" v-if="alertTime">{{ translate('ui.m_292332a83aa4') }}{{ alertTime }}</div>
+    <div class="res-sub" style="margin-top:14px">{{ translate('ui.m_399fced38fdf') }}</div>
     <ul class="res-tips">
       <li v-for="(t,i) in tips" :key="i">{{ t }}</li>
     </ul>
     <div style="text-align:right;margin-top:18px">
       <a-space>
-        <a-button type="primary" @click="goDashboard">去态势总览</a-button>
-        <a-button @click="dismiss">稍后处理</a-button>
+        <a-button type="primary" @click="goDashboard">{{ translate('ui.m_fe9fcaad7fd9') }}</a-button>
+        <a-button @click="dismiss">{{ translate('ui.m_bf639a51feec') }}</a-button>
       </a-space>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { consoleApi, type ResourceAlertDim } from '../api/console'
@@ -67,18 +69,18 @@ const alertTime = computed(() => {
 
 const summary = computed(() => {
   const parts = dims.value.map(d => `${d.label} ${d.value}%`)
-  return parts.length ? `当前 ${parts.join('、')}，已超过危险阈值。持续高水位可能触发内核 OOM，导致中间件/任务进程被杀。` : '系统资源紧张。'
+  return parts.length ? translate('ui.m_18fb9c27da34', { p0: (parts.join('、')) }) : translate('ui.m_75a68fff0afc')
 })
 
 // 按超标维度给针对性排查建议（哪项高给哪项的建议，无明确短板给通用建议）
 const tips = computed<string[]>(() => {
   const keys = dims.value.map(d => d.key)
   const out: string[] = []
-  if (keys.includes('memory')) out.push('内存偏高：暂停或减少并发的 AI 渗透会话/扫描任务；若为小内存机器，避免同时开启浏览器渲染工具（Chromium 内存消耗大）。')
-  if (keys.includes('cpu')) out.push('CPU 偏高：降低扫描并发（策略侧 io_concurrency/scan_parallelism），或错峰运行大批量任务。')
-  if (keys.includes('disk')) out.push('磁盘偏高：清理旧扫描结果/日志/镜像缓存，检查 resource_history、日志集合的 TTL 保留天数是否过长。')
-  if (!out.length) out.push('系统综合资源紧张：到「态势总览」查看资源趋势图，定位是内存、CPU 还是磁盘瓶颈。')
-  out.push('调度器已对高水位自动降级（暂停低优先级会话、收窄并发）；若持续告警，建议扩容或减负。')
+  if (keys.includes('memory')) out.push(translate('ui.m_f3881d85bf55'))
+  if (keys.includes('cpu')) out.push(translate('ui.m_1752e233bb2c'))
+  if (keys.includes('disk')) out.push(translate('ui.m_0481f3a69254'))
+  if (!out.length) out.push(translate('ui.m_a638ce44ae11'))
+  out.push(translate('ui.m_970339be3afb'))
   return out
 })
 

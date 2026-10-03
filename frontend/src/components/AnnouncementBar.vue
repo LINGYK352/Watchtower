@@ -4,11 +4,11 @@
     <component :is="levelIcon(barItem.level)" class="ann-bar-ico" />
     <span class="ann-bar-title">{{ barItem.title }}</span>
     <span class="ann-bar-content">{{ barItem.content }}</span>
-    <a class="ann-bar-close" @click="closeBar(barItem.id)" title="关闭此通告">✕</a>
+    <a class="ann-bar-close" @click="closeBar(barItem.id)" :title="translate('ui.m_530475d69caa')">✕</a>
   </div>
 
   <!-- 强制弹窗：popup=true 的通告，每条按 id 记已读，不重复弹 -->
-  <a-modal :open="popupOpen" :title="popupItem?.title || '系统通告'" :footer="null"
+  <a-modal :open="popupOpen" :title="popupItem?.title || translate('ui.m_cc1e57efaf6d')" :footer="null"
     :maskClosable="false" centered width="520px" @cancel="dismissPopup" wrap-class-name="ann-modal">
     <div v-if="popupItem" class="ann-pop">
       <a-alert :type="alertType(popupItem.level)" show-icon banner style="margin-bottom:14px"
@@ -16,13 +16,15 @@
       <div class="ann-pop-body">{{ popupItem.content }}</div>
       <div class="ann-pop-meta" v-if="popupItem.ts">{{ popupItem.ts }}</div>
       <div class="ann-pop-actions">
-        <a-button type="primary" @click="dismissPopup">我知道了</a-button>
+        <a-button type="primary" @click="dismissPopup">{{ translate('ui.m_348f1cf1243e') }}</a-button>
       </div>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   InfoCircleOutlined, WarningOutlined, ExclamationCircleOutlined,

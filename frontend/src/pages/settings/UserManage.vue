@@ -1,11 +1,11 @@
 <template>
-  <PageContainer title="用户管理" kicker="User & Role" description="创建用户、分配角色,管理角色权限。权限校验由后端统一拦截,前端菜单按权限显隐。">
+  <PageContainer :title="translate('ui.m_fbf413d429bd')" kicker="User & Role" :description="translate('ui.m_d7fc78e962f3')">
     <a-tabs v-model:activeKey="tab">
       <!-- 用户 -->
       <a-tab-pane key="users" tab="用户">
         <div class="bar">
-          <a-button @click="loadUsers">刷新</a-button>
-          <a-button type="primary" @click="openAddUser">新建用户</a-button>
+          <a-button @click="loadUsers">{{ translate('ui.m_aee887434131') }}</a-button>
+          <a-button type="primary" @click="openAddUser">{{ translate('ui.m_3ae9a33489d7') }}</a-button>
         </div>
         <a-table :columns="userCols" :data-source="users" :loading="loadingUsers" :pagination="false" row-key="username" size="middle" bordered>
           <template #bodyCell="{ column, record }">
@@ -13,14 +13,14 @@
               <a-tag :color="record.is_manager ? 'red' : 'blue'">{{ roleTitle(record.role) }}</a-tag>
             </template>
             <template v-else-if="column.key === 'disabled'">
-              <a-tag :color="record.disabled ? 'default' : 'green'">{{ record.disabled ? '已禁用' : '启用' }}</a-tag>
+              <a-tag :color="record.disabled ? 'default' : 'green'">{{ record.disabled ? translate('ui.m_bc5a87a757a5') : translate('ui.m_f4f0ead1116b') }}</a-tag>
             </template>
             <template v-else-if="column.key === 'action'">
               <a-space>
-                <a @click="openEditUser(record)">编辑</a>
-                <a @click="toggleDisable(record)">{{ record.disabled ? '启用' : '禁用' }}</a>
-                <ConfirmAction title="确认删除该用户?" danger @confirm="removeUser(record.username)">
-                  <a class="danger-link">删除</a>
+                <a @click="openEditUser(record)">{{ translate('ui.m_051836569928') }}</a>
+                <a @click="toggleDisable(record)">{{ record.disabled ? translate('ui.m_f4f0ead1116b') : translate('ui.m_7df5c456c765') }}</a>
+                <ConfirmAction :title="translate('ui.m_df407347ab01')" danger @confirm="removeUser(record.username)">
+                  <a class="danger-link">{{ translate('ui.m_2f9daa828907') }}</a>
                 </ConfirmAction>
               </a-space>
             </template>
@@ -31,24 +31,24 @@
       <!-- 角色 -->
       <a-tab-pane key="roles" tab="角色">
         <div class="bar">
-          <a-button @click="loadRoles">刷新</a-button>
-          <a-button type="primary" @click="openAddRole">新建角色</a-button>
+          <a-button @click="loadRoles">{{ translate('ui.m_aee887434131') }}</a-button>
+          <a-button type="primary" @click="openAddRole">{{ translate('ui.m_7642dfca45b3') }}</a-button>
         </div>
         <a-table :columns="roleCols" :data-source="roles" :loading="loadingRoles" :pagination="false" row-key="name" size="middle" bordered>
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'builtin'">
-              <a-tag :color="record.builtin ? 'gold' : 'default'">{{ record.builtin ? '内置' : '自定义' }}</a-tag>
+              <a-tag :color="record.builtin ? 'gold' : 'default'">{{ record.builtin ? translate('ui.m_95e35aabd9a9') : translate('ui.m_4eafa9e925b3') }}</a-tag>
             </template>
             <template v-else-if="column.key === 'permissions'">
-              <span v-if="record.permissions.includes('*') || record.permissions.length >= allPermCount">全部权限</span>
-              <span v-else>{{ record.permissions.length }} 项</span>
+              <span v-if="record.permissions.includes('*') || record.permissions.length >= allPermCount">{{ translate('ui.m_d80fd2cc445b') }}</span>
+              <span v-else>{{ record.permissions.length }} {{ translate('ui.m_49ccde43a154') }}</span>
             </template>
             <template v-else-if="column.key === 'action'">
               <a-space>
-                <a v-if="!record.builtin" @click="openEditRole(record)">编辑</a>
-                <a v-else @click="viewRole(record)">查看</a>
-                <ConfirmAction v-if="!record.builtin" title="确认删除该角色?" danger @confirm="removeRole(record.name)">
-                  <a class="danger-link">删除</a>
+                <a v-if="!record.builtin" @click="openEditRole(record)">{{ translate('ui.m_051836569928') }}</a>
+                <a v-else @click="viewRole(record)">{{ translate('ui.m_db8db0530432') }}</a>
+                <ConfirmAction v-if="!record.builtin" :title="translate('ui.m_fd1ef9cc3687')" danger @confirm="removeRole(record.name)">
+                  <a class="danger-link">{{ translate('ui.m_2f9daa828907') }}</a>
                 </ConfirmAction>
               </a-space>
             </template>
@@ -58,15 +58,15 @@
     </a-tabs>
 
     <!-- 用户弹窗 -->
-    <a-modal v-model:open="userModal" :title="userForm.isEdit ? '编辑用户' : '新建用户'" @ok="saveUser" :confirm-loading="saving" width="460px">
+    <a-modal v-model:open="userModal" :title="userForm.isEdit ? translate('ui.m_fff6a05a26bc') : translate('ui.m_3ae9a33489d7')" @ok="saveUser" :confirm-loading="saving" width="460px">
       <a-form layout="vertical">
-        <a-form-item label="用户名" required>
-          <a-input v-model:value="userForm.username" :disabled="userForm.isEdit" placeholder="2-32 位,字母数字 _ . -" />
+        <a-form-item :label="translate('ui.m_1a3f0617d6de')" required>
+          <a-input v-model:value="userForm.username" :disabled="userForm.isEdit" :placeholder="translate('ui.m_c97d3a45b8b0')" />
         </a-form-item>
-        <a-form-item :label="userForm.isEdit ? '重置密码(留空不改)' : '密码'" :required="!userForm.isEdit">
-          <a-input-password v-model:value="userForm.password" placeholder="至少 6 位" />
+        <a-form-item :label="userForm.isEdit ? translate('ui.m_23ea6729ffde') : translate('ui.m_a621ab606db2')" :required="!userForm.isEdit">
+          <a-input-password v-model:value="userForm.password" :placeholder="translate('ui.m_041568c2db7a')" />
         </a-form-item>
-        <a-form-item label="角色" required>
+        <a-form-item :label="translate('ui.m_c47b54e84e79')" required>
           <a-select v-model:value="userForm.role" :options="roleOptions" />
         </a-form-item>
       </a-form>
@@ -77,17 +77,17 @@
       <a-form layout="vertical">
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item label="角色标识" required>
-              <a-input v-model:value="roleForm.name" :disabled="roleForm.isEdit || roleForm.readonly" placeholder="英文标识,如 auditor" />
+            <a-form-item :label="translate('ui.m_1bb6ba42be2d')" required>
+              <a-input v-model:value="roleForm.name" :disabled="roleForm.isEdit || roleForm.readonly" :placeholder="translate('ui.m_399a167bc125')" />
             </a-form-item>
           </a-col>
           <a-col :span="12">
-            <a-form-item label="显示名">
-              <a-input v-model:value="roleForm.title" :disabled="roleForm.readonly" placeholder="如 审计员" />
+            <a-form-item :label="translate('ui.m_4587cc06a981')">
+              <a-input v-model:value="roleForm.title" :disabled="roleForm.readonly" :placeholder="translate('ui.m_4aab5c3172c6')" />
             </a-form-item>
           </a-col>
         </a-row>
-        <a-form-item label="权限点" style="margin-bottom:0">
+        <a-form-item :label="translate('ui.m_cc62491b9740')" style="margin-bottom:0">
           <a-checkbox-group v-model:value="roleForm.permissions" :disabled="roleForm.readonly" class="perm-grid">
             <a-checkbox v-for="p in perms" :key="p.key" :value="p.key" class="perm-item">{{ p.desc }}</a-checkbox>
           </a-checkbox-group>
@@ -98,6 +98,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -121,20 +123,20 @@ function roleTitle(name: string) {
 }
 
 const userCols = [
-  { title: '用户名', dataIndex: 'username', key: 'username' },
-  { title: '角色', key: 'role', width: 140 },
-  { title: '状态', key: 'disabled', width: 100 },
-  { title: '创建者', dataIndex: 'created_by', key: 'created_by', width: 120 },
-  { title: '创建时间', dataIndex: 'create_date', key: 'create_date', width: 170 },
-  { title: '操作', key: 'action', width: 180 },
+  { get title() { return translate('ui.m_1a3f0617d6de') }, dataIndex: 'username', key: 'username' },
+  { get title() { return translate('ui.m_c47b54e84e79') }, key: 'role', width: 140 },
+  { get title() { return translate('ui.m_6320b4a8722a') }, key: 'disabled', width: 100 },
+  { get title() { return translate('ui.m_f46c86c0286a') }, dataIndex: 'created_by', key: 'created_by', width: 120 },
+  { get title() { return translate('ui.m_07ec86e0f1d4') }, dataIndex: 'create_date', key: 'create_date', width: 170 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 180 },
 ]
 const roleCols = [
-  { title: '角色标识', dataIndex: 'name', key: 'name' },
-  { title: '显示名', dataIndex: 'title', key: 'title' },
-  { title: '类型', key: 'builtin', width: 100 },
-  { title: '权限', key: 'permissions', width: 110 },
-  { title: '说明', dataIndex: 'desc', key: 'desc' },
-  { title: '操作', key: 'action', width: 140 },
+  { get title() { return translate('ui.m_1bb6ba42be2d') }, dataIndex: 'name', key: 'name' },
+  { get title() { return translate('ui.m_4587cc06a981') }, dataIndex: 'title', key: 'title' },
+  { get title() { return translate('ui.m_ba40014ff496') }, key: 'builtin', width: 100 },
+  { get title() { return translate('ui.m_978cbca6265d') }, key: 'permissions', width: 110 },
+  { get title() { return translate('ui.m_4262c45dc797') }, dataIndex: 'desc', key: 'desc' },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 140 },
 ]
 
 async function loadUsers() {
@@ -164,8 +166,8 @@ function openEditUser(r: UserItem) {
   userModal.value = true
 }
 async function saveUser() {
-  if (!userForm.username) return message.warning('请填写用户名')
-  if (!userForm.isEdit && !userForm.password) return message.warning('请填写密码')
+  if (!userForm.username) return message.warning(translate('ui.m_9b305ad90c54'))
+  if (!userForm.isEdit && !userForm.password) return message.warning(translate('ui.m_3d1a8a4e75de'))
   saving.value = true
   try {
     if (userForm.isEdit) {
@@ -173,7 +175,7 @@ async function saveUser() {
     } else {
       await userApi.createUser(userForm.username, userForm.password, userForm.role)
     }
-    message.success('已保存')
+    message.success(translate('ui.m_1bd91a7d0c53'))
     userModal.value = false
     loadUsers()
   } catch (e) { message.error(errMsg(e)) } finally { saving.value = false }
@@ -181,19 +183,19 @@ async function saveUser() {
 async function toggleDisable(r: UserItem) {
   try {
     await userApi.updateUser({ username: r.username, disabled: !r.disabled })
-    message.success(r.disabled ? '已启用' : '已禁用')
+    message.success(r.disabled ? translate('ui.m_dfb802238b38') : translate('ui.m_bc5a87a757a5'))
     loadUsers()
   } catch (e) { message.error(errMsg(e)) }
 }
 async function removeUser(username: string) {
-  try { await userApi.deleteUser(username); message.success('已删除'); loadUsers() }
+  try { await userApi.deleteUser(username); message.success(translate('ui.m_077a6d37719a')); loadUsers() }
   catch (e) { message.error(errMsg(e)) }
 }
 
 // —— 角色表单 ——
 const roleModal = ref(false)
 const roleForm = reactive({ isEdit: false, readonly: false, name: '', title: '', permissions: [] as string[], desc: '' })
-const roleModalTitle = computed(() => roleForm.readonly ? '查看角色' : (roleForm.isEdit ? '编辑角色' : '新建角色'))
+const roleModalTitle = computed(() => roleForm.readonly ? translate('ui.m_325c838e3219') : (roleForm.isEdit ? translate('ui.m_181ccc03f7d2') : translate('ui.m_7642dfca45b3')))
 function openAddRole() {
   Object.assign(roleForm, { isEdit: false, readonly: false, name: '', title: '', permissions: [], desc: '' })
   roleModal.value = true
@@ -209,17 +211,17 @@ function viewRole(r: RoleItem) {
 }
 async function saveRole() {
   if (roleForm.readonly) { roleModal.value = false; return }
-  if (!roleForm.name) return message.warning('请填写角色标识')
+  if (!roleForm.name) return message.warning(translate('ui.m_ec12f09b231e'))
   saving.value = true
   try {
     await userApi.upsertRole({ name: roleForm.name, title: roleForm.title, permissions: roleForm.permissions, desc: roleForm.desc })
-    message.success('已保存')
+    message.success(translate('ui.m_1bd91a7d0c53'))
     roleModal.value = false
     loadRoles()
   } catch (e) { message.error(errMsg(e)) } finally { saving.value = false }
 }
 async function removeRole(name: string) {
-  try { await userApi.deleteRole(name); message.success('已删除'); loadRoles() }
+  try { await userApi.deleteRole(name); message.success(translate('ui.m_077a6d37719a')); loadRoles() }
   catch (e) { message.error(errMsg(e)) }
 }
 </script>

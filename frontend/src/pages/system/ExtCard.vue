@@ -2,37 +2,39 @@
   <div class="ext-card">
     <div class="c-head">
       <code class="c-name">{{ ext.name || ext.extension_id }}</code>
-      <a-tag :color="ext.available ? 'green' : 'red'" size="small">{{ ext.available ? '兼容' : ext.unavailable_reason || '不可用' }}</a-tag>
+      <a-tag :color="ext.available ? 'green' : 'red'" size="small">{{ ext.available ? translate('ui.m_e1ba8151b252') : ext.unavailable_reason || translate('ui.m_460b3574e4bd') }}</a-tag>
     </div>
     <div class="c-cat">
       <a-tag color="blue" size="small">{{ ext.category }}</a-tag>
       <span class="muted">v{{ ext.version }}</span>
-      <a-tag :color="ext.source === 'store' ? 'gold' : 'default'" size="small">{{ ext.source === 'store' ? '商店' : '本地' }}</a-tag>
-      <a-tag :color="ext.origin === 'third_party' ? 'orange' : 'cyan'" size="small">{{ ext.origin === 'third_party' ? '第三方' : '自研' }}</a-tag>
-      <a-tag v-if="ext.ext_type === 'both'" color="purple" size="small">公共扩展</a-tag>
+      <a-tag :color="ext.source === 'store' ? 'gold' : 'default'" size="small">{{ ext.source === 'store' ? translate('ui.m_61f96c6aac6a') : translate('ui.m_bf4ad761840f') }}</a-tag>
+      <a-tag :color="ext.origin === 'third_party' ? 'orange' : 'cyan'" size="small">{{ ext.origin === 'third_party' ? translate('ui.m_376cbd8cfc85') : translate('ui.m_4e88cd310f2c') }}</a-tag>
+      <a-tag v-if="ext.ext_type === 'both'" color="purple" size="small">{{ translate('ui.m_4e7009404af9') }}</a-tag>
     </div>
     <div class="c-sum">{{ ext.summary || ext.description }}</div>
     <div v-if="params.length" class="c-params">
-      <span class="c-params-label">参数</span>
+      <span class="c-params-label">{{ translate('ui.m_9634fb0832be') }}</span>
       <span v-for="p in params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
     </div>
     <div class="c-actions">
       <a-space size="small">
-        <a @click="$emit('detail', ext)">详情</a>
-        <a @click="$emit('check', ext)">检测</a>
-        <a-popconfirm title="删除该扩展所有本地版本？" @confirm="$emit('remove', ext)"><a class="danger">删除</a></a-popconfirm>
+        <a @click="$emit('detail', ext)">{{ translate('ui.m_979a332955c8') }}</a>
+        <a @click="$emit('check', ext)">{{ translate('ui.m_071089398bfd') }}</a>
+        <a-popconfirm :title="translate('ui.m_ee8441ca0919')" @confirm="$emit('remove', ext)"><a class="danger">{{ translate('ui.m_2f9daa828907') }}</a></a-popconfirm>
       </a-space>
       <span class="c-switch">
-        <span class="s-label">{{ ext.enabled ? '已启用' : '已停用' }}</span>
+        <span class="s-label">{{ ext.enabled ? translate('ui.m_dfb802238b38') : translate('ui.m_a8c3698b5b8c') }}</span>
         <a-switch size="small" :checked="ext.enabled"
           :disabled="!ext.available || ext.side_effect === 'dangerous'"
           @change="(v: boolean) => $emit('toggle', ext, v)" />
       </span>
     </div>
-    <div v-if="ext.side_effect === 'dangerous'" class="c-danger">高危扩展，不进入自动工具表</div>
+    <div v-if="ext.side_effect === 'dangerous'" class="c-danger">{{ translate('ui.m_5110ffe55072') }}</div>
   </div>
 </template>
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed } from 'vue'
 import type { ExtensionItem, ExtParam } from '../../api/aiExtension'
 

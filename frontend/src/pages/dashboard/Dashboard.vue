@@ -1,10 +1,10 @@
 <template>
-  <PageContainer title="态势总览" kicker="Dashboard" description="资产与任务概览、AI 渗透与算力消耗、设备运行状态，数据定时自动刷新。">
+  <PageContainer :title="translate('ui.m_70a1534aa33c')" kicker="Dashboard" :description="translate('ui.m_ad9cb92dd002')">
     <template #extra>
       <a-space>
         <TimezoneTag />
         <span v-if="lastRefresh" class="muted refresh-ts">{{ lastRefresh }}</span>
-        <a-button @click="loadAll">刷新</a-button>
+        <a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button>
       </a-space>
     </template>
 
@@ -27,8 +27,8 @@
 
     <a-row :gutter="16" class="section-row">
       <a-col :xs="24" :lg="8">
-        <a-card title="AI 渗透会话" :bordered="false" :loading="sessLoading">
-          <template #extra><a-button type="link" @click="router.push('/pentest')">全部</a-button></template>
+        <a-card :title="translate('ui.m_13b1fa2f1b42')" :bordered="false" :loading="sessLoading">
+          <template #extra><a-button type="link" @click="router.push('/pentest')">{{ translate('ui.m_5c55a67935af') }}</a-button></template>
           <div class="sess-grid">
             <div v-for="s in sessCards" :key="s.key" class="sess-item">
               <div class="sess-num" :style="{ color: s.color }">{{ s.value }}</div>
@@ -38,23 +38,23 @@
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="8">
-        <a-card title="代理状态" :bordered="false" :loading="proxyLoading">
-          <template #extra><a-button type="link" @click="router.push('/proxy')">详情</a-button></template>
+        <a-card :title="translate('ui.m_b90665e74c01')" :bordered="false" :loading="proxyLoading">
+          <template #extra><a-button type="link" @click="router.push('/proxy')">{{ translate('ui.m_979a332955c8') }}</a-button></template>
           <a-descriptions :column="1" size="small">
-            <a-descriptions-item label="代理模式">
+            <a-descriptions-item :label="translate('ui.m_9fbd3b4f0eb2')">
               <a-tag :color="proxyModeColor">{{ proxyData.modeLabel || '—' }}</a-tag>
             </a-descriptions-item>
-            <a-descriptions-item label="代理出口 IP">
+            <a-descriptions-item :label="translate('ui.m_6d1823525b81')">
               <span class="proxy-ip">{{ proxyData.mode === 'direct' ? (proxyData.directIp || '—') : (proxyData.exitIp || '—') }}</span>
             </a-descriptions-item>
-            <a-descriptions-item label="实际出口 IP">
+            <a-descriptions-item :label="translate('ui.m_e2ffff7a0910')">
               <span class="proxy-ip">{{ proxyData.directIp || '—' }}</span>
             </a-descriptions-item>
-            <a-descriptions-item label="累计流量">
+            <a-descriptions-item :label="translate('ui.m_d5834c762513')">
               <span class="proxy-traffic">↑ {{ fmtBytes(proxyData.upload) }} · ↓ {{ fmtBytes(proxyData.download) }}</span>
             </a-descriptions-item>
-            <a-descriptions-item label="出口归属">
-              <a-tooltip :title="proxyData.mode === 'direct' ? '未走代理' : proxyData.sourceLabel">
+            <a-descriptions-item :label="translate('ui.m_0da7017a387c')">
+              <a-tooltip :title="proxyData.mode === 'direct' ? translate('ui.m_22a6e952da98') : proxyData.sourceLabel">
                 <span class="proxy-src">{{ proxyData.mode === 'direct' ? '—' : (proxyData.sourceLabel || '—') }}</span>
               </a-tooltip>
             </a-descriptions-item>
@@ -62,15 +62,15 @@
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="8">
-        <a-card title="算力消耗 (Token)" :bordered="false" :loading="tokenLoading">
-          <template #extra><a-button type="link" @click="router.push('/ai-config')">详情</a-button></template>
-          <a-statistic title="累计 Token" :value="tokenStat.total" :value-style="{ color: '#1677ff' }" />
+        <a-card :title="translate('ui.m_d268b857582a')" :bordered="false" :loading="tokenLoading">
+          <template #extra><a-button type="link" @click="router.push('/ai-config')">{{ translate('ui.m_979a332955c8') }}</a-button></template>
+          <a-statistic :title="translate('ui.m_a974f197e00a')" :value="tokenStat.total" :value-style="{ color: '#1677ff' }" />
           <div class="token-sub">
-            <span>调用 {{ tokenStat.calls.toLocaleString() }} 次</span>
-            <span v-if="tokenStat.fail">· 失败 <b style="color:#cf1322">{{ tokenStat.fail }}</b></span>
-            <span>· 入 {{ fmtK(tokenStat.prompt) }} / 出 {{ fmtK(tokenStat.completion) }}</span>
+            <span>{{ translate('ui.m_653b123c956d') }} {{ tokenStat.calls.toLocaleString() }} {{ translate('ui.m_172fb7e67b9b') }}</span>
+            <span v-if="tokenStat.fail">{{ translate('ui.m_89661a556032') }} <b style="color:#cf1322">{{ tokenStat.fail }}</b></span>
+            <span>{{ translate('ui.m_d2bf57d2794b') }} {{ fmtK(tokenStat.prompt) }} {{ translate('ui.m_ab84b8877934') }} {{ fmtK(tokenStat.completion) }}</span>
           </div>
-          <div v-if="tokenStat.topScene" class="token-scene muted">主要环节：{{ tokenStat.topScene }}</div>
+          <div v-if="tokenStat.topScene" class="token-scene muted">{{ translate('ui.m_04a54e7cf545') }}{{ tokenStat.topScene }}</div>
         </a-card>
       </a-col>
     </a-row>
@@ -82,12 +82,12 @@
           <div class="netq-bar" :class="'nq-' + (netQuality.level || 'unknown')">
             <div class="netq-badge">
               <div class="netq-level">{{ netQuality.level_text || '—' }}</div>
-              <div class="netq-score">{{ netQuality.score != null ? netQuality.score : '?' }}<span>分</span></div>
+              <div class="netq-score">{{ netQuality.score != null ? netQuality.score : '?' }}<span>{{ translate('ui.m_b6a993c256ef') }}</span></div>
             </div>
             <div class="netq-body">
-              <div class="netq-title">网络环境质量 <a-tag v-for="(g, k) in (netQuality.dims || {})" :key="k" :color="dimColor(String(g))" class="netq-dim">{{ dimLabel(String(k)) }}</a-tag></div>
-              <div class="netq-summary">{{ netQuality.summary || '暂无体检数据，系统将自动检测' }}</div>
-              <div class="netq-time" v-if="netCheckedAt">最近检测：{{ netCheckedAt }} · 每 30 分钟自动监测 · 点击查看详情</div>
+              <div class="netq-title">{{ translate('ui.m_17a114b74dd3') }} <a-tag v-for="(g, k) in (netQuality.dims || {})" :key="k" :color="dimColor(String(g))" class="netq-dim">{{ dimLabel(String(k)) }}</a-tag></div>
+              <div class="netq-summary">{{ netQuality.summary || translate('ui.m_1d87af6f5398') }}</div>
+              <div class="netq-time" v-if="netCheckedAt">{{ translate('ui.m_755b69eb6bc3') }}{{ netCheckedAt }} {{ translate('ui.m_b6a64ebe217c') }}</div>
             </div>
           </div>
         </a-card>
@@ -96,65 +96,65 @@
 
     <a-row :gutter="16" class="section-row">
       <a-col :xs="24" :lg="8">
-        <a-card title="设备状态" :bordered="false" :loading="deviceLoading">
+        <a-card :title="translate('ui.m_240cf246ac39')" :bordered="false" :loading="deviceLoading">
           <!-- 资源分数 + 运行可靠性总评（实时，像网络质量一样评当前资源是否适合系统运行）-->
           <div v-if="resScore != null" class="res-verdict" :class="'rv-' + resLevel">
             <div class="rv-badge">
               <div class="rv-level">{{ resLevelText }}</div>
-              <div class="rv-score">{{ resScore }}<span>分</span></div>
+              <div class="rv-score">{{ resScore }}<span>{{ translate('ui.m_b6a993c256ef') }}</span></div>
             </div>
             <div class="rv-body">
-              <div class="rv-title">资源运行可靠性</div>
+              <div class="rv-title">{{ translate('ui.m_2b6932e6e9e9') }}</div>
               <div class="rv-verdict">{{ resVerdict }}</div>
-              <div v-if="resTaskSlots != null" class="rv-slots">⚙ 当前可起并发任务：{{ resTaskSlots }} 个（随可用内存动态）</div>
+              <div v-if="resTaskSlots != null" class="rv-slots">{{ translate('ui.m_ab748b898307') }}{{ resTaskSlots }} {{ translate('ui.m_7208d7d97cf9') }}</div>
               <div v-if="resDiskNote" class="rv-disknote">🗄 {{ resDiskNote }}</div>
             </div>
           </div>
           <div class="dev-list">
             <div class="dev-row">
-              <span class="dev-label">CPU（{{ cpuCount || '-' }} 核）</span>
+              <span class="dev-label">CPU（{{ cpuCount || '-' }} {{ translate('ui.m_6a8655f976ce') }}</span>
               <div class="dev-val"><a-progress :percent="cpu" size="small" :status="cpu > 85 ? 'exception' : 'normal'" /></div>
             </div>
             <div class="dev-row">
-              <span class="dev-label">内存</span>
+              <span class="dev-label">{{ translate('ui.m_7d8f8c37ec78') }}</span>
               <div class="dev-val">
                 <a-progress :percent="memory" size="small" :status="memory > 85 ? 'exception' : 'normal'" />
                 <span v-if="memText" class="dev-sub">{{ memText }}</span>
               </div>
             </div>
             <div class="dev-row">
-              <span class="dev-label">磁盘</span>
+              <span class="dev-label">{{ translate('ui.m_de7b72a3f852') }}</span>
               <div class="dev-val">
                 <a-progress :percent="disk" size="small" :status="disk > 90 ? 'exception' : 'normal'" />
                 <span v-if="diskText" class="dev-sub">{{ diskText }}</span>
               </div>
             </div>
             <div class="dev-row">
-              <span class="dev-label">瞭望塔运行</span>
-              <div class="dev-val"><span class="uptime">{{ uptimeText }}</span><span class="dev-hint">（平台启动至今，非操作系统）</span></div>
+              <span class="dev-label">{{ translate('ui.m_35c1852c5c65') }}</span>
+              <div class="dev-val"><span class="uptime">{{ uptimeText }}</span><span class="dev-hint">{{ translate('ui.m_328e72edd309') }}</span></div>
             </div>
             <div class="dev-row">
-              <span class="dev-label">出口 IP</span>
+              <span class="dev-label">{{ translate('ui.m_4ebb761ac335') }}</span>
               <div class="dev-val">
                 <span class="mono">{{ exitIpText }}</span>
-                <a-tag v-if="proxyEnabled" :color="proxyOk ? 'green' : 'red'" class="dev-tag">{{ proxyOk ? '代理正常' : '代理异常' }}</a-tag>
+                <a-tag v-if="proxyEnabled" :color="proxyOk ? 'green' : 'red'" class="dev-tag">{{ proxyOk ? translate('ui.m_6edaf5a51e39') : translate('ui.m_e84ba7b04237') }}</a-tag>
               </div>
             </div>
           </div>
         </a-card>
       </a-col>
       <a-col :xs="24" :lg="16">
-        <a-card title="资源趋势" :bordered="false" :loading="chartLoading">
+        <a-card :title="translate('ui.m_357e222335bd')" :bordered="false" :loading="chartLoading">
           <template #extra>
-            <a-slider v-model:value="chartDays" :min="1" :max="360" :step="1" style="width: 160px; display: inline-block; margin-right: 8px;" :tip-formatter="(v: number) => v + '天'" @afterChange="loadChart" />
-            <span class="muted">{{ chartDays }}天</span>
+            <a-slider v-model:value="chartDays" :min="1" :max="360" :step="1" style="width: 160px; display: inline-block; margin-right: 8px;" :tip-formatter="(v: number) => v + translate('ui.m_49da61ceeea2')" @afterChange="loadChart" />
+            <span class="muted">{{ chartDays }}{{ translate('ui.m_49da61ceeea2') }}</span>
           </template>
           <canvas ref="chartCanvas" class="resource-chart"></canvas>
           <div class="chart-legend">
             <span class="legend-item"><span class="legend-dot cpu-dot"></span>CPU</span>
-            <span class="legend-item"><span class="legend-dot mem-dot"></span>内存</span>
-            <span class="legend-item"><span class="legend-dot disk-dot"></span>磁盘</span>
-            <span class="legend-item"><span class="legend-line thresh-line"></span>80% 阈值</span>
+            <span class="legend-item"><span class="legend-dot mem-dot"></span>{{ translate('ui.m_7d8f8c37ec78') }}</span>
+            <span class="legend-item"><span class="legend-dot disk-dot"></span>{{ translate('ui.m_de7b72a3f852') }}</span>
+            <span class="legend-item"><span class="legend-line thresh-line"></span>{{ translate('ui.m_427bbea90e6f') }}</span>
           </div>
         </a-card>
       </a-col>
@@ -162,8 +162,8 @@
 
     <a-row :gutter="16" class="section-row">
       <a-col :span="24">
-        <a-card title="最近任务" :bordered="false">
-          <template #extra><a-button type="link" @click="router.push('/tasks')">全部</a-button></template>
+        <a-card :title="translate('ui.m_e69968577d33')" :bordered="false">
+          <template #extra><a-button type="link" @click="router.push('/tasks')">{{ translate('ui.m_5c55a67935af') }}</a-button></template>
           <a-table :columns="taskColumns" :data-source="recentTasks" :loading="taskLoading" row-key="_id" :pagination="false" size="small">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'status'"><StatusTag :value="String(record.status || '')" /></template>
@@ -179,7 +179,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, markRaw, computed, nextTick } from 'vue'
+import { t as translate, appLocale } from '../../i18n'
+
+import { onMounted, reactive, ref, markRaw, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ProfileOutlined, GlobalOutlined, ClusterOutlined, CloudServerOutlined, BugOutlined, RobotOutlined } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -214,12 +216,12 @@ function fmtBytes(n: number) {
 
 const metricLoading = ref(false)
 const metrics = ref([
-  { key: 'task', title: '任务总数', value: 0, sub: '', to: '/tasks', icon: markRaw(ProfileOutlined), color: '#1677ff', bg: '#e6f4ff' },
-  { key: 'domain', title: '域名', value: 0, sub: '', to: '/search', icon: markRaw(GlobalOutlined), color: '#13c2c2', bg: '#e6fffb' },
+  { key: 'task', get title() { return translate('ui.m_f1cc96bb316f') }, value: 0, sub: '', to: '/tasks', icon: markRaw(ProfileOutlined), color: '#1677ff', bg: '#e6f4ff' },
+  { key: 'domain', get title() { return translate('ui.m_222952431147') }, value: 0, sub: '', to: '/search', icon: markRaw(GlobalOutlined), color: '#13c2c2', bg: '#e6fffb' },
   { key: 'ip', title: 'IP', value: 0, sub: '', to: '/search', icon: markRaw(ClusterOutlined), color: '#722ed1', bg: '#f9f0ff' },
-  { key: 'site', title: '站点', value: 0, sub: '', to: '/search', icon: markRaw(CloudServerOutlined), color: '#fa8c16', bg: '#fff7e6' },
-  { key: 'vuln', title: '漏洞总数', value: 0, sub: '', to: '/vuln-center', icon: markRaw(BugOutlined), color: '#cf1322', bg: '#fff1f0' },
-  { key: 'sess', title: 'AI 渗透会话', value: 0, sub: '', to: '/pentest', icon: markRaw(RobotOutlined), color: '#2f54eb', bg: '#f0f5ff' }
+  { key: 'site', get title() { return translate('ui.m_a59fe62777ff') }, value: 0, sub: '', to: '/search', icon: markRaw(CloudServerOutlined), color: '#fa8c16', bg: '#fff7e6' },
+  { key: 'vuln', get title() { return translate('ui.m_e4246b7d0651') }, value: 0, sub: '', to: '/vuln-center', icon: markRaw(BugOutlined), color: '#cf1322', bg: '#fff1f0' },
+  { key: 'sess', get title() { return translate('ui.m_13b1fa2f1b42') }, value: 0, sub: '', to: '/pentest', icon: markRaw(RobotOutlined), color: '#2f54eb', bg: '#f0f5ff' }
 ])
 
 async function loadMetrics(silent = false) {
@@ -235,7 +237,7 @@ async function loadMetrics(silent = false) {
   try {
     const s = await pentestApi.findingStat()
     const v = get('vuln'); v.value = s.combined_total || 0
-    v.sub = `扫描 ${s.poc.total} · AI ${s.ai.verified}`
+    v.sub = translate('ui.m_504349f8bdf7', { p0: (s.poc.total), p1: (s.ai.verified) })
   } catch { get('vuln').value = 0 }
   metricLoading.value = false
 }
@@ -243,12 +245,12 @@ async function loadMetrics(silent = false) {
 const sessLoading = ref(false)
 const sess = reactive({ total: 0, running: 0, queued: 0, waiting: 0, paused: 0, done: 0, fatal: 0, stopped: 0, active: 0 })
 const sessCards = computed(() => [
-  { key: 'active', label: '进行中', value: sess.active, color: '#1677ff' },
-  { key: 'running', label: '执行中', value: sess.running, color: '#52c41a' },
-  { key: 'done', label: '已完成', value: sess.done, color: '#8c8c8c' },
-  { key: 'paused', label: '已暂停', value: sess.paused, color: '#fa8c16' },
-  { key: 'fatal', label: '失败', value: sess.fatal, color: '#cf1322' },
-  { key: 'total', label: '总计', value: sess.total, color: '#2f54eb' }
+  { key: 'active', get label() { return translate('ui.m_dc9591e56d50') }, value: sess.active, color: '#1677ff' },
+  { key: 'running', get label() { return translate('ui.m_5026a63b58cd') }, value: sess.running, color: '#52c41a' },
+  { key: 'done', get label() { return translate('ui.m_f28461bb49c8') }, value: sess.done, color: '#8c8c8c' },
+  { key: 'paused', get label() { return translate('ui.m_eb0c326b60ae') }, value: sess.paused, color: '#fa8c16' },
+  { key: 'fatal', get label() { return translate('ui.m_28384d7afd2e') }, value: sess.fatal, color: '#cf1322' },
+  { key: 'total', get label() { return translate('ui.m_e8dc871a7fde') }, value: sess.total, color: '#2f54eb' }
 ])
 async function loadSession(silent = false) {
   if (!silent) sessLoading.value = true
@@ -256,7 +258,7 @@ async function loadSession(silent = false) {
     const s = await pentestApi.sessionStat()
     Object.assign(sess, s)
     metrics.value.find(m => m.key === 'sess')!.value = s.total || 0
-    metrics.value.find(m => m.key === 'sess')!.sub = `进行中 ${s.active}`
+    metrics.value.find(m => m.key === 'sess')!.sub = translate('ui.m_7386ba27de4d', { p0: (s.active) })
   } catch { /* 忽略 */ } finally { sessLoading.value = false }
 }
 
@@ -290,17 +292,17 @@ const uptimeText = computed(() => {
   const s = uptime.value
   if (!s) return '—'
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
-  if (d > 0) return `${d} 天 ${h} 小时`
-  if (h > 0) return `${h} 小时 ${m} 分`
-  return `${m} 分钟`
+  if (d > 0) return translate('ui.m_f214b0b89ed5', { p0: (d), p1: (h) })
+  if (h > 0) return translate('ui.m_0e58ac1ec4d0', { p0: (h), p1: (m) })
+  return translate('ui.m_c36f6e281671', { p0: (m) })
 })
 const memText = computed(() => memTotalGb.value ? `${memUsedGb.value} / ${memTotalGb.value} GB` : '')
 const diskText = computed(() => diskTotalGb.value ? `${diskUsedGb.value} / ${diskTotalGb.value} GB` : '')
-const cpuText = computed(() => cpuCount.value ? `${cpu.value}%（${cpuCount.value} 核）` : `${cpu.value}%`)
+const cpuText = computed(() => cpuCount.value ? translate('ui.m_d73a46fc48a5', { p0: (cpu.value), p1: (cpuCount.value) }) : `${cpu.value}%`)
 const exitIpText = computed(() => {
   if (!exitIp.value) return '—'
-  if (!proxyEnabled.value) return `${exitIp.value}（直连）`
-  return proxyOk.value ? `${exitIp.value}（代理出口）` : `${exitIp.value}（代理异常·实际直连出口）`
+  if (!proxyEnabled.value) return translate('ui.m_d419a1a5f6a1', { p0: (exitIp.value) })
+  return proxyOk.value ? translate('ui.m_1253091a0bb1', { p0: (exitIp.value) }) : translate('ui.m_55f3772c525a', { p0: (exitIp.value) })
 })
 async function loadDevice(silent = false) {
   if (!silent) deviceLoading.value = true
@@ -364,10 +366,10 @@ async function loadProxy(silent = false) {
 const taskLoading = ref(false)
 const recentTasks = ref<RowRecord[]>([])
 const taskColumns = [
-  { title: '任务名', key: 'name', ellipsis: true },
-  { title: '目标', dataIndex: 'target', key: 'target', ellipsis: true },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '开始时间', dataIndex: 'start_time', key: 'start_time', width: 160 }
+  { get title() { return translate('ui.m_2c43cd7db149') }, key: 'name', ellipsis: true },
+  { get title() { return translate('ui.m_57060c88a36b') }, dataIndex: 'target', key: 'target', ellipsis: true },
+  { get title() { return translate('ui.m_6320b4a8722a') }, key: 'status', width: 90 },
+  { get title() { return translate('ui.m_6a9906c79f26') }, dataIndex: 'start_time', key: 'start_time', width: 160 }
 ]
 async function loadTasks() {
   taskLoading.value = true
@@ -378,13 +380,13 @@ async function loadTasks() {
 // 网络质量总评（读定时监测落库的最新结果）
 const netQuality = ref<Record<string, any> | null>(null)
 const netCheckedAt = ref('')
-function dimLabel(k: string) { return ({ deps: '依赖', stability: '出网', ping: '链路', dns: 'DNS', proxy: '代理' } as Record<string, string>)[k] || k }
+function dimLabel(k: string) { return ({ get deps() { return translate('ui.m_776740486540') }, get stability() { return translate('ui.m_a0e1075d16cb') }, get ping() { return translate('ui.m_c00455239802') }, dns: 'DNS', get proxy() { return translate('ui.m_5e84ea61e838') } } as Record<string, string>)[k] || k }
 function dimColor(g: string) { return ({ good: 'green', fair: 'gold', poor: 'orange', dead: 'red' } as Record<string, string>)[g] || 'default' }
 async function loadNetQuality() {
   try {
     const r = await request<any>('/api/network/quality/latest')
     if (r && r.has_data && r.assess) { netQuality.value = r.assess; netCheckedAt.value = r.checked_at || '' }
-    else { netQuality.value = { level: 'unknown', level_text: '待检测', score: null, summary: '暂无体检数据，系统将在 30 分钟内自动检测（或到网络检测页手动体检）', dims: {} }; netCheckedAt.value = '' }
+    else { netQuality.value = { level: 'unknown', level_text: '待检测', score: null, get summary() { return translate('ui.m_6bfac6efef26') }, dims: {} }; netCheckedAt.value = '' }
   } catch { /* 网络质量可选，取不到不影响 */ }
 }
 
@@ -403,6 +405,7 @@ function loadAll(silent = false): Promise<void> {
 // 默认自动刷新(30s)——恒定开启且静默(不闪骨架屏);首次挂载显骨架屏。
 useAutoRefresh(() => loadAll(true), 30000)
 onMounted(() => loadAll(false))
+watch(appLocale, () => { void loadAll(true).then(drawChart) })
 
 /* 资源趋势图(Canvas, 后端历史数据) */
 const chartCanvas = ref<HTMLCanvasElement | null>(null)
@@ -464,7 +467,7 @@ function drawChart() {
   if (points.length < 2) {
     ctx.fillStyle = '#ccc'
     ctx.font = '13px sans-serif'
-    ctx.fillText('数据采集中...', w / 2 - 40, h / 2)
+    ctx.fillText(translate('ui.m_bee985624afb'), w / 2 - 40, h / 2)
     return
   }
 

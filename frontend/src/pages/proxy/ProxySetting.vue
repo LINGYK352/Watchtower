@@ -4,39 +4,39 @@
       class="page-alert"
       type="info"
       show-icon
-      message="代理出口 = 模式 × 源。顶层默认直连；启用代理后，「全局」「智能」两个模式各绑一个代理源（自定义 / 内核代理 / 公共代理）。模式在扫描策略里选，第三方情报固定智能出口，控制流量（LLM/更新/激活）永远直连。"
+      :message="translate('ui.m_dbeb89948740')"
     />
 
     <!-- ① 平台代理模式：4模式(直连/全局/规则/智能)×3源(自定义/机场/公共代理)。
          本区配「全局代理」和「智能代理」各绑哪个源(3选一)；策略页选 direct/global/smart 时套用。 -->
-    <a-card class="page-card netmode-card" title="平台代理模式" size="small">
-      <template #extra><a-button size="small" type="primary" :loading="modeSaving" @click="saveMode">保存</a-button></template>
+    <a-card class="page-card netmode-card" :title="translate('ui.m_4fa362683021')" size="small">
+      <template #extra><a-button size="small" type="primary" :loading="modeSaving" @click="saveMode">{{ translate('ui.m_a3030bf8f16d') }}</a-button></template>
       <!-- 顶层总开关：直连（默认）/ 启用代理。直连时全局+智能配置禁用 -->
       <a-radio-group v-model:value="platformTop" button-style="solid" class="top-radios">
-        <a-radio-button value="direct">🔗 直连（默认）</a-radio-button>
-        <a-radio-button value="proxy">🛰️ 启用代理</a-radio-button>
+        <a-radio-button value="direct">{{ translate('ui.m_a2895bde5c79') }}</a-radio-button>
+        <a-radio-button value="proxy">{{ translate('ui.m_36c4b473328f') }}</a-radio-button>
       </a-radio-group>
       <a-alert v-if="platformTop === 'direct'" type="success" show-icon banner class="mode-intro" style="margin-top:12px"
-        message="当前：直连模式。平台全局出口不走任何代理，下方代理源配置不生效。（这是默认，最快最稳）" />
+        :message="translate('ui.m_3e90e7c33eca')" />
       <template v-else>
         <a-alert type="info" show-icon banner class="mode-intro" style="margin-top:12px"
-          message="代理出口 = 模式 × 源。模式(全局/智能)在扫描策略里选；本区配「全局」「智能」两个模式各绑哪个代理源(自定义/内核代理/公共代理)。控制流量(LLM/更新)永远直连。" />
+          :message="translate('ui.m_16215fdeb946')" />
         <a-row :gutter="16" style="margin-top:12px">
           <a-col :xs="24" :md="12">
             <div class="mode-block" :class="{ 'mode-on': globalForm.enabled }">
               <div class="mode-block-head">
-                <span class="mode-name">🌍 全局代理 <a-tag color="blue">global</a-tag></span>
+                <span class="mode-name">{{ translate('ui.m_47a6434fe7b6') }} <a-tag color="blue">global</a-tag></span>
                 <a-switch v-model:checked="globalForm.enabled" checked-children="开" un-checked-children="关" />
               </div>
               <SrcPicker v-if="globalForm.enabled" :src="globalForm.source" :customs="customs" @update="(s:ProxySource)=>globalForm.source=s" />
-              <div class="hint">开启后，策略选「全局」的扫描/渗透出口走此源；关闭则「全局」等于直连。连不通不自动降级（明确报错）。</div>
+              <div class="hint">{{ translate('ui.m_c17ff8f56f02') }}</div>
             </div>
           </a-col>
           <a-col :xs="24" :md="12">
             <div class="mode-block mode-on">
-              <div class="mode-block-head"><span class="mode-name">🧠 智能代理 <a-tag color="green">smart</a-tag></span></div>
+              <div class="mode-block-head"><span class="mode-name">{{ translate('ui.m_7b026997bac4') }} <a-tag color="green">smart</a-tag></span></div>
               <SrcPicker :src="smartForm.source" :customs="customs" @update="(s:ProxySource)=>smartForm.source=s" />
-              <div class="hint">智能模式：此源可达则走代理，不可达自动降级（→全局若开→直连）。第三方情报固定用它。</div>
+              <div class="hint">{{ translate('ui.m_4737d54672e4') }}</div>
             </div>
           </a-col>
         </a-row>
@@ -47,37 +47,37 @@
     <a-card class="page-card status-card">
       <template #title>
         <a-space>
-          <span>运行状态</span>
+          <span>{{ translate('ui.m_e46b0272bd64') }}</span>
           <a-badge v-if="!status?.running" status="default" text="内核未运行" />
           <a-badge v-else-if="status?.last_health_ok" status="processing" text="运行中 · 代理可用" />
           <a-badge v-else status="error" text="运行中 · 代理不可用" />
         </a-space>
       </template>
-      <template #extra><a-button size="small" @click="loadAll">刷新</a-button></template>
+      <template #extra><a-button size="small" @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button></template>
       <!-- 出口 IP 大字对比（最直观的"代理生不生效"）-->
       <a-row :gutter="16" class="exit-row">
         <a-col :xs="24" :sm="8">
           <div class="exit-box" :class="exitBoxClass">
-            <div class="exit-k">当前出口 IP</div>
+            <div class="exit-k">{{ translate('ui.m_c2d411a98923') }}</div>
             <div class="exit-v">{{ status?.last_exit_ip || exitResult?.proxy_ip || exitResult?.direct_ip || '—' }}</div>
             <div class="exit-tag">
-              <a-tag v-if="exitResult?.proxied" color="green">代理生效</a-tag>
-              <a-tag v-else-if="exitProxyUnreachable" color="red">代理不可用·网络异常</a-tag>
-              <a-tag v-else color="default">直连出口</a-tag>
+              <a-tag v-if="exitResult?.proxied" color="green">{{ translate('ui.m_00c682cdcc54') }}</a-tag>
+              <a-tag v-else-if="exitProxyUnreachable" color="red">{{ translate('ui.m_2469998ac9e4') }}</a-tag>
+              <a-tag v-else color="default">{{ translate('ui.m_6d7cb8fad1d2') }}</a-tag>
             </div>
           </div>
         </a-col>
         <a-col :xs="24" :sm="16">
           <a-descriptions :column="{ xs: 1, sm: 2 }" size="small" bordered>
-            <a-descriptions-item label="内核">
-              <a-tag :color="status?.running ? 'success' : 'default'">{{ status?.running ? '运行中' : '未运行' }}</a-tag>
-              <span class="muted" style="font-size:12px">由容器编排自动托管（restart:unless-stopped 自愈）</span>
+            <a-descriptions-item :label="translate('ui.m_416baf7ad2a7')">
+              <a-tag :color="status?.running ? 'success' : 'default'">{{ status?.running ? translate('ui.m_1f0eb99b7ed0') : translate('ui.m_62cdc8713bcf') }}</a-tag>
+              <span class="muted" style="font-size:12px">{{ translate('ui.m_19fdba1f7361') }}</span>
             </a-descriptions-item>
-            <a-descriptions-item label="进程 PID">{{ status?.pid || '-' }}</a-descriptions-item>
-            <a-descriptions-item label="活跃配置">{{ status?.config?.active_profile_id || '未激活' }}</a-descriptions-item>
-            <a-descriptions-item label="代理出口地址"><a-typography-text :copyable="!!status?.proxy_url" :content="status?.proxy_url || '-'" /></a-descriptions-item>
-            <a-descriptions-item label="健康检测" :span="2">
-              <a-tag :color="status?.last_health_ok ? 'success' : 'error'">{{ status?.last_health_ok ? '正常' : '异常' }}</a-tag>
+            <a-descriptions-item :label="translate('ui.m_ccc148ea9788')">{{ status?.pid || '-' }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_4696e67647af')">{{ status?.config?.active_profile_id || translate('ui.m_fdc1183b6810') }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_c29326ab330d')"><a-typography-text :copyable="!!status?.proxy_url" :content="status?.proxy_url || '-'" /></a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_c9859a7f6cc3')" :span="2">
+              <a-tag :color="status?.last_health_ok ? 'success' : 'error'">{{ status?.last_health_ok ? translate('ui.m_296de0e31f8c') : translate('ui.m_428fb8bfeecf') }}</a-tag>
               <span v-if="status?.last_health_check_time" style="color:#999;font-size:12px">{{ status?.last_health_check_time }}</span>
               <span v-if="!status?.last_health_ok && status?.last_health_error" style="color:#cf1322">（{{ status?.last_health_error }}）</span>
             </a-descriptions-item>
@@ -85,35 +85,35 @@
         </a-col>
       </a-row>
       <a-alert v-if="exitResult && !exitResult.proxied && exitProxyUnreachable" type="error" show-icon style="margin-top:12px"
-        :message="'⚠ 代理不可用·网络异常：代理已开启但无法连接（' + (exitResult.error || '经代理探出口失败') + '）。请检查代理源/节点是否可用。'" />
+        :message="translate('ui.m_31e376a1d0d6') + (exitResult.error || translate('ui.m_3a12fbef48fe')) + translate('ui.m_953efc17b560')" />
       <a-space class="card-actions" wrap style="margin-top: 14px">
         <!-- mihomo 独立容器由 compose 管生命周期(restart:unless-stopped 自愈)，无需手动启停内核，故删启动/停止/重启按钮。
              改配置(节点/订阅)经 controller 热 reload 生效。保留出口 IP 检测。 -->
-        <a-button :loading="exitLoading" @click="checkExitIp">检测出口 IP</a-button>
+        <a-button :loading="exitLoading" @click="checkExitIp">{{ translate('ui.m_3073bade4934') }}</a-button>
       </a-space>
     </a-card>
     <!-- ③ 流量消耗（公共信息，突出不折叠） -->
     <a-card class="page-card" size="small">
       <template #title>
         <a-space>
-          <span>流量消耗</span>
-          <a-button type="link" size="small" @click="loadTraffic">刷新</a-button>
-          <ConfirmAction danger size="small" type="link" title="确认清空全部流量统计？" @confirm="resetTrafficAll">清空统计</ConfirmAction>
+          <span>{{ translate('ui.m_effbbec31497') }}</span>
+          <a-button type="link" size="small" @click="loadTraffic">{{ translate('ui.m_aee887434131') }}</a-button>
+          <ConfirmAction danger size="small" type="link" :title="translate('ui.m_c80c340216bd')" @confirm="resetTrafficAll">{{ translate('ui.m_d75292a9941b') }}</ConfirmAction>
         </a-space>
       </template>
       <a-row :gutter="16">
-        <a-col :span="6"><a-statistic title="总上行" :value="traffic?.total_up_h || '0B'" /></a-col>
-        <a-col :span="6"><a-statistic title="总下行" :value="traffic?.total_down_h || '0B'" /></a-col>
-        <a-col :span="6"><a-statistic title="当前连接数" :value="traffic?.connections ?? 0" /></a-col>
-        <a-col :span="6"><a-statistic title="内核" :value="traffic?.running ? '运行中' : '未运行'" :value-style="{ color: traffic?.running ? '#3f8600' : '#999' }" /></a-col>
+        <a-col :span="6"><a-statistic :title="translate('ui.m_13839d7727ff')" :value="traffic?.total_up_h || '0B'" /></a-col>
+        <a-col :span="6"><a-statistic :title="translate('ui.m_3c7acac1de25')" :value="traffic?.total_down_h || '0B'" /></a-col>
+        <a-col :span="6"><a-statistic :title="translate('ui.m_042e5887ea1f')" :value="traffic?.connections ?? 0" /></a-col>
+        <a-col :span="6"><a-statistic :title="translate('ui.m_416baf7ad2a7')" :value="traffic?.running ? '运行中' : '未运行'" :value-style="{ color: traffic?.running ? '#3f8600' : '#999' }" /></a-col>
       </a-row>
-      <a-alert v-if="traffic && !traffic.running" type="info" show-icon style="margin-top:10px" message="代理内核未运行，无流量统计。启用代理并启动内核后自动统计。" />
+      <a-alert v-if="traffic && !traffic.running" type="info" show-icon style="margin-top:10px" :message="translate('ui.m_5c2b2f90c250')" />
       <a-tabs v-if="traffic && (traffic.by_profile?.length || traffic.by_node?.length)" size="small" style="margin-top:12px">
         <a-tab-pane key="profile" tab="按机场订阅">
           <a-table :columns="profileCols" :data-source="traffic.by_profile" row-key="key" size="small" :pagination="false">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'act'">
-                <ConfirmAction danger size="small" type="link" title="清空该机场统计？" @confirm="() => resetTraffic('profile', record.key)">清空</ConfirmAction>
+                <ConfirmAction danger size="small" type="link" :title="translate('ui.m_861e75417ee3')" @confirm="() => resetTraffic('profile', record.key)">{{ translate('ui.m_1ef3de06b32e') }}</ConfirmAction>
               </template>
             </template>
           </a-table>
@@ -122,7 +122,7 @@
           <a-table :columns="nodeCols" :data-source="traffic.by_node" row-key="key" size="small" :pagination="{ pageSize: 10 }">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'act'">
-                <ConfirmAction danger size="small" type="link" title="清空该节点统计？" @confirm="() => resetTraffic('node', record.key)">清空</ConfirmAction>
+                <ConfirmAction danger size="small" type="link" :title="translate('ui.m_6252e9d65e53')" @confirm="() => resetTraffic('node', record.key)">{{ translate('ui.m_1ef3de06b32e') }}</ConfirmAction>
               </template>
             </template>
           </a-table>
@@ -134,21 +134,21 @@
     <a-collapse class="page-card src-collapse">
       <!-- 自定义代理 -->
       <a-collapse-panel key="custom">
-        <template #header><span class="cp-h">🧩 自定义代理</span><span class="cp-sub">{{ customs.length }} 条 · 手填 URL（类 Proxifier）</span></template>
-        <template #extra><a-button size="small" type="primary" @click.stop="openCustom()">新增</a-button></template>
+        <template #header><span class="cp-h">{{ translate('ui.m_b5f943f6f042') }}</span><span class="cp-sub">{{ customs.length }} {{ translate('ui.m_0d9651ec92f7') }}</span></template>
+        <template #extra><a-button size="small" type="primary" @click.stop="openCustom()">{{ translate('ui.m_0006d696d8e1') }}</a-button></template>
         <a-table :columns="customCols" :data-source="customs" :loading="customLoading" row-key="_id" :pagination="false" size="small">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'enabled'"><a-switch :checked="record.enabled" size="small" @change="(v: any) => toggleCustom(record, !!v)" /></template>
             <template v-else-if="column.key === 'health'">
-              <a-tag v-if="record.last_health_ok === true" color="green">✓ 可达</a-tag>
-              <a-tag v-else-if="record.last_health_ok === false" color="red">✗ 不可达</a-tag>
-              <a-tag v-else color="default">未测</a-tag>
+              <a-tag v-if="record.last_health_ok === true" color="green">{{ translate('ui.m_53c67f0a00ba') }}</a-tag>
+              <a-tag v-else-if="record.last_health_ok === false" color="red">{{ translate('ui.m_24c6481c0883') }}</a-tag>
+              <a-tag v-else color="default">{{ translate('ui.m_c3eb5da0453e') }}</a-tag>
             </template>
             <template v-else-if="column.key === 'act'">
               <a-space>
-                <a @click="testCustom(record)">测试</a>
-                <a @click="openCustom(record)">编辑</a>
-                <a-popconfirm title="删除该自定义代理？" @confirm="delCustom(record)"><a class="danger">删除</a></a-popconfirm>
+                <a @click="testCustom(record)">{{ translate('ui.m_6aa8f49cc992') }}</a>
+                <a @click="openCustom(record)">{{ translate('ui.m_051836569928') }}</a>
+                <a-popconfirm :title="translate('ui.m_4f5e0eee1f3d')" @confirm="delCustom(record)"><a class="danger">{{ translate('ui.m_2f9daa828907') }}</a></a-popconfirm>
               </a-space>
             </template>
           </template>
@@ -157,48 +157,48 @@
 
       <!-- 内核代理（mihomo）：订阅导入 + YAML 上传 + 配置列表 + 代理组节点 + 内核基础配置，全并入此折叠 -->
       <a-collapse-panel key="mihomo">
-        <template #header><span class="cp-h">✈️ 内核代理</span><span class="cp-sub">{{ profiles.length }} 个订阅 · 订阅导入 / 节点管理 / 内核配置(mihomo)</span></template>
+        <template #header><span class="cp-h">{{ translate('ui.m_7c140e4cb81e') }}</span><span class="cp-sub">{{ profiles.length }} {{ translate('ui.m_7dbe94dd5ac0') }}</span></template>
         <a-row :gutter="16">
           <a-col :xs="24" :lg="12">
             <div class="sub-block">
-              <div class="sub-title">订阅导入</div>
-              <a-input v-model:value="importForm.name" placeholder="配置名称" style="margin-bottom:8px" />
-              <a-input v-model:value="importForm.url" placeholder="订阅 URL" style="margin-bottom:8px" />
-              <a-button type="primary" size="small" :loading="loading" @click="importUrl">导入订阅</a-button>
+              <div class="sub-title">{{ translate('ui.m_25bcdf7f86c4') }}</div>
+              <a-input v-model:value="importForm.name" :placeholder="translate('ui.m_9919db867bd4')" style="margin-bottom:8px" />
+              <a-input v-model:value="importForm.url" :placeholder="translate('ui.m_24c5cddfb643')" style="margin-bottom:8px" />
+              <a-button type="primary" size="small" :loading="loading" @click="importUrl">{{ translate('ui.m_a29a272c0e06') }}</a-button>
             </div>
           </a-col>
           <a-col :xs="24" :lg="12">
             <div class="sub-block">
-              <div class="sub-title">YAML 上传</div>
-              <a-input v-model:value="uploadForm.name" placeholder="配置名称" style="margin-bottom:8px" />
+              <div class="sub-title">{{ translate('ui.m_bfc0aa508798') }}</div>
+              <a-input v-model:value="uploadForm.name" :placeholder="translate('ui.m_9919db867bd4')" style="margin-bottom:8px" />
               <a-upload :before-upload="beforeYamlUpload" :show-upload-list="false" accept=".yaml,.yml,.txt">
-                <a-button size="small" style="margin-bottom:8px"><template #icon><UploadOutlined /></template>选择文件</a-button>
+                <a-button size="small" style="margin-bottom:8px"><template #icon><UploadOutlined /></template>{{ translate('ui.m_822fb37dba29') }}</a-button>
               </a-upload>
-              <a-textarea v-model:value="uploadForm.content" :rows="3" placeholder="选 .yaml 自动读入，或粘贴 Clash/Mihomo 配置" style="margin-bottom:8px" />
-              <a-button type="primary" size="small" :loading="loading" @click="uploadProfile">上传配置</a-button>
+              <a-textarea v-model:value="uploadForm.content" :rows="3" :placeholder="translate('ui.m_3d242483b53c')" style="margin-bottom:8px" />
+              <a-button type="primary" size="small" :loading="loading" @click="uploadProfile">{{ translate('ui.m_c9e5e8908558') }}</a-button>
             </div>
           </a-col>
         </a-row>
-        <div class="sub-title" style="margin-top:12px">配置列表</div>
+        <div class="sub-title" style="margin-top:12px">{{ translate('ui.m_5305214750a5') }}</div>
         <a-table :columns="profileColumns" :data-source="profiles" row-key="_id" :pagination="false" size="small">
           <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'action'"><a-button type="link" size="small" @click="activate(record._id)">激活</a-button></template>
+            <template v-if="column.key === 'action'"><a-button type="link" size="small" @click="activate(record._id)">{{ translate('ui.m_dd1286c29e9b') }}</a-button></template>
           </template>
         </a-table>
         <!-- 代理组/节点（内层折叠，节点多时收起） -->
         <a-collapse v-model:activeKey="groupsCardOpen" style="margin-top:12px">
           <a-collapse-panel key="groups">
-            <template #header><span>代理组 / 节点</span><span class="cp-sub">{{ selectableGroups.length ? selectableGroups.length + ' 个代理组' : '未加载（展开查看）' }}</span></template>
+            <template #header><span>{{ translate('ui.m_a82d0cca4b3f') }}</span><span class="cp-sub">{{ selectableGroups.length ? selectableGroups.length + translate('ui.m_a9f463237ae2') : translate('ui.m_5673b042ee1f') }}</span></template>
             <template #extra>
               <a-space @click.stop>
-                <a-button size="small" @click="loadProxies">刷新节点</a-button>
-                <a-button size="small" type="primary" @click="autoSelect">自动选优</a-button>
+                <a-button size="small" @click="loadProxies">{{ translate('ui.m_778b04988d4f') }}</a-button>
+                <a-button size="small" type="primary" @click="autoSelect">{{ translate('ui.m_1af4eae8c1a5') }}</a-button>
               </a-space>
             </template>
-            <a-empty v-if="!selectableGroups.length" description="暂无可选择代理组，确认内核已启动且配置有效。" />
+            <a-empty v-if="!selectableGroups.length" :description="translate('ui.m_32d4e91ed275')" />
             <a-collapse v-else v-model:activeKey="activeGroupKeys" class="proxy-collapse">
               <a-collapse-panel v-for="group in selectableGroups" :key="group.name">
-                <template #header><span style="font-weight:500">{{ group.name }}</span><a-tag color="blue" style="margin-left:8px">当前：{{ group.now || '-' }}</a-tag><span class="cp-sub">{{ group.all.length }} 节点</span></template>
+                <template #header><span style="font-weight:500">{{ group.name }}</span><a-tag color="blue" style="margin-left:8px">{{ translate('ui.m_660648805666') }}{{ group.now || '-' }}</a-tag><span class="cp-sub">{{ group.all.length }} {{ translate('ui.m_2410d860f093') }}</span></template>
                 <a-space wrap>
                   <a-button v-for="node in group.all" :key="node" size="small" :type="node === group.now ? 'primary' : 'default'" @click="selectProxy(group.name, node)">{{ node }}</a-button>
                 </a-space>
@@ -207,93 +207,93 @@
           </a-collapse-panel>
         </a-collapse>
         <!-- 内核基础配置（端口/熔断/DoH，属 mihomo 内核，并入本折叠） -->
-        <a-divider orientation="left" style="margin-top:14px">内核基础配置（端口 / 熔断检测 / DoH）</a-divider>
+        <a-divider orientation="left" style="margin-top:14px">{{ translate('ui.m_8a815f415b0b') }}</a-divider>
         <a-form layout="vertical" :model="form">
           <a-row :gutter="16">
             <!-- 删「启用代理」开关：mihomo 独立容器由 compose 常驻自愈，内核恒启用（是否真走代理由顶层「直连/启用代理」
                  总开关 + 各模式源绑定决定，不需内核级启用开关）。form.enabled 保存时恒置 true(见 saveConfig)。 -->
-            <a-col :xs="24" :md="6"><a-form-item label="自动优选"><a-switch v-model:checked="form.auto_select" checked-children="启用" un-checked-children="关闭" /></a-form-item></a-col>
-            <a-col :xs="24" :md="6"><a-form-item label="Controller端口"><a-input-number v-model:value="form.controller_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
-            <a-col :xs="24" :md="6"><a-form-item label="HTTP端口"><a-input-number v-model:value="form.http_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
-            <a-col :xs="24" :md="6"><a-form-item label="SOCKS端口"><a-input-number v-model:value="form.socks_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
-            <a-col :xs="24" :md="6"><a-form-item label="Mixed端口"><a-input-number v-model:value="form.mixed_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
-            <a-col :xs="24" :md="12"><a-form-item label="测速URL"><a-input v-model:value="form.test_url" /></a-form-item></a-col>
+            <a-col :xs="24" :md="6"><a-form-item :label="translate('ui.m_dd7ae0b1e668')"><a-switch v-model:checked="form.auto_select" checked-children="启用" un-checked-children="关闭" /></a-form-item></a-col>
+            <a-col :xs="24" :md="6"><a-form-item :label="translate('ui.m_1f8158d17dd9')"><a-input-number v-model:value="form.controller_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
+            <a-col :xs="24" :md="6"><a-form-item :label="translate('ui.m_103215b7c2bb')"><a-input-number v-model:value="form.http_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
+            <a-col :xs="24" :md="6"><a-form-item :label="translate('ui.m_cd476d2a8717')"><a-input-number v-model:value="form.socks_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
+            <a-col :xs="24" :md="6"><a-form-item :label="translate('ui.m_3ba40d64a964')"><a-input-number v-model:value="form.mixed_port" :min="1" :max="65535" class="full" /></a-form-item></a-col>
+            <a-col :xs="24" :md="12"><a-form-item :label="translate('ui.m_11c9b0f23db4')"><a-input v-model:value="form.test_url" /></a-form-item></a-col>
           </a-row>
-          <a-divider orientation="left" style="margin-top: 4px">熔断检测参数</a-divider>
+          <a-divider orientation="left" style="margin-top: 4px">{{ translate('ui.m_6d825943bd10') }}</a-divider>
           <a-row :gutter="16">
-            <a-col :xs="24" :md="12"><a-form-item label="健康检测URL"><a-input v-model:value="form.health_check_url" placeholder="https://www.gstatic.com/generate_204" /></a-form-item></a-col>
-            <a-col :xs="24" :md="6"><a-form-item label="检测间隔(秒)"><a-input-number v-model:value="form.health_check_interval" :min="10" class="full" /></a-form-item></a-col>
-            <a-col :xs="24" :md="6"><a-form-item label="失败阈值"><a-input-number v-model:value="form.health_fail_threshold" :min="1" :max="10" class="full" /></a-form-item></a-col>
+            <a-col :xs="24" :md="12"><a-form-item :label="translate('ui.m_d90e44ea56d3')"><a-input v-model:value="form.health_check_url" placeholder="https://www.gstatic.com/generate_204" /></a-form-item></a-col>
+            <a-col :xs="24" :md="6"><a-form-item :label="translate('ui.m_ca7ed1f3a74d')"><a-input-number v-model:value="form.health_check_interval" :min="10" class="full" /></a-form-item></a-col>
+            <a-col :xs="24" :md="6"><a-form-item :label="translate('ui.m_74106a5df046')"><a-input-number v-model:value="form.health_fail_threshold" :min="1" :max="10" class="full" /></a-form-item></a-col>
           </a-row>
-          <a-form-item label="DoH 端点"><a-textarea v-model:value="dohText" :rows="2" placeholder="https://dns.alidns.com/resolve" /></a-form-item>
-          <a-button type="primary" size="small" :loading="loading" @click="saveConfig">保存内核配置</a-button>
+          <a-form-item :label="translate('ui.m_efdc92c8a66d')"><a-textarea v-model:value="dohText" :rows="2" placeholder="https://dns.alidns.com/resolve" /></a-form-item>
+          <a-button type="primary" size="small" :loading="loading" @click="saveConfig">{{ translate('ui.m_d6039c4b243c') }}</a-button>
         </a-form>
       </a-collapse-panel>
 
       <!-- 公共代理（原公开抓取代理池） -->
       <a-collapse-panel key="pool">
-        <template #header><span class="cp-h">🌐 公共代理</span><span class="cp-sub">{{ poolStats?.alive ?? '-' }}/{{ poolStats?.total ?? '-' }} 可用 · FOFA/Hunter 抓取的免费代理</span></template>
+        <template #header><span class="cp-h">{{ translate('ui.m_be7654e5e349') }}</span><span class="cp-sub">{{ poolStats?.alive ?? '-' }}/{{ poolStats?.total ?? '-' }} {{ translate('ui.m_3942cbf29122') }}</span></template>
         <template #extra>
           <a-space @click.stop>
-            <a-button size="small" @click="loadPool">刷新</a-button>
-            <a-button size="small" type="primary" :loading="poolCrawling" @click="crawlPool">立即抓取</a-button>
-            <a-button size="small" :loading="poolVerifying" @click="verifyPool()">验活全部</a-button>
+            <a-button size="small" @click="loadPool">{{ translate('ui.m_aee887434131') }}</a-button>
+            <a-button size="small" type="primary" :loading="poolCrawling" @click="crawlPool">{{ translate('ui.m_851758e4fb63') }}</a-button>
+            <a-button size="small" :loading="poolVerifying" @click="verifyPool()">{{ translate('ui.m_e46320670dd8') }}</a-button>
           </a-space>
         </template>
         <a-alert type="warning" show-icon style="margin-bottom:12px"
-          message="公共代理来自 FOFA/Hunter 测绘的免费代理，属不可信中间人（可能蜜罐/嗅探），质量低、存活短。仅用于打目标的 HTTP 请求轮换 IP 防 WAF 封，绝不用于 LLM 访问。平台模式选「公共代理」即启用，池内自动选延时最低。" />
+          :message="translate('ui.m_44cbe86dbe6e')" />
         <a-descriptions :column="{ xs: 2, sm: 5 }" size="small" bordered style="margin-bottom:12px">
-          <a-descriptions-item label="总数">{{ poolStats?.total ?? '-' }}</a-descriptions-item>
-          <a-descriptions-item label="可用">{{ poolStats?.alive ?? '-' }}</a-descriptions-item>
-          <a-descriptions-item label="失效">{{ poolStats?.dead ?? '-' }}</a-descriptions-item>
-          <a-descriptions-item label="未验活">{{ poolStats?.unchecked ?? '-' }}</a-descriptions-item>
-          <a-descriptions-item label="启用">{{ poolStats?.enabled ?? '-' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_5953fc09384f')">{{ poolStats?.total ?? '-' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_4d99c976beb8')">{{ poolStats?.alive ?? '-' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_1559a0a78fce')">{{ poolStats?.dead ?? '-' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_e5abf02cfe9e')">{{ poolStats?.unchecked ?? '-' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_f4f0ead1116b')">{{ poolStats?.enabled ?? '-' }}</a-descriptions-item>
         </a-descriptions>
         <a-collapse style="margin-bottom:12px">
           <a-collapse-panel key="cfg" header="抓取配置（查询语法 / 期望总量，0=不限）">
             <div v-for="(q, i) in poolCfg.queries" :key="i" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
               <a-select v-model:value="q.source" style="width:90px" size="small" :options="[{value:'fofa',label:'FOFA'},{value:'hunter',label:'Hunter'}]" />
               <a-select v-model:value="q.type" style="width:90px" size="small" :options="[{value:'socks5',label:'socks5'},{value:'http',label:'http'}]" />
-              <a-input v-model:value="q.q" size="small" style="flex:1;min-width:180px" placeholder="测绘语法" />
+              <a-input v-model:value="q.q" size="small" style="flex:1;min-width:180px" :placeholder="translate('ui.m_0778983d2ceb')" />
               <a-switch v-model:checked="q.enabled" size="small" checked-children="启用" un-checked-children="停用" />
-              <a-button size="small" danger type="link" @click="poolCfg.queries.splice(i,1)">删除</a-button>
+              <a-button size="small" danger type="link" @click="poolCfg.queries.splice(i,1)">{{ translate('ui.m_2f9daa828907') }}</a-button>
             </div>
             <a-space>
-              <a-button size="small" @click="poolCfg.queries.push({source:'fofa',type:'socks5',q:'protocol=\'socks5\'',enabled:true})">+ 添加查询</a-button>
-              <span>每条期望总量</span>
+              <a-button size="small" @click="poolCfg.queries.push({source:'fofa',type:'socks5',q:'protocol=\'socks5\'',enabled:true})">{{ translate('ui.m_c06e7ce0f822') }}</a-button>
+              <span>{{ translate('ui.m_6dffd126484f') }}</span>
               <a-input-number v-model:value="poolCfg.limit" :min="0" size="small" style="width:100px" />
-              <a-button size="small" type="primary" @click="savePoolCfg">保存配置</a-button>
+              <a-button size="small" type="primary" @click="savePoolCfg">{{ translate('ui.m_6e584e3d5ce6') }}</a-button>
             </a-space>
           </a-collapse-panel>
         </a-collapse>
         <a-space style="margin-bottom:8px" wrap>
-          <span>显示</span>
+          <span>{{ translate('ui.m_4e1449e7d5e5') }}</span>
           <a-radio-group v-model:value="poolStatus" button-style="solid" size="small" @change="()=>{poolPage=1;loadPool()}">
-            <a-radio-button value="alive">存活</a-radio-button>
-            <a-radio-button value="">全部</a-radio-button>
-            <a-radio-button value="dead">失效</a-radio-button>
-            <a-radio-button value="unchecked">未验活</a-radio-button>
+            <a-radio-button value="alive">{{ translate('ui.m_b994669232e7') }}</a-radio-button>
+            <a-radio-button value="">{{ translate('ui.m_5c55a67935af') }}</a-radio-button>
+            <a-radio-button value="dead">{{ translate('ui.m_1559a0a78fce') }}</a-radio-button>
+            <a-radio-button value="unchecked">{{ translate('ui.m_e5abf02cfe9e') }}</a-radio-button>
           </a-radio-group>
           <a-divider type="vertical" />
-          <a-button size="small" :disabled="!poolSel.length" @click="verifyPool(poolSel)">验活选中</a-button>
-          <a-button size="small" :disabled="!poolSel.length" @click="enablePool(poolSel, true)">启用选中</a-button>
-          <a-button size="small" :disabled="!poolSel.length" @click="enablePool(poolSel, false)">禁用选中</a-button>
-          <ConfirmAction danger size="small" :disabled="!poolSel.length" title="删除选中代理?" @confirm="() => deletePool(poolSel)">删除选中</ConfirmAction>
+          <a-button size="small" :disabled="!poolSel.length" @click="verifyPool(poolSel)">{{ translate('ui.m_4d800c6416fd') }}</a-button>
+          <a-button size="small" :disabled="!poolSel.length" @click="enablePool(poolSel, true)">{{ translate('ui.m_696025432811') }}</a-button>
+          <a-button size="small" :disabled="!poolSel.length" @click="enablePool(poolSel, false)">{{ translate('ui.m_b07b51d47814') }}</a-button>
+          <ConfirmAction danger size="small" :disabled="!poolSel.length" :title="translate('ui.m_0e8e67487022')" @confirm="() => deletePool(poolSel)">{{ translate('ui.m_469f67cf665e') }}</ConfirmAction>
         </a-space>
         <a-table :columns="poolColumns" :data-source="poolItems" row-key="_id" size="small"
           :row-selection="{ selectedRowKeys: poolSel, onChange: (k:any)=>poolSel=k }"
           :pagination="{ current: poolPage, pageSize: poolSize, total: poolTotal, onChange: (p:number)=>{poolPage=p;loadPool()} }">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'delay'">
-              <a-tag v-if="record.delay === null" color="default">未验活</a-tag>
-              <a-tag v-else-if="record.delay < 0" color="error">失效</a-tag>
+              <a-tag v-if="record.delay === null" color="default">{{ translate('ui.m_e5abf02cfe9e') }}</a-tag>
+              <a-tag v-else-if="record.delay < 0" color="error">{{ translate('ui.m_1559a0a78fce') }}</a-tag>
               <a-tag v-else :color="record.delay < 1500 ? 'success' : 'warning'">{{ record.delay }}ms</a-tag>
             </template>
             <template v-else-if="column.key === 'enabled'"><a-switch :checked="record.enabled" size="small" @change="(v:boolean)=>enablePool([record._id], v)" /></template>
             <template v-else-if="column.key === 'action'">
               <a-space>
-                <a-button size="small" type="link" @click="verifyPool([record._id])">验活</a-button>
-                <ConfirmAction danger size="small" type="link" title="删除?" @confirm="() => deletePool([record._id])">删除</ConfirmAction>
+                <a-button size="small" type="link" @click="verifyPool([record._id])">{{ translate('ui.m_687809210499') }}</a-button>
+                <ConfirmAction danger size="small" type="link" :title="translate('ui.m_6c54d847bd5d')" @confirm="() => deletePool([record._id])">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
               </a-space>
             </template>
           </template>
@@ -302,28 +302,30 @@
 
       <!-- 内核日志 -->
       <a-collapse-panel key="logs">
-        <template #header><span class="cp-h">📄 内核日志</span></template>
-        <template #extra><a-button size="small" @click.stop="loadLogs">刷新</a-button></template>
-        <pre class="log-box">{{ logs || '暂无日志' }}</pre>
+        <template #header><span class="cp-h">{{ translate('ui.m_4fdb0cd045bf') }}</span></template>
+        <template #extra><a-button size="small" @click.stop="loadLogs">{{ translate('ui.m_aee887434131') }}</a-button></template>
+        <pre class="log-box">{{ logs || translate('ui.m_10fafbeaa7fd') }}</pre>
       </a-collapse-panel>
 
     </a-collapse>
 
     <!-- 自定义代理编辑弹窗 -->
-    <a-modal v-model:open="customOpen" :title="customForm._id ? '编辑自定义代理' : '新增自定义代理'"
+    <a-modal v-model:open="customOpen" :title="customForm._id ? translate('ui.m_ca391aa29198') : translate('ui.m_f0b242d61d9f')"
       :confirm-loading="customSaving" @ok="saveCustom">
       <a-form layout="vertical">
-        <a-form-item label="名称"><a-input v-model:value="customForm.name" placeholder="如 香港线路A" /></a-form-item>
-        <a-form-item label="代理 URL">
-          <a-input v-model:value="customForm.url" placeholder="http://user:pass@host:port 或 socks5://host:port" />
-          <div class="hint">支持 http:// / https:// / socks5://（socks5 需服务端装 PySocks）。</div>
+        <a-form-item :label="translate('ui.m_d44e9b3d3b31')"><a-input v-model:value="customForm.name" :placeholder="translate('ui.m_a32346d4cf0a')" /></a-form-item>
+        <a-form-item :label="translate('ui.m_bc95d6b6890e')">
+          <a-input v-model:value="customForm.url" :placeholder="translate('ui.m_a9257f172186')" />
+          <div class="hint">{{ translate('ui.m_641f1ae35157') }}</div>
         </a-form-item>
-        <a-space><span>启用</span><a-switch v-model:checked="customForm.enabled" /></a-space>
+        <a-space><span>{{ translate('ui.m_f4f0ead1116b') }}</span><a-switch v-model:checked="customForm.enabled" /></a-space>
       </a-form>
     </a-modal>
   </div>
 </template>
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, reactive, ref, h } from 'vue'
 import { message, Modal, RadioGroup, RadioButton, Select } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
@@ -331,17 +333,17 @@ import { proxyApi, type ProxyConfig, type ProxyProfile, type ProxyStatus, type E
 import ConfirmAction from '../../components/ConfirmAction.vue'
 
 const profileCols = [
-  { title: '机场(订阅)', dataIndex: 'name', key: 'name', ellipsis: true },
-  { title: '上行', dataIndex: 'up_h', key: 'up_h', width: 110 },
-  { title: '下行', dataIndex: 'down_h', key: 'down_h', width: 110 },
-  { title: '操作', key: 'act', width: 70 }
+  { get title() { return translate('ui.m_11f8f3d952a7') }, dataIndex: 'name', key: 'name', ellipsis: true },
+  { get title() { return translate('ui.m_9043e17f4fbe') }, dataIndex: 'up_h', key: 'up_h', width: 110 },
+  { get title() { return translate('ui.m_1cc22077b864') }, dataIndex: 'down_h', key: 'down_h', width: 110 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'act', width: 70 }
 ]
 const nodeCols = [
-  { title: '节点', dataIndex: 'name', key: 'name', ellipsis: true },
-  { title: '所属机场', dataIndex: 'profile_name', key: 'profile_name', ellipsis: true },
-  { title: '上行', dataIndex: 'up_h', key: 'up_h', width: 110 },
-  { title: '下行', dataIndex: 'down_h', key: 'down_h', width: 110 },
-  { title: '操作', key: 'act', width: 70 }
+  { get title() { return translate('ui.m_2410d860f093') }, dataIndex: 'name', key: 'name', ellipsis: true },
+  { get title() { return translate('ui.m_f0d0533e8d07') }, dataIndex: 'profile_name', key: 'profile_name', ellipsis: true },
+  { get title() { return translate('ui.m_9043e17f4fbe') }, dataIndex: 'up_h', key: 'up_h', width: 110 },
+  { get title() { return translate('ui.m_1cc22077b864') }, dataIndex: 'down_h', key: 'down_h', width: 110 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'act', width: 70 }
 ]
 
 const loading = ref(false)
@@ -363,15 +365,15 @@ const poolVerifying = ref(false)
 const poolStatus = ref('alive')
 const poolCfg = reactive<PoolConfig>({ queries: [], limit: 100 })
 const poolColumns = [
-  { title: '类型', dataIndex: 'type', key: 'type', width: 70 },
+  { get title() { return translate('ui.m_ba40014ff496') }, dataIndex: 'type', key: 'type', width: 70 },
   { title: 'IP', dataIndex: 'host', key: 'host', ellipsis: true },
-  { title: '端口', dataIndex: 'port', key: 'port', width: 70 },
-  { title: '国家', dataIndex: 'country', key: 'country', width: 90, ellipsis: true },
-  { title: '延时', key: 'delay', width: 90 },
-  { title: '来源', dataIndex: 'source', key: 'source', width: 70 },
-  { title: '最后验活', dataIndex: 'last_check', key: 'last_check', width: 150, ellipsis: true },
-  { title: '启用', key: 'enabled', width: 60 },
-  { title: '操作', key: 'action', width: 110 }
+  { get title() { return translate('ui.m_e71ac32b544b') }, dataIndex: 'port', key: 'port', width: 70 },
+  { get title() { return translate('ui.m_0cc659a9f57c') }, dataIndex: 'country', key: 'country', width: 90, ellipsis: true },
+  { get title() { return translate('ui.m_ee3b1e6332b5') }, key: 'delay', width: 90 },
+  { get title() { return translate('ui.m_a488e93d69cc') }, dataIndex: 'source', key: 'source', width: 70 },
+  { get title() { return translate('ui.m_b8639bf714f7') }, dataIndex: 'last_check', key: 'last_check', width: 150, ellipsis: true },
+  { get title() { return translate('ui.m_f4f0ead1116b') }, key: 'enabled', width: 60 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 110 }
 ]
 
 const form = reactive<ProxyConfig>({
@@ -393,18 +395,18 @@ const exitBoxClass = computed(() => exitResult.value?.proxied ? 'exit-ok' : (exi
 const exitLoading = ref(false)
 
 const profileColumns = [
-  { title: '名称', dataIndex: 'name' },
-  { title: '来源', dataIndex: 'source' },
-  { title: '节点', dataIndex: 'proxy_count' },
-  { title: '代理组', dataIndex: 'group_count' },
-  { title: '操作', key: 'action' }
+  { get title() { return translate('ui.m_d44e9b3d3b31') }, dataIndex: 'name' },
+  { get title() { return translate('ui.m_a488e93d69cc') }, dataIndex: 'source' },
+  { get title() { return translate('ui.m_2410d860f093') }, dataIndex: 'proxy_count' },
+  { get title() { return translate('ui.m_d2fb017efc97') }, dataIndex: 'group_count' },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action' }
 ]
 const customCols = [
-  { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true },
+  { get title() { return translate('ui.m_d44e9b3d3b31') }, dataIndex: 'name', key: 'name', ellipsis: true },
   { title: 'URL', dataIndex: 'url', key: 'url', ellipsis: true },
-  { title: '启用', key: 'enabled', width: 70 },
-  { title: '健康', key: 'health', width: 90 },
-  { title: '操作', key: 'act', width: 150 }
+  { get title() { return translate('ui.m_f4f0ead1116b') }, key: 'enabled', width: 70 },
+  { get title() { return translate('ui.m_aa18b6dcd893') }, key: 'health', width: 90 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'act', width: 150 }
 ]
 
 // coreReady 已删：独立容器架构下 mihomo_bin(web容器内探二进制)恒空→误判"缺失"，内核状态改只看 controller 探活(status.running)
@@ -438,7 +440,7 @@ const SrcPicker = (props: { src: ProxySource; customs: CustomProxy[] }, ctx: any
   if (src.type === 'custom') {
     children.push(h(Select as any, {
       value: src.ref_id || undefined, size: 'small', style: 'min-width:200px;margin-left:8px',
-      placeholder: '选一条自定义代理',
+      get placeholder() { return translate('ui.m_7dc5dd5bdff1') },
       options: enabledCustoms.map(c => ({ label: c.name + ' (' + c.url + ')', value: c._id })),
       'onUpdate:value': (v: string) => ctx.emit('update', { type: 'custom', ref_id: v })
     }))
@@ -452,7 +454,7 @@ async function saveMode() {
     modeSaving.value = true
     try {
       await proxyApi.saveConfig({ global_mode_enabled: false, global_source: { type: 'subscription', ref_id: '' }, smart_source: { type: 'subscription', ref_id: '' } })
-      message.success('已切换为直连模式，代理配置不生效')
+      message.success(translate('ui.m_1573747cb18b'))
     } catch (e) { message.error((e as Error).message) } finally { modeSaving.value = false }
     return
   }
@@ -469,7 +471,7 @@ async function saveMode() {
     })
     // 后端校验失败返回 {error}（HTTP 200，非异常），必须显式检查——否则空源会误报"已保存"
     if (res && res.error) { message.error(res.error); return }
-    message.success('平台代理模式已保存')
+    message.success(translate('ui.m_28b27652c0f3'))
     // 需求3：勾选启用代理后立即探测一次出口，失效则明确提示（不等定时的10分钟）
     verifyAfterSave()
   } catch (e) { message.error((e as Error).message) } finally { modeSaving.value = false }
@@ -486,17 +488,17 @@ function isSourceConfigured(src: ProxySource): boolean {
 function validateSourceLocal(src: ProxySource | null, label: string): string {
   if (!src || !src.type) return ''
   if (src.type === 'custom') {
-    if (!src.ref_id) return `${label}选了「自定义代理」但未选择具体条目，请先选一条自定义代理再保存。`
-    if (!customs.value.some(c => c._id === src.ref_id && c.enabled)) return `${label}绑定的自定义代理不存在或已禁用，请重新选择一条可用的自定义代理。`
+    if (!src.ref_id) return translate('ui.m_883514a84b43', { p0: (label) })
+    if (!customs.value.some(c => c._id === src.ref_id && c.enabled)) return translate('ui.m_d21bf721faea', { p0: (label) })
     return ''
   }
   if (src.type === 'pool') {
     const enabled = Number(poolStats.value?.enabled ?? 0), alive = Number(poolStats.value?.alive ?? 0)
-    if (!(enabled > 0 && alive > 0)) return `${label}选了「公共代理」但代理池当前无可用代理（启用 ${enabled} / 可用 ${alive}）。请先到「公共代理」抓取并验活，或改选其它代理源。`
+    if (!(enabled > 0 && alive > 0)) return translate('ui.m_2536533d1eba', { p0: (label), p1: (enabled), p2: (alive) })
     return ''
   }
   if (src.type === 'subscription') {
-    if (!(status.value?.config as any)?.active_profile_id) return `${label}选了「内核代理」但尚未导入并激活任何机场订阅，请先在「内核代理」导入订阅并激活。`
+    if (!(status.value?.config as any)?.active_profile_id) return translate('ui.m_d2ddec937f55', { p0: (label) })
     return ''
   }
   return ''
@@ -507,8 +509,8 @@ async function verifyAfterSave() {
   try {
     const r = await proxyApi.exitIp()
     exitResult.value = r
-    if (r.proxied) message.success(`代理生效，出口 IP：${r.proxy_ip}`)
-    else if (r.error && r.error !== 'proxy not enabled' && !r.proxy_ip) message.warning('⚠ 代理已启用但探不到出口，可能失效/节点不通，请检查代理源')
+    if (r.proxied) message.success(translate('ui.m_906deffe1d59', { p0: (r.proxy_ip) }))
+    else if (r.error && r.error !== 'proxy not enabled' && !r.proxy_ip) message.warning(translate('ui.m_ab3ebd8b7e95'))
   } catch { /* 探测失败不阻断保存 */ }
 }
 
@@ -524,10 +526,10 @@ async function withLoading(fn: () => Promise<void>) {
 async function loadStatus() { status.value = await proxyApi.status(); applyConfig(status.value.config) }
 async function loadTraffic() { try { traffic.value = await proxyApi.traffic() } catch { /* 降级 */ } }
 async function resetTraffic(scope: string, key: string) {
-  try { traffic.value = await proxyApi.resetTraffic(scope, key); message.success('已清空') } catch (e) { message.error((e as Error).message || '清空失败') }
+  try { traffic.value = await proxyApi.resetTraffic(scope, key); message.success(translate('ui.m_9790c6e72a16')) } catch (e) { message.error((e as Error).message || translate('ui.m_660fb1b057cd')) }
 }
 async function resetTrafficAll() {
-  try { traffic.value = await proxyApi.resetTraffic(); message.success('已清空全部统计') } catch (e) { message.error((e as Error).message || '清空失败') }
+  try { traffic.value = await proxyApi.resetTraffic(); message.success(translate('ui.m_ac1f7acd8cb3')) } catch (e) { message.error((e as Error).message || translate('ui.m_660fb1b057cd')) }
 }
 async function loadProfiles() { profiles.value = (await proxyApi.profiles()).items || [] }
 async function loadProxies() { proxies.value = (await proxyApi.proxies()).proxies || {} }
@@ -540,8 +542,8 @@ async function checkExitIp() {
   exitLoading.value = true
   try {
     exitResult.value = await proxyApi.exitIp()
-    if (exitResult.value.proxied) message.success(`代理生效，出口 IP：${exitResult.value.proxy_ip}`)
-    else message.warning('代理未生效或出口异常，详见提示')
+    if (exitResult.value.proxied) message.success(translate('ui.m_906deffe1d59', { p0: (exitResult.value.proxy_ip) }))
+    else message.warning(translate('ui.m_eb682235349c'))
     await loadStatus()
   } catch (error) { message.error(error instanceof Error ? error.message : String(error)) } finally { exitLoading.value = false }
 }
@@ -556,25 +558,25 @@ function openCustom(rec?: CustomProxy) {
   customOpen.value = true
 }
 async function saveCustom() {
-  if (!customForm.name || !customForm.url) { message.warning('名称和 URL 必填'); return }
+  if (!customForm.name || !customForm.url) { message.warning(translate('ui.m_a5bf4f80e812')); return }
   customSaving.value = true
   try {
     const r = await proxyApi.customSave({ ...customForm })
-    if (!r.ok) { message.error('保存失败'); return }
-    message.success('已保存'); customOpen.value = false; await loadCustoms()
+    if (!r.ok) { message.error(translate('ui.m_6309a3bb5ba4')); return }
+    message.success(translate('ui.m_1bd91a7d0c53')); customOpen.value = false; await loadCustoms()
   } catch (e) { message.error((e as Error).message) } finally { customSaving.value = false }
 }
 async function delCustom(rec: CustomProxy) {
-  try { await proxyApi.customDelete(rec._id); message.success('已删除'); await loadCustoms() } catch (e) { message.error((e as Error).message) }
+  try { await proxyApi.customDelete(rec._id); message.success(translate('ui.m_077a6d37719a')); await loadCustoms() } catch (e) { message.error((e as Error).message) }
 }
 async function toggleCustom(rec: CustomProxy, v: boolean) {
   try { await proxyApi.customSave({ _id: rec._id, name: rec.name, url: rec.url, enabled: v }); await loadCustoms() } catch (e) { message.error((e as Error).message) }
 }
 async function testCustom(rec: CustomProxy) {
-  message.loading({ content: '探测中…', key: 'tc' })
+  message.loading({ get content() { return translate('ui.m_339da995c389') }, key: 'tc' })
   try {
     const r = await proxyApi.customTest(rec._id)
-    message.success({ content: r.reachable ? '可达 ✓' : '不可达 ✗', key: 'tc' })
+    message.success({ content: r.reachable ? translate('ui.m_3e0d24bc8b62') : translate('ui.m_1d56d9de7087'), key: 'tc' })
     await loadCustoms()
   } catch (e) { message.error({ content: (e as Error).message, key: 'tc' }) }
 }
@@ -617,51 +619,51 @@ async function crawlPool() {
   poolCrawling.value = true
   try {
     const r = await proxyApi.poolCrawl()
-    if (r.added > 0) message.success(`抓取完成,新增 ${r.added} 条,正在后台验活,稍后刷新即只见存活`)
-    else message.info('未抓到新代理(可能已存在或语法无结果)')
+    if (r.added > 0) message.success(translate('ui.m_78e257d62a43', { p0: (r.added) }))
+    else message.info(translate('ui.m_2a92cee67280'))
     await loadPool()
-  } catch (e) { message.error((e as Error).message || '抓取失败') } finally { poolCrawling.value = false }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_f522416a047e')) } finally { poolCrawling.value = false }
 }
 async function verifyPool(ids?: string[]) {
   poolVerifying.value = true
   try {
     const r = await proxyApi.poolVerify(ids)
-    message.success(`验活完成:检测 ${r.checked},可用 ${r.alive},剔除 ${r.dropped}`)
+    message.success(translate('ui.m_3254f812c831', { p0: (r.checked), p1: (r.alive), p2: (r.dropped) }))
     poolSel.value = []
     await loadPool()
-  } catch (e) { message.error((e as Error).message || '验活失败') } finally { poolVerifying.value = false }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_e3d65a6880d8')) } finally { poolVerifying.value = false }
 }
 async function enablePool(ids: string[], enabled: boolean) {
-  try { await proxyApi.poolEnable(ids, enabled); await loadPool() } catch (e) { message.error((e as Error).message || '操作失败') }
+  try { await proxyApi.poolEnable(ids, enabled); await loadPool() } catch (e) { message.error((e as Error).message || translate('ui.m_0c3b4cf7aa25')) }
 }
 async function deletePool(ids: string[]) {
-  try { await proxyApi.poolDelete(ids); poolSel.value = []; message.success('已删除'); await loadPool() } catch (e) { message.error((e as Error).message || '删除失败') }
+  try { await proxyApi.poolDelete(ids); poolSel.value = []; message.success(translate('ui.m_077a6d37719a')); await loadPool() } catch (e) { message.error((e as Error).message || translate('ui.m_c228558cf257')) }
 }
 async function savePoolCfg() {
-  try { await proxyApi.poolSaveConfig({ queries: poolCfg.queries, limit: poolCfg.limit }); message.success('抓取配置已保存') } catch (e) { message.error((e as Error).message || '保存失败') }
+  try { await proxyApi.poolSaveConfig({ queries: poolCfg.queries, limit: poolCfg.limit }); message.success(translate('ui.m_2b68cb9b659a')) } catch (e) { message.error((e as Error).message || translate('ui.m_6309a3bb5ba4')) }
 }
 async function saveConfig() {
   await withLoading(async () => {
     // enabled 恒 true：mihomo 独立容器常驻，内核级 enabled 开关已删（是否走代理由顶层总开关+源绑定决定）
     const payload = { ...form, enabled: true, doh_endpoints: dohText.value }
     applyConfig(await proxyApi.saveConfig(payload))
-    message.success('配置已保存')
+    message.success(translate('ui.m_985c5a8ccded'))
     await loadStatus()
   })
 }
 // runCore 已删：mihomo 独立容器由 compose 自愈，不再手动启停内核（见状态卡说明）
 async function importUrl() {
-  if (!importForm.url) return message.warning('请输入订阅 URL')
+  if (!importForm.url) return message.warning(translate('ui.m_6011ba08d5c2'))
   await withLoading(async () => {
     await proxyApi.importUrl(importForm.name, importForm.url)
-    message.success('订阅已导入'); importForm.url = ''; await loadProfiles()
+    message.success(translate('ui.m_9aa5b676ae86')); importForm.url = ''; await loadProfiles()
   })
 }
 async function uploadProfile() {
-  if (!uploadForm.content) return message.warning('请输入 YAML 内容')
+  if (!uploadForm.content) return message.warning(translate('ui.m_f082c4f9e125'))
   await withLoading(async () => {
     await proxyApi.upload(uploadForm.name, uploadForm.content)
-    message.success('配置已上传'); uploadForm.content = ''; await loadProfiles()
+    message.success(translate('ui.m_3740b6bd4a5b')); uploadForm.content = ''; await loadProfiles()
   })
 }
 function beforeYamlUpload(file: File) {
@@ -669,32 +671,32 @@ function beforeYamlUpload(file: File) {
   reader.onload = e => {
     uploadForm.content = String(e.target?.result || '')
     if (!uploadForm.name) uploadForm.name = file.name.replace(/\.(ya?ml|txt)$/i, '')
-    message.success('已读取文件，点击「上传配置」确认')
+    message.success(translate('ui.m_854c598eee15'))
   }
-  reader.onerror = () => message.error('文件读取失败')
+  reader.onerror = () => message.error(translate('ui.m_3d943f807f07'))
   reader.readAsText(file)
   return false
 }
 async function activate(id: string) {
   await withLoading(async () => {
     applyConfig(await proxyApi.activate(id))
-    message.success('配置已激活'); await loadAll()
+    message.success(translate('ui.m_192916153355')); await loadAll()
   })
 }
 async function selectProxy(group: string, name: string) {
   await withLoading(async () => {
     await proxyApi.select(group, name)
-    message.success(`已切换 ${group} -> ${name}`); await loadProxies()
+    message.success(translate('ui.m_15fd1fa3aa65', { p0: (group), p1: (name) })); await loadProxies()
   })
 }
 function autoSelect() {
   Modal.confirm({
-    title: '自动选择最优节点',
-    content: '将对代理组 PROXY 执行延迟测试并切换到最低延迟节点。',
+    get title() { return translate('ui.m_d44da281bd11') },
+    get content() { return translate('ui.m_4ddaaf35ae63') },
     onOk: async () => {
       await withLoading(async () => {
         const result = await proxyApi.autoSelect('PROXY')
-        message.success(`已选择 ${result.selected.name}，延迟 ${result.selected.delay}ms`)
+        message.success(translate('ui.m_cac4ef79bf38', { p0: (result.selected.name), p1: (result.selected.delay) }))
         await loadProxies()
       })
     }

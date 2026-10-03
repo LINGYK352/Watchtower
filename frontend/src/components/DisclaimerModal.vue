@@ -11,7 +11,7 @@
     :z-index="2000">
     <div class="dc-body">
       <a-alert type="warning" show-icon banner style="margin-bottom:14px"
-        message="请仔细阅读以下条款，同意后方可使用本系统。" />
+        :message="translate('ui.m_8eaf04cf69bb')" />
       <div class="dc-scroll">
         <div v-for="sec in sections" :key="sec.h" class="dc-sec">
           <h4 class="dc-h">{{ sec.h }}</h4>
@@ -22,9 +22,9 @@
       </div>
       <a-checkbox v-model:checked="agreed" class="dc-check">{{ agreeText }}</a-checkbox>
       <div class="dc-actions">
-        <a-button danger @click="onReject">不同意并退出</a-button>
+        <a-button danger @click="onReject">{{ translate('ui.m_40b0aade58d7') }}</a-button>
         <a-button type="primary" :disabled="!agreed || countdown > 0" :loading="submitting" @click="onAgree">
-          {{ countdown > 0 ? `请阅读条款（${countdown}s）` : '同意并继续' }}
+          {{ countdown > 0 ? translate('ui.m_e5c44f9be14d', { p0: (countdown) }) : translate('ui.m_81c92013219d') }}
         </a-button>
       </div>
     </div>
@@ -32,6 +32,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { clearToken } from '../api/request'
@@ -93,7 +95,7 @@ async function onAgree() {
     await acceptDisclaimer(DISCLAIMER_VERSION)   // 写服务端磁盘标记，重启/换浏览器保留
     visible.value = false
   } catch (e) {
-    message.error('保存同意状态失败：' + (e instanceof Error ? e.message : String(e)))
+    message.error(translate('ui.m_60b699584716') + (e instanceof Error ? e.message : String(e)))
   } finally {
     submitting.value = false
   }

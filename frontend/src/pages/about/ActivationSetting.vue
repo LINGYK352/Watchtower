@@ -1,12 +1,12 @@
 <template>
-  <PageContainer title="激活设置" kicker="Activation" description="查看当前系统激活状态与授权信息。">
+  <PageContainer :title="translate('ui.m_116636064123')" kicker="Activation" :description="translate('ui.m_6969e3a5b16d')">
     <a-card class="page-card">
       <div class="act-hero">
         <div class="act-badge" :class="info.activated ? 'act-badge--ok' : 'act-badge--off'">
           <KeyOutlined />
         </div>
         <div>
-          <div class="act-label">激活状态</div>
+          <div class="act-label">{{ translate('ui.m_83de9a9a3443') }}</div>
           <a-tag :color="info.activated ? 'green' : 'red'" class="act-tag">
             {{ getStatusText(info) }}
           </a-tag>
@@ -16,14 +16,14 @@
       <a-divider style="margin:18px 0" />
 
       <a-descriptions :column="1" bordered size="middle" class="act-desc" v-if="loaded">
-        <a-descriptions-item label="激活时间">{{ info.activated_at || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="失效时间">{{ info.expires_at || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="有效期(天)">{{ info.auth_days || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="剩余天数">
+        <a-descriptions-item :label="translate('ui.m_d2b869681367')">{{ info.activated_at || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_6bc17d5127bc')">{{ info.expires_at || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_80591ea87b74')">{{ info.auth_days || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_6684a9225162')">
           <span :class="info.remaining_days <= 7 ? 'danger-text' : ''">{{ info.remaining_days }}</span>
         </a-descriptions-item>
-        <a-descriptions-item label="授权用户">{{ info.username || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="凭证">
+        <a-descriptions-item :label="translate('ui.m_e46b5523ff3c')">{{ info.username || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_058f672b8779')">
           <code class="key-masked">{{ info.key_masked || '-' }}</code>
         </a-descriptions-item>
       </a-descriptions>
@@ -32,26 +32,26 @@
 
       <a-button type="primary" @click="showModal = true">
         <template #icon><KeyOutlined /></template>
-        {{ info.activated ? '更换 Key' : '重新激活' }}
+        {{ info.activated ? translate('ui.m_4dc540cb0369') : translate('ui.m_2036369fe36f') }}
       </a-button>
 
       <a-divider style="margin:18px 0" />
 
       <!-- 免责声明签署状态（服务端持久化，重启/换浏览器保留） -->
       <div class="disc-status">
-        <span class="disc-label">免责声明</span>
+        <span class="disc-label">{{ translate('ui.m_280af617c87f') }}</span>
         <a-tag v-if="disc.accepted" color="green" class="disc-signed">
-          <CheckCircleOutlined /> 已签署同意
+          <CheckCircleOutlined /> {{ translate('ui.m_51ae950c5f10') }}
         </a-tag>
-        <a-tag v-else color="default">未签署</a-tag>
-        <span v-if="disc.accepted && disc.accepted_at" class="disc-at">于 {{ disc.accepted_at }} 签署</span>
+        <a-tag v-else color="default">{{ translate('ui.m_31b625bbada1') }}</a-tag>
+        <span v-if="disc.accepted && disc.accepted_at" class="disc-at">{{ translate('ui.m_ec46c055ab6b') }} {{ disc.accepted_at }} {{ translate('ui.m_8bc94c0cb57c') }}</span>
       </div>
     </a-card>
 
-    <a-modal v-model:open="showModal" title="激活 / 更换 Key" @ok="doActivate" :confirm-loading="submitting" ok-text="提交激活">
+    <a-modal v-model:open="showModal" :title="translate('ui.m_208a01c79ebb')" @ok="doActivate" :confirm-loading="submitting" :ok-text="translate('ui.m_1fa2b8b2043a')">
       <a-form layout="vertical">
-        <a-form-item label="授权凭证 (JWT)" required>
-          <a-textarea v-model:value="newKey" :rows="4" placeholder="粘贴从分发系统注册页获取的 JWT 凭证" />
+        <a-form-item :label="translate('ui.m_80d0504305aa')" required>
+          <a-textarea v-model:value="newKey" :rows="4" :placeholder="translate('ui.m_b846e6d09a49')" />
         </a-form-item>
       </a-form>
     </a-modal>
@@ -59,6 +59,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { KeyOutlined, CheckCircleOutlined } from '@ant-design/icons-vue'
@@ -84,10 +86,10 @@ const newKey = ref('')
 const submitting = ref(false)
 
 function getStatusText(i: typeof info) {
-  if (i.activated) return '已激活'
-  if (i.revoked) return '已被吊销'
-  if (i.expired) return '已过期'
-  return '未激活'
+  if (i.activated) return translate('ui.m_8f3c822f08ad')
+  if (i.revoked) return translate('ui.m_b0bff6e7c453')
+  if (i.expired) return translate('ui.m_2fe0e3339ac4')
+  return translate('ui.m_fdc1183b6810')
 }
 
 async function fetchInfo() {
@@ -103,11 +105,11 @@ async function fetchInfo() {
 }
 
 async function doActivate() {
-  if (!newKey.value.trim()) return message.warning('请输入授权凭证')
+  if (!newKey.value.trim()) return message.warning(translate('ui.m_f7f055a82def'))
   submitting.value = true
   try {
     await submitActivation(newKey.value.trim())
-    message.success('激活成功')
+    message.success(translate('ui.m_66dcb20e4a76'))
     showModal.value = false
     newKey.value = ''
     await fetchInfo()

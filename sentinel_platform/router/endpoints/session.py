@@ -364,6 +364,8 @@ def _console_event_stream(session_id: str, svc):
             # meta：console_running（非 status，因 console 恒 paused_manual）+ 轮次/token +
             # stream/stream_phase（气泡流式：LLM 生成中 partial 文本 + 阶段 thinking/text，供前端气泡实时渲染）
             meta = {"console_running": bool(sess.get("console_running", False)),
+                    "console_revision": int(sess.get("console_revision", 0) or 0),
+                    "console_error": sess.get("console_error", "") or "",
                     "round": sess.get("round", 0), "total_tokens": sess.get("total_tokens", 0),
                     "window_tokens": sess.get("window_tokens", 0),
                     "token_budget": sess.get("token_budget", 0), "tool_count": len(tool_log),
@@ -425,8 +427,8 @@ def _action(session_id, fn_name):
 class SessionStart(Resource):
     @ns.doc(security="token", description="需权限 pentest:write（启动引擎，phase-2 未建则入队）")
     def post(self, session_id):
-        """启动会话（跑引擎）"""
-        return _action(session_id, "run_session")
+        """启动会话：持久入队后立即返回，后台执行引擎。"""
+        return _action(session_id, "start_session")
 
 
 @ns.route("/session/<string:session_id>/resume")

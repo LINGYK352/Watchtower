@@ -1,26 +1,26 @@
 <template>
-  <PageContainer title="资产视图" kicker="Asset View" description="扫描资产归集成三层身份(资产实例/系统/代码)+单位视图,服务渗透去重、同系统借鉴、代码审计复用。">
+  <PageContainer :title="translate('ui.m_71f13524f302')" kicker="Asset View" :description="translate('ui.m_bb7677cce316')">
     <template #extra>
       <a-space>
-        <a-button @click="loadStat">刷新</a-button>
-        <a-button @click="icpOpen = true">解析备案单位</a-button>
-        <a-button type="primary" @click="collectOpen = true">从任务归集</a-button>
+        <a-button @click="loadStat">{{ translate('ui.m_aee887434131') }}</a-button>
+        <a-button @click="icpOpen = true">{{ translate('ui.m_fda1c81403fd') }}</a-button>
+        <a-button type="primary" @click="collectOpen = true">{{ translate('ui.m_e4efd685efde') }}</a-button>
       </a-space>
     </template>
 
     <a-row :gutter="16" style="margin-bottom: 16px">
-      <a-col :span="4"><a-card :bordered="false"><a-statistic title="资产实例" :value="stat.asset_total" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic title="系统身份" :value="stat.system_total" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic title="含漏洞资产" :value="stat.asset_with_vuln" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic title="含泄露资产" :value="stat.asset_with_leak" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic title="含密钥资产" :value="stat.asset_with_secret" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic title="已渗透" :value="stat.asset_pentested" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
+      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_29ae9ac44b49')" :value="stat.asset_total" /></a-card></a-col>
+      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_38aa407393df')" :value="stat.system_total" /></a-card></a-col>
+      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_7ed61f4f27fc')" :value="stat.asset_with_vuln" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f0e83aad71c7')" :value="stat.asset_with_leak" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
+      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f4d8d39d3204')" :value="stat.asset_with_secret" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_9f70256c2f4d')" :value="stat.asset_pentested" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
     </a-row>
 
     <a-row :gutter="16" style="margin-bottom: 16px">
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="代码身份" :value="stat.code_total" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="已审计" :value="stat.code_audited" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="渗透报告" :value="stat.report_total" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_dad2903d50cb')" :value="stat.code_total" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_3aa0781d6595')" :value="stat.code_audited" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_285bc741cad0')" :value="stat.report_total" /></a-card></a-col>
     </a-row>
 
     <a-card :bordered="false">
@@ -28,16 +28,16 @@
         <!-- 资产实例 -->
         <a-tab-pane key="asset" tab="资产实例">
           <SearchBar :model="assetQuery" @search="() => loadAsset(1)" @reset="resetAsset">
-            <a-form-item label="单位"><a-input v-model:value="assetQuery.unit" allow-clear placeholder="所属单位" /></a-form-item>
-            <a-form-item label="站点"><a-input v-model:value="assetQuery.site" allow-clear placeholder="URL" /></a-form-item>
-            <a-form-item label="指纹/系统"><a-input v-model:value="assetQuery.finger_names" allow-clear placeholder="如 帆软/致远/泛微/Shiro" /></a-form-item>
-            <a-form-item label="渗透状态">
+            <a-form-item :label="translate('ui.m_80b19d68b149')"><a-input v-model:value="assetQuery.unit" allow-clear :placeholder="translate('ui.m_63ff1732e396')" /></a-form-item>
+            <a-form-item :label="translate('ui.m_a59fe62777ff')"><a-input v-model:value="assetQuery.site" allow-clear placeholder="URL" /></a-form-item>
+            <a-form-item :label="translate('ui.m_8da7b84c6e67')"><a-input v-model:value="assetQuery.finger_names" allow-clear :placeholder="translate('ui.m_bf228fd890de')" /></a-form-item>
+            <a-form-item :label="translate('ui.m_ec19a5e13344')">
               <a-select v-model:value="assetQuery.pentest_status" allow-clear style="width: 130px" :options="statusOptions" />
             </a-form-item>
           </SearchBar>
           <div style="margin-bottom:8px">
-            <a-popconfirm :title="`确认删除选中的 ${assetSelected.length} 条资产情报？`" :disabled="!assetSelected.length" @confirm="batchDeleteAsset">
-              <a-button danger :disabled="!assetSelected.length">批量删除{{ assetSelected.length ? `(${assetSelected.length})` : '' }}</a-button>
+            <a-popconfirm :title="translate('ui.m_b3dce9fa21c7', { p0: (assetSelected.length) })" :disabled="!assetSelected.length" @confirm="batchDeleteAsset">
+              <a-button danger :disabled="!assetSelected.length">{{ translate('ui.m_ddae7a0fc554') }}{{ assetSelected.length ? `(${assetSelected.length})` : '' }}</a-button>
             </a-popconfirm>
           </div>
           <AppTable :columns="assetColumns" :data="assetData.items" :loading="loading" selectable
@@ -64,8 +64,8 @@
               </template>
               <template v-else-if="column.key === 'action'">
                 <a-space>
-                  <a-button type="link" size="small" @click="openContext(record)">渗透档案</a-button>
-                  <ConfirmAction danger type="link" size="small" title="确认删除该资产实例？" @confirm="removeRow('intel_asset', String(record._id), loadAsset)">删除</ConfirmAction>
+                  <a-button type="link" size="small" @click="openContext(record)">{{ translate('ui.m_d6d4a20a30ea') }}</a-button>
+                  <ConfirmAction danger type="link" size="small" :title="translate('ui.m_ff26f51a4ae3')" @confirm="removeRow('intel_asset', String(record._id), loadAsset)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
                 </a-space>
               </template>
             </template>
@@ -75,12 +75,12 @@
         <!-- 系统身份 -->
         <a-tab-pane key="system" tab="系统知识">
           <SearchBar :model="systemQuery" @search="() => loadSystem(1)" @reset="resetSystem">
-            <a-form-item label="系统名"><a-input v-model:value="systemQuery.name" allow-clear placeholder="如 泛微OA" /></a-form-item>
-            <a-form-item label="版本"><a-input v-model:value="systemQuery.version" allow-clear /></a-form-item>
+            <a-form-item :label="translate('ui.m_8c3b91d03f51')"><a-input v-model:value="systemQuery.name" allow-clear :placeholder="translate('ui.m_29e7d0ffe833')" /></a-form-item>
+            <a-form-item :label="translate('ui.m_5f76b2bf82dd')"><a-input v-model:value="systemQuery.version" allow-clear /></a-form-item>
           </SearchBar>
           <div style="margin-bottom:8px">
-            <a-popconfirm :title="`确认删除选中的 ${systemSelected.length} 条系统知识？`" :disabled="!systemSelected.length" @confirm="batchDeleteSystem">
-              <a-button danger :disabled="!systemSelected.length">批量删除{{ systemSelected.length ? `(${systemSelected.length})` : '' }}</a-button>
+            <a-popconfirm :title="translate('ui.m_f242e36e1d45', { p0: (systemSelected.length) })" :disabled="!systemSelected.length" @confirm="batchDeleteSystem">
+              <a-button danger :disabled="!systemSelected.length">{{ translate('ui.m_ddae7a0fc554') }}{{ systemSelected.length ? `(${systemSelected.length})` : '' }}</a-button>
             </a-popconfirm>
           </div>
           <AppTable :columns="systemColumns" :data="systemData.items" :loading="loading" selectable
@@ -115,7 +115,7 @@
                   <template v-for="p in sortedPaths(record.success_paths)" :key="p.vuln_type + (p.entry || '')">
                     <a-tooltip :title="p.entry || p.vuln_type">
                       <a-tag :color="(p.useful_count || 0) > 0 ? 'green' : 'default'">
-                        {{ p.vuln_type }} · 有用×{{ p.useful_count || 0 }} · 见过×{{ p.seen_count || 0 }}
+                        {{ p.vuln_type }} {{ translate('ui.m_f4c032d4aaaf') }}{{ p.useful_count || 0 }} {{ translate('ui.m_01ed1ef351c8') }}{{ p.seen_count || 0 }}
                       </a-tag>
                     </a-tooltip>
                   </template>
@@ -123,7 +123,7 @@
                 </div>
               </template>
               <template v-else-if="column.key === 'action'">
-                <ConfirmAction danger type="link" size="small" title="确认删除该系统身份？" @confirm="removeRow('intel_system', String(record._id), loadSystem)">删除</ConfirmAction>
+                <ConfirmAction danger type="link" size="small" :title="translate('ui.m_55826b201cb1')" @confirm="removeRow('intel_system', String(record._id), loadSystem)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
               </template>
             </template>
           </AppTable>
@@ -132,9 +132,9 @@
         <!-- 代码身份 -->
         <a-tab-pane key="code" tab="代码审计">
           <a-space style="margin-bottom: 12px">
-            <a-button type="primary" @click="codeOpen = true">登记待审代码</a-button>
-            <a-popconfirm :title="`确认删除选中的 ${codeSelected.length} 条代码身份？`" :disabled="!codeSelected.length" @confirm="batchDeleteCode">
-              <a-button danger :disabled="!codeSelected.length">批量删除{{ codeSelected.length ? `(${codeSelected.length})` : '' }}</a-button>
+            <a-button type="primary" @click="codeOpen = true">{{ translate('ui.m_7b4da3c6db3a') }}</a-button>
+            <a-popconfirm :title="translate('ui.m_70a87cd73894', { p0: (codeSelected.length) })" :disabled="!codeSelected.length" @confirm="batchDeleteCode">
+              <a-button danger :disabled="!codeSelected.length">{{ translate('ui.m_ddae7a0fc554') }}{{ codeSelected.length ? `(${codeSelected.length})` : '' }}</a-button>
             </a-popconfirm>
           </a-space>
           <AppTable :columns="codeColumns" :data="codeData.items" :loading="loading" selectable
@@ -146,7 +146,7 @@
                 <a-tag :color="auditColor(String(record.audit_status))">{{ auditLabel(String(record.audit_status)) }}</a-tag>
               </template>
               <template v-else-if="column.key === 'action'">
-                <ConfirmAction danger type="link" size="small" title="确认删除该代码身份？" @confirm="removeRow('intel_code', String(record._id), loadCode)">删除</ConfirmAction>
+                <ConfirmAction danger type="link" size="small" :title="translate('ui.m_e19b44cb3d44')" @confirm="removeRow('intel_code', String(record._id), loadCode)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
               </template>
             </template>
           </AppTable>
@@ -155,23 +155,23 @@
         <!-- 渗透报告 -->
         <a-tab-pane key="report" tab="渗透报告">
           <a-radio-group v-model:value="reportView" size="small" style="margin-bottom:12px" @change="onReportViewChange">
-            <a-radio-button value="tree">三级目录</a-radio-button>
-            <a-radio-button value="list">列表</a-radio-button>
+            <a-radio-button value="tree">{{ translate('ui.m_646dd7daa0ff') }}</a-radio-button>
+            <a-radio-button value="list">{{ translate('ui.m_aedd6814ff8c') }}</a-radio-button>
           </a-radio-group>
 
           <div v-if="reportView === 'tree'">
-            <a-empty v-if="!reportTree.length" description="暂无报告。AI 引擎渗透后报告按 任务&gt;单位&gt;资产 自动归档于此。" />
+            <a-empty v-if="!reportTree.length" :description="translate('ui.m_b3c99ba313bc')" />
             <a-collapse v-else accordion>
               <a-collapse-panel v-for="t in reportTree" :key="t.task_name">
                 <template #header>
-                  <a-space><a-tag color="blue">📋 {{ t.task_name }}</a-tag><span>{{ t.report_cnt }} 份报告</span></a-space>
+                  <a-space><a-tag color="blue">📋 {{ t.task_name }}</a-tag><span>{{ t.report_cnt }} {{ translate('ui.m_2933d4ab3491') }}</span></a-space>
                 </template>
                 <div v-for="u in t.units" :key="u.unit" style="margin-bottom:10px">
-                  <div style="font-weight:600;margin:4px 0"><a-tag color="geekblue">🏢 {{ u.unit }}</a-tag><span style="color:#888">{{ u.report_cnt }} 份</span></div>
+                  <div style="font-weight:600;margin:4px 0"><a-tag color="geekblue">🏢 {{ u.unit }}</a-tag><span style="color:#888">{{ u.report_cnt }} {{ translate('ui.m_0066134b36c4') }}</span></div>
                   <div v-for="a in u.assets" :key="a.asset" style="padding-left:16px;margin-bottom:4px">
                     <a-tag color="cyan">🌐 {{ a.asset }}</a-tag>
                     <a-button v-for="r in a.reports" :key="r._id" type="link" size="small" @click="showReportById(r._id)">
-                      <a-tag v-if="r.system_name" color="purple" style="margin-right:4px">{{ r.system_name }}</a-tag>查看报告({{ r.save_date }})
+                      <a-tag v-if="r.system_name" color="purple" style="margin-right:4px">{{ r.system_name }}</a-tag>{{ translate('ui.m_5acb29ad2cb6') }}{{ r.save_date }})
                     </a-button>
                   </div>
                 </div>
@@ -181,12 +181,12 @@
 
           <template v-else>
             <SearchBar :model="reportQuery" @search="() => loadReport(1)" @reset="resetReport">
-              <a-form-item label="单位"><a-input v-model:value="reportQuery.unit" allow-clear /></a-form-item>
-              <a-form-item label="资产"><a-input v-model:value="reportQuery.asset_key" allow-clear placeholder="资产 key" /></a-form-item>
+              <a-form-item :label="translate('ui.m_80b19d68b149')"><a-input v-model:value="reportQuery.unit" allow-clear /></a-form-item>
+              <a-form-item :label="translate('ui.m_5f45bb826b16')"><a-input v-model:value="reportQuery.asset_key" allow-clear :placeholder="translate('ui.m_c49a9c20184c')" /></a-form-item>
             </SearchBar>
             <div style="margin-bottom:8px">
-              <a-popconfirm :title="`确认删除选中的 ${reportSelected.length} 份报告？`" :disabled="!reportSelected.length" @confirm="batchDeleteReport">
-                <a-button danger :disabled="!reportSelected.length">批量删除{{ reportSelected.length ? `(${reportSelected.length})` : '' }}</a-button>
+              <a-popconfirm :title="translate('ui.m_a052d5160ce5', { p0: (reportSelected.length) })" :disabled="!reportSelected.length" @confirm="batchDeleteReport">
+                <a-button danger :disabled="!reportSelected.length">{{ translate('ui.m_ddae7a0fc554') }}{{ reportSelected.length ? `(${reportSelected.length})` : '' }}</a-button>
               </a-popconfirm>
             </div>
             <AppTable :columns="reportColumns" :data="reportData.items" :loading="loading" selectable
@@ -195,8 +195,8 @@
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'action'">
                   <a-space>
-                    <a-button type="link" size="small" @click="showReport(record)">查看</a-button>
-                    <ConfirmAction danger type="link" size="small" title="确认删除该报告？" @confirm="removeRow('intel_report', String(record._id), loadReport)">删除</ConfirmAction>
+                    <a-button type="link" size="small" @click="showReport(record)">{{ translate('ui.m_db8db0530432') }}</a-button>
+                    <ConfirmAction danger type="link" size="small" :title="translate('ui.m_a00b1ca5af9f')" @confirm="removeRow('intel_report', String(record._id), loadReport)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
                   </a-space>
                 </template>
               </template>
@@ -212,73 +212,73 @@
     </a-card>
 
     <!-- 从任务归集 -->
-    <a-modal v-model:open="collectOpen" title="从扫描任务归集情报资产" :confirm-loading="loading" @ok="doCollect">
+    <a-modal v-model:open="collectOpen" :title="translate('ui.m_825dd846eebf')" :confirm-loading="loading" @ok="doCollect">
       <a-alert type="info" show-icon style="margin-bottom: 12px"
-        message="读取该任务的 site 站点结果,归一化成资产实例并按指纹聚合系统身份。重复归集幂等,不会产生重复资产。" />
+        :message="translate('ui.m_ef77b8cc947c')" />
       <a-form layout="vertical">
-        <a-form-item label="扫描任务 ID" required>
-          <a-input v-model:value="collectTaskId" placeholder="task 集合的 _id" />
+        <a-form-item :label="translate('ui.m_a67aab1e472a')" required>
+          <a-input v-model:value="collectTaskId" :placeholder="translate('ui.m_6ecc4e23ce73')" />
         </a-form-item>
       </a-form>
     </a-modal>
 
     <!-- 解析 ICP 备案单位 -->
-    <a-modal v-model:open="icpOpen" title="解析 ICP 备案单位" :confirm-loading="loading" @ok="doResolveIcp">
+    <a-modal v-model:open="icpOpen" :title="translate('ui.m_77184d6b3f86')" :confirm-loading="loading" @ok="doResolveIcp">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-        message="通过鹰图/FOFA 查域名备案单位,并回填该主域下所有资产的单位字段(报告三级目录第一级)。需在 config.yaml 配置 HUNTER.KEY。" />
+        :message="translate('ui.m_525645c0a368')" />
       <a-form layout="vertical">
-        <a-form-item label="域名" required>
-          <a-input v-model:value="icpDomain" placeholder="如 example.com" />
+        <a-form-item :label="translate('ui.m_222952431147')" required>
+          <a-input v-model:value="icpDomain" :placeholder="translate('ui.m_f51539de19d5')" />
         </a-form-item>
       </a-form>
       <a-descriptions v-if="icpResult" :column="1" size="small" bordered>
-        <a-descriptions-item label="备案单位">{{ icpResult.unit || '(未查到)' }}</a-descriptions-item>
-        <a-descriptions-item label="备案号">{{ icpResult.icp_no || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="来源">{{ icpResult.source }}</a-descriptions-item>
-        <a-descriptions-item label="回填资产数">{{ icpResult.updated }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_23a30e02ebc3')">{{ icpResult.unit || translate('ui.m_4fc0d394be36') }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_961c62c16230')">{{ icpResult.icp_no || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_a488e93d69cc')">{{ icpResult.source }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_f67a796567a5')">{{ icpResult.updated }}</a-descriptions-item>
       </a-descriptions>
     </a-modal>
 
     <!-- 登记代码身份 -->
-    <a-modal v-model:open="codeOpen" title="登记待审计代码身份" :confirm-loading="loading" @ok="doAddCode">
+    <a-modal v-model:open="codeOpen" :title="translate('ui.m_ff02570c9629')" :confirm-loading="loading" @ok="doAddCode">
       <a-form layout="vertical">
-        <a-form-item label="仓库地址" required><a-input v-model:value="codeForm.repo_url" placeholder="https://github.com/xxx/yyy" /></a-form-item>
-        <a-form-item label="版本 / commit"><a-input v-model:value="codeForm.version" placeholder="可空" /></a-form-item>
-        <a-form-item label="关联系统身份 ID"><a-input v-model:value="codeForm.system_id" placeholder="可空,system 表 _id" /></a-form-item>
-        <a-form-item label="源码落地目录"><a-input v-model:value="codeForm.local_path" placeholder="可空,服务器路径" /></a-form-item>
+        <a-form-item :label="translate('ui.m_e6161ef37a62')" required><a-input v-model:value="codeForm.repo_url" placeholder="https://github.com/xxx/yyy" /></a-form-item>
+        <a-form-item :label="translate('ui.m_b6df88d38b99')"><a-input v-model:value="codeForm.version" :placeholder="translate('ui.m_6f0318cda678')" /></a-form-item>
+        <a-form-item :label="translate('ui.m_f258d24de968')"><a-input v-model:value="codeForm.system_id" :placeholder="translate('ui.m_4e18391e6997')" /></a-form-item>
+        <a-form-item :label="translate('ui.m_f14353bc9ed9')"><a-input v-model:value="codeForm.local_path" :placeholder="translate('ui.m_f9578a5e8a7c')" /></a-form-item>
       </a-form>
     </a-modal>
 
     <!-- 报告详情 -->
-    <a-drawer v-model:open="reportOpen" title="渗透报告" width="820">
+    <a-drawer v-model:open="reportOpen" :title="translate('ui.m_285bc741cad0')" width="820">
       <template #extra>
         <a-space>
-          <a-button size="small" @click="copyAllVulns">复制全部漏洞</a-button>
-          <a-button size="small" type="primary" @click="exportReportMd">导出 Markdown</a-button>
+          <a-button size="small" @click="copyAllVulns">{{ translate('ui.m_1ee3552aea63') }}</a-button>
+          <a-button size="small" type="primary" @click="exportReportMd">{{ translate('ui.m_ac8b027cc1e3') }}</a-button>
         </a-space>
       </template>
       <a-descriptions :column="2" size="small" bordered style="margin-bottom: 14px">
-        <a-descriptions-item label="资产" :span="2">{{ currentReport?.asset_key || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="单位">{{ currentReport?.unit || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="系统">{{ currentReport?.system_name || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="时间">{{ currentReport?.save_date || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="漏洞数">{{ reportVulns.length }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_5f45bb826b16')" :span="2">{{ currentReport?.asset_key || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_80b19d68b149')">{{ currentReport?.unit || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_5b50d7c4b595')">{{ currentReport?.system_name || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_8b6ff498515b')">{{ currentReport?.save_date || '-' }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_415760c06b97')">{{ reportVulns.length }}</a-descriptions-item>
       </a-descriptions>
 
       <a-tabs v-model:activeKey="reportTab">
         <a-tab-pane key="raw" tab="报告正文">
-          <a-empty v-if="!reportContent" description="报告正文为空" />
+          <a-empty v-if="!reportContent" :description="translate('ui.m_f6bd7a2b54bc')" />
           <pre v-else class="report-content">{{ reportContent }}</pre>
         </a-tab-pane>
-        <a-tab-pane key="vulns" :tab="`漏洞清单(${reportVulns.length})`">
-          <a-empty v-if="!reportVulns.length" description="本报告无结构化漏洞条目" />
+        <a-tab-pane key="vulns" :tab="translate('ui.m_1ffe7e6e3f85', { p0: (reportVulns.length) })">
+          <a-empty v-if="!reportVulns.length" :description="translate('ui.m_fdeb6fc2cc04')" />
           <a-card v-for="v in reportVulns" :key="v.no" size="small" style="margin-bottom:10px"
             :title="`#${v.no} ${v.type}`">
             <template #extra><a-tag :color="sevColor(String(v.severity))">{{ String(v.severity || '').toUpperCase() }}</a-tag></template>
-            <div class="vrow"><b>目标:</b> <CopyText :text="String(v.target || '')" /></div>
-            <div class="vrow" v-if="v.impact"><b>危害:</b> {{ v.impact }}</div>
+            <div class="vrow"><b>{{ translate('ui.m_1b451d4b169a') }}</b> <CopyText :text="String(v.target || '')" /></div>
+            <div class="vrow" v-if="v.impact"><b>{{ translate('ui.m_eb8687470173') }}</b> {{ v.impact }}</div>
             <div class="vrow" v-if="v.poc">
-              <b>PoC:</b> <a-button size="small" type="link" @click="copyText(String(v.poc))">复制</a-button>
+              <b>PoC:</b> <a-button size="small" type="link" @click="copyText(String(v.poc))">{{ translate('ui.m_63d90d977348') }}</a-button>
               <pre class="report-content">{{ v.poc }}</pre>
             </div>
           </a-card>
@@ -287,65 +287,65 @@
     </a-drawer>
 
     <!-- 渗透档案(完整侦察情报装配) -->
-    <a-drawer v-model:open="ctxOpen" title="AI 渗透情报档案" width="860" :body-style="{ paddingTop: '8px' }">
+    <a-drawer v-model:open="ctxOpen" :title="translate('ui.m_529d50a0d0b6')" width="860" :body-style="{ paddingTop: '8px' }">
       <a-spin :spinning="ctxLoading">
         <template v-if="ctx">
-          <a-descriptions title="资产身份" :column="2" size="small" bordered style="margin-bottom:14px">
-            <a-descriptions-item label="站点" :span="2">{{ ctx.identity.site }}</a-descriptions-item>
+          <a-descriptions :title="translate('ui.m_f3e619f5e5f7')" :column="2" size="small" bordered style="margin-bottom:14px">
+            <a-descriptions-item :label="translate('ui.m_a59fe62777ff')" :span="2">{{ ctx.identity.site }}</a-descriptions-item>
             <a-descriptions-item label="IP">{{ ctx.identity.ip || '-' }}</a-descriptions-item>
-            <a-descriptions-item label="单位">{{ ctx.identity.unit || '-' }}</a-descriptions-item>
-            <a-descriptions-item label="系统">{{ ctx.identity.system || '-' }}</a-descriptions-item>
-            <a-descriptions-item label="指纹">
+            <a-descriptions-item :label="translate('ui.m_80b19d68b149')">{{ ctx.identity.unit || '-' }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_5b50d7c4b595')">{{ ctx.identity.system || '-' }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_0d6a14a9ab25')">
               <a-tag v-for="f in (ctx.identity.fingerprints as string[] || [])" :key="f" color="blue">{{ f }}</a-tag>
               <span v-if="!(ctx.identity.fingerprints as string[] || []).length">-</span>
             </a-descriptions-item>
           </a-descriptions>
 
-          <a-divider orientation="left" style="margin:10px 0">已知弱点(已发现，无需重复挖)</a-divider>
-          <p style="margin:4px 0"><b>已确认漏洞</b></p>
+          <a-divider orientation="left" style="margin:10px 0">{{ translate('ui.m_ffd619daea29') }}</a-divider>
+          <p style="margin:4px 0"><b>{{ translate('ui.m_dd78082c47cf') }}</b></p>
           <a-table v-if="knownVulns.length" :columns="vulnCols" :data-source="knownVulns" :pagination="false" size="small" row-key="target" bordered>
             <template #bodyCell="{ column, record }">
               <a-tag v-if="column.key==='severity'" :color="sevColor(String(record.severity))">{{ record.severity }}</a-tag>
             </template>
           </a-table>
-          <a-empty v-else :image="false" description="无" style="margin:0" />
-          <p style="margin:10px 0 4px"><b>文件泄露</b></p>
+          <a-empty v-else :image="false" :description="translate('ui.m_484d55613910')" style="margin:0" />
+          <p style="margin:10px 0 4px"><b>{{ translate('ui.m_ddca902e3201') }}</b></p>
           <div v-if="fileLeaks.length">
             <a-tag v-for="(l,i) in fileLeaks" :key="i" color="orange" style="margin:2px">{{ l.url || l.site }} ({{ l.status_code }})</a-tag>
           </div>
-          <a-empty v-else :image="false" description="无" style="margin:0" />
-          <p style="margin:10px 0 4px"><b>JS 情报(WebInfoHunter)</b></p>
+          <a-empty v-else :image="false" :description="translate('ui.m_484d55613910')" style="margin:0" />
+          <p style="margin:10px 0 4px"><b>{{ translate('ui.m_9c6a168830c5') }}</b></p>
           <div v-if="wihSamples.length">
             <div v-for="(s,i) in wihSamples" :key="i" class="secret-line">
               <a-tag color="red">{{ s.record_type }}</a-tag><span class="mono">{{ s.content }}</span>
             </div>
           </div>
-          <a-empty v-else :image="false" description="无" style="margin:0" />
+          <a-empty v-else :image="false" :description="translate('ui.m_484d55613910')" style="margin:0" />
 
-          <a-divider orientation="left" style="margin:14px 0 10px">攻击面</a-divider>
-          <p style="margin:4px 0"><b>开放端口/服务</b></p>
+          <a-divider orientation="left" style="margin:14px 0 10px">{{ translate('ui.m_5aad54811bb4') }}</a-divider>
+          <p style="margin:4px 0"><b>{{ translate('ui.m_01d64a3dcd2b') }}</b></p>
           <div v-if="asPorts.length">
             <a-tag v-for="(p,i) in asPorts" :key="i">{{ p.port }} {{ p.service }} {{ p.product }} {{ p.version }}</a-tag>
           </div>
-          <a-empty v-else :image="false" description="无" style="margin:0" />
-          <p style="margin:10px 0 4px"><b>关键端点(URL 样本)</b></p>
+          <a-empty v-else :image="false" :description="translate('ui.m_484d55613910')" style="margin:0" />
+          <p style="margin:10px 0 4px"><b>{{ translate('ui.m_bbc1ed0bea05') }}</b></p>
           <div v-if="urlSamples.length">
             <div v-for="(e,i) in urlSamples" :key="i" class="mono">{{ e.url }} ({{ e.status_code }})</div>
           </div>
-          <a-empty v-else :image="false" description="无" style="margin:0" />
+          <a-empty v-else :image="false" :description="translate('ui.m_484d55613910')" style="margin:0" />
 
-          <a-divider orientation="left" style="margin:14px 0 10px">同系统借鉴(这套系统在别处怎么被打下来)</a-divider>
+          <a-divider orientation="left" style="margin:14px 0 10px">{{ translate('ui.m_1ad71a47649d') }}</a-divider>
           <div v-if="sysKnownVulns.length || sysCommonLeaks.length">
-            <p style="margin:4px 0"><b>同系统历史漏洞</b></p>
-            <a-tag v-for="(v,i) in sysKnownVulns" :key="i" :color="sevColor(String(v.severity))">{{ v.name }} ×{{ v.seen_count }} ({{ (v.units||[]).length }}单位)</a-tag>
-            <p style="margin:10px 0 4px"><b>共性泄露路径</b></p>
+            <p style="margin:4px 0"><b>{{ translate('ui.m_55409bb6d6ae') }}</b></p>
+            <a-tag v-for="(v,i) in sysKnownVulns" :key="i" :color="sevColor(String(v.severity))">{{ v.name }} ×{{ v.seen_count }} ({{ (v.units||[]).length }}{{ translate('ui.m_0ff3cb5fb171') }}</a-tag>
+            <p style="margin:10px 0 4px"><b>{{ translate('ui.m_f80d18e79ffb') }}</b></p>
             <a-tag v-for="(l,i) in sysCommonLeaks" :key="i" color="orange">{{ l.path }} ×{{ l.seen_count }}</a-tag>
           </div>
-          <a-empty v-else :image="false" description="暂无同系统历史情报(首次遇到该系统)" style="margin:0" />
+          <a-empty v-else :image="false" :description="translate('ui.m_766402cf7043')" style="margin:0" />
 
-          <a-divider orientation="left" style="margin:14px 0 10px">代码审计</a-divider>
+          <a-divider orientation="left" style="margin:14px 0 10px">{{ translate('ui.m_3dad33aa3b74') }}</a-divider>
           <div v-if="codeAudit"><pre class="report-content">{{ codeAudit.audit_report }}</pre></div>
-          <a-empty v-else :image="false" description="该系统未关联开源代码审计" style="margin:0" />
+          <a-empty v-else :image="false" :description="translate('ui.m_d048c8d78030')" style="margin:0" />
         </template>
       </a-spin>
     </a-drawer>
@@ -353,6 +353,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { onMounted, reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -370,12 +372,12 @@ const unitTabLoaded = ref(false)   // #11 单位视图 Tab 懒加载：首次切
 const stat = ref<IntelStat>({ asset_total: 0, asset_pentested: 0, system_total: 0, code_total: 0, code_audited: 0, report_total: 0, asset_with_vuln: 0, asset_with_leak: 0, asset_with_secret: 0 })
 
 const statusOptions = [
-  { label: '未渗透', value: 'none' }, { label: '待渗透', value: 'pending' },
-  { label: '进行中', value: 'doing' }, { label: '已渗透', value: 'done' }, { label: '已跳过', value: 'skip' }
+  { get label() { return translate('ui.m_ec1512e4b8dc') }, value: 'none' }, { get label() { return translate('ui.m_52dcb5fd61c8') }, value: 'pending' },
+  { get label() { return translate('ui.m_dc9591e56d50') }, value: 'doing' }, { get label() { return translate('ui.m_9f70256c2f4d') }, value: 'done' }, { get label() { return translate('ui.m_71e95b289aad') }, value: 'skip' }
 ]
-const statusLabelMap: Record<string, string> = { none: '未渗透', pending: '待渗透', doing: '进行中', done: '已渗透', skip: '已跳过' }
+const statusLabelMap: Record<string, string> = { get none() { return translate('ui.m_ec1512e4b8dc') }, get pending() { return translate('ui.m_52dcb5fd61c8') }, get doing() { return translate('ui.m_dc9591e56d50') }, get done() { return translate('ui.m_9f70256c2f4d') }, get skip() { return translate('ui.m_71e95b289aad') } }
 const statusColorMap: Record<string, string> = { none: 'default', pending: 'orange', doing: 'processing', done: 'green', skip: 'default' }
-const statusLabel = (s: string) => statusLabelMap[s] || s || '未渗透'
+const statusLabel = (s: string) => statusLabelMap[s] || s || translate('ui.m_ec1512e4b8dc')
 const statusColor = (s: string) => statusColorMap[s] || 'default'
 
 // 侦察徽标
@@ -392,14 +394,14 @@ function hasRecon(record: Record<string, unknown>): boolean {
 const sevColorMap: Record<string, string> = { critical: 'red', high: 'volcano', medium: 'orange', low: 'gold', info: 'blue', unknown: 'default', none: 'default' }
 const sevColor = (s: string) => sevColorMap[(s || '').toLowerCase()] || 'default'
 const vulnCols = [
-  { title: '漏洞', dataIndex: 'name', ellipsis: true },
-  { title: '等级', key: 'severity', width: 100 },
-  { title: '来源', dataIndex: 'source', width: 80 },
-  { title: '目标', dataIndex: 'target', ellipsis: true }
+  { get title() { return translate('ui.m_b0475a364bcb') }, dataIndex: 'name', ellipsis: true },
+  { get title() { return translate('ui.m_337717173807') }, key: 'severity', width: 100 },
+  { get title() { return translate('ui.m_a488e93d69cc') }, dataIndex: 'source', width: 80 },
+  { get title() { return translate('ui.m_57060c88a36b') }, dataIndex: 'target', ellipsis: true }
 ]
-const auditLabelMap: Record<string, string> = { none: '未审计', pending: '待审计', done: '已审计' }
+const auditLabelMap: Record<string, string> = { get none() { return translate('ui.m_108f47763695') }, get pending() { return translate('ui.m_f17e031d84f4') }, get done() { return translate('ui.m_3aa0781d6595') } }
 const auditColorMap: Record<string, string> = { none: 'default', pending: 'orange', done: 'green' }
-const auditLabel = (s: string) => auditLabelMap[s] || s || '未审计'
+const auditLabel = (s: string) => auditLabelMap[s] || s || translate('ui.m_108f47763695')
 const auditColor = (s: string) => auditColorMap[s] || 'default'
 
 const empty: ListResult<RowRecord> = { page: 1, size: 10, total: 0, items: [] }
@@ -417,23 +419,23 @@ const systemQuery = reactive<Record<string, string>>({ name: '', version: '' })
 const reportQuery = reactive<Record<string, string>>({ unit: '', asset_key: '' })
 
 const assetColumns = [
-  { title: '站点', key: 'site', dataIndex: 'site', ellipsis: true },
-  { title: '标题', dataIndex: 'title', ellipsis: true },
-  { title: '指纹', key: 'finger_names' },
-  { title: '侦察', key: 'recon', width: 230 },
-  { title: '单位', dataIndex: 'unit', ellipsis: true },
-  { title: '渗透状态', key: 'pentest_status' },
-  { title: '操作', key: 'action', width: 150 }
+  { get title() { return translate('ui.m_a59fe62777ff') }, key: 'site', dataIndex: 'site', ellipsis: true },
+  { get title() { return translate('ui.m_c3405f8c7d9d') }, dataIndex: 'title', ellipsis: true },
+  { get title() { return translate('ui.m_0d6a14a9ab25') }, key: 'finger_names' },
+  { get title() { return translate('ui.m_b7585d36c8fc') }, key: 'recon', width: 230 },
+  { get title() { return translate('ui.m_80b19d68b149') }, dataIndex: 'unit', ellipsis: true },
+  { get title() { return translate('ui.m_ec19a5e13344') }, key: 'pentest_status' },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 150 }
 ]
 const systemColumns = [
-  { title: '系统名', dataIndex: 'name', width: 160, ellipsis: true },
-  { title: '版本', dataIndex: 'version', width: 90 },
-  { title: '涉及单位', key: 'units', width: 160 },
-  { title: '实例', key: 'instance_keys', width: 60 },
-  { title: '同系统已知漏洞', key: 'known_vulns', width: 220 },
-  { title: '共性泄露', key: 'common_leaks', width: 200 },
-  { title: '打法', key: 'success_paths', width: 300 },
-  { title: '操作', key: 'action', width: 80 }
+  { get title() { return translate('ui.m_8c3b91d03f51') }, dataIndex: 'name', width: 160, ellipsis: true },
+  { get title() { return translate('ui.m_5f76b2bf82dd') }, dataIndex: 'version', width: 90 },
+  { get title() { return translate('ui.m_0a9efd2f4309') }, key: 'units', width: 160 },
+  { get title() { return translate('ui.m_cc43dc69ae08') }, key: 'instance_keys', width: 60 },
+  { get title() { return translate('ui.m_9b42cb291e51') }, key: 'known_vulns', width: 220 },
+  { get title() { return translate('ui.m_0de7cdcb77d4') }, key: 'common_leaks', width: 200 },
+  { get title() { return translate('ui.m_b4cba457aa21') }, key: 'success_paths', width: 300 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 80 }
 ]
 // 打法按 有用值(被借鉴后真打成)> 出现次数 降序,与后端 read_system_playbook 排序一致;限前 6 条防列溢出
 function sortedPaths(paths: unknown): Array<Record<string, any>> {
@@ -443,17 +445,17 @@ function sortedPaths(paths: unknown): Array<Record<string, any>> {
   ).slice(0, 6)
 }
 const codeColumns = [
-  { title: '仓库', key: 'repo_url', dataIndex: 'repo_url', ellipsis: true },
-  { title: '版本/commit', dataIndex: 'version', width: 160 },
-  { title: '审计状态', key: 'audit_status', width: 110 },
-  { title: '落地目录', dataIndex: 'local_path', ellipsis: true },
-  { title: '操作', key: 'action', width: 90 }
+  { get title() { return translate('ui.m_89b2ecbe1f09') }, key: 'repo_url', dataIndex: 'repo_url', ellipsis: true },
+  { get title() { return translate('ui.m_1ebda8b43508') }, dataIndex: 'version', width: 160 },
+  { get title() { return translate('ui.m_26d5f382b4b2') }, key: 'audit_status', width: 110 },
+  { get title() { return translate('ui.m_ef6e45755779') }, dataIndex: 'local_path', ellipsis: true },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 90 }
 ]
 const reportColumns = [
-  { title: '资产', dataIndex: 'asset_key', ellipsis: true },
-  { title: '单位', dataIndex: 'unit', ellipsis: true },
-  { title: '时间', dataIndex: 'save_date', width: 170 },
-  { title: '操作', key: 'action', width: 120 }
+  { get title() { return translate('ui.m_5f45bb826b16') }, dataIndex: 'asset_key', ellipsis: true },
+  { get title() { return translate('ui.m_80b19d68b149') }, dataIndex: 'unit', ellipsis: true },
+  { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date', width: 170 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 120 }
 ]
 
 async function loadStat() {
@@ -468,7 +470,7 @@ async function batchDeleteAsset() {
   if (!assetSelected.value.length) return
   try {
     await intelApi.remove('intel_asset', assetSelected.value)
-    message.success(`已删除 ${assetSelected.value.length} 条资产情报`)
+    message.success(translate('ui.m_1facce16efa9', { p0: (assetSelected.value.length) }))
     loadAsset(1); loadStat()
   } catch (e) { message.error((e as Error).message) }
 }
@@ -489,17 +491,17 @@ async function loadReport(page = 1, size = reportData.value.size) {
 }
 async function batchDeleteSystem() {
   if (!systemSelected.value.length) return
-  try { await intelApi.remove('intel_system', systemSelected.value); message.success(`已删除 ${systemSelected.value.length} 条`); loadSystem(1); loadStat() }
+  try { await intelApi.remove('intel_system', systemSelected.value); message.success(translate('ui.m_925464646d44', { p0: (systemSelected.value.length) })); loadSystem(1); loadStat() }
   catch (e) { message.error((e as Error).message) }
 }
 async function batchDeleteCode() {
   if (!codeSelected.value.length) return
-  try { await intelApi.remove('intel_code', codeSelected.value); message.success(`已删除 ${codeSelected.value.length} 条`); loadCode(1); loadStat() }
+  try { await intelApi.remove('intel_code', codeSelected.value); message.success(translate('ui.m_925464646d44', { p0: (codeSelected.value.length) })); loadCode(1); loadStat() }
   catch (e) { message.error((e as Error).message) }
 }
 async function batchDeleteReport() {
   if (!reportSelected.value.length) return
-  try { await intelApi.remove('intel_report', reportSelected.value); message.success(`已删除 ${reportSelected.value.length} 份`); loadReport(1); loadStat() }
+  try { await intelApi.remove('intel_report', reportSelected.value); message.success(translate('ui.m_15d28ba48370', { p0: (reportSelected.value.length) })); loadReport(1); loadStat() }
   catch (e) { message.error((e as Error).message) }
 }
 function cleanQuery(q: Record<string, string>) {
@@ -520,7 +522,7 @@ function onTabChange(key: string) {
 }
 
 async function removeRow(collection: IntelCollection, id: string, reload: (p?: number) => void) {
-  try { await intelApi.remove(collection, [id]); message.success('已删除'); reload(1); loadStat() }
+  try { await intelApi.remove(collection, [id]); message.success(translate('ui.m_077a6d37719a')); reload(1); loadStat() }
   catch (e) { message.error((e as Error).message) }
 }
 
@@ -528,11 +530,11 @@ async function removeRow(collection: IntelCollection, id: string, reload: (p?: n
 const collectOpen = ref(false)
 const collectTaskId = ref('')
 async function doCollect() {
-  if (!collectTaskId.value.trim()) return message.warning('请输入任务 ID')
+  if (!collectTaskId.value.trim()) return message.warning(translate('ui.m_ebec9110521f'))
   loading.value = true
   try {
     const ret = await intelApi.collect(collectTaskId.value.trim())
-    message.success(`归集完成:站点 ${ret.site_total},新增资产 ${ret.new_asset},系统 ${ret.system_cnt}`)
+    message.success(translate('ui.m_262c98b43f60', { p0: (ret.site_total), p1: (ret.new_asset), p2: (ret.system_cnt) }))
     collectOpen.value = false; collectTaskId.value = ''
     loadStat(); loadAsset(1)
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
@@ -542,11 +544,11 @@ async function doCollect() {
 const codeOpen = ref(false)
 const codeForm = reactive({ repo_url: '', version: '', system_id: '', local_path: '' })
 async function doAddCode() {
-  if (!codeForm.repo_url.trim()) return message.warning('请输入仓库地址')
+  if (!codeForm.repo_url.trim()) return message.warning(translate('ui.m_4c2bebd5b1c1'))
   loading.value = true
   try {
     await intelApi.addCode({ ...codeForm })
-    message.success('已登记')
+    message.success(translate('ui.m_5f2f3886f1b2'))
     codeOpen.value = false
     codeForm.repo_url = ''; codeForm.version = ''; codeForm.system_id = ''; codeForm.local_path = ''
     loadCode(1); loadStat()
@@ -561,7 +563,7 @@ const reportTab = ref('raw')
 interface ReportVuln { no: string; type: string; severity: string; target: string; impact?: string; poc?: string }
 const reportVulns = ref<ReportVuln[]>([])
 function copyText(t: string) {
-  navigator.clipboard?.writeText(t).then(() => message.success('已复制')).catch(() => message.error('复制失败'))
+  navigator.clipboard?.writeText(t).then(() => message.success(translate('ui.m_8f6f8d979c98'))).catch(() => message.error(translate('ui.m_753d8bb0da99')))
 }
 function showReport(record: RowRecord) {
   currentReport.value = record
@@ -582,11 +584,11 @@ function showReport(record: RowRecord) {
   reportOpen.value = true
 }
 function vulnToMd(v: ReportVuln) {
-  return `### #${v.no} ${v.type}\n- 等级: ${String(v.severity || '').toUpperCase()}\n- 目标: ${v.target}\n`
-    + (v.impact ? `- 危害: ${v.impact}\n` : '') + (v.poc ? `\n\`\`\`bash\n${v.poc}\n\`\`\`\n` : '')
+  return translate('ui.m_73aebb566b42', { p0: (v.no), p1: (v.type), p2: (String(v.severity || '').toUpperCase()), p3: (v.target) })
+    + (v.impact ? translate('ui.m_e2c9a6361a9d', { p0: (v.impact) }) : '') + (v.poc ? `\n\`\`\`bash\n${v.poc}\n\`\`\`\n` : '')
 }
 function copyAllVulns() {
-  if (!reportVulns.value.length) return message.warning('无结构化漏洞')
+  if (!reportVulns.value.length) return message.warning(translate('ui.m_f22224474a9b'))
   copyText(reportVulns.value.map(vulnToMd).join('\n'))
 }
 function exportReportMd() {
@@ -661,7 +663,7 @@ async function showReportById(id: string) {
   try {
     const doc = await intelApi.reportDetail(id)
     if (doc && doc._id) showReport(doc)
-    else message.error('报告不存在')
+    else message.error(translate('ui.m_a81da756dd01'))
   } catch (e) { message.error((e as Error).message) }
 }
 
@@ -670,12 +672,12 @@ const icpOpen = ref(false)
 const icpDomain = ref('')
 const icpResult = ref<{ unit: string; icp_no: string; source: string; updated: number } | null>(null)
 async function doResolveIcp() {
-  if (!icpDomain.value.trim()) return message.warning('请输入域名')
+  if (!icpDomain.value.trim()) return message.warning(translate('ui.m_b6e3c2e08699'))
   loading.value = true
   try {
     const r = await intelApi.resolveIcp(icpDomain.value.trim())
     icpResult.value = r
-    message.success(r.unit ? `备案单位:${r.unit},回填 ${r.updated} 个资产` : '未查到备案单位')
+    message.success(r.unit ? translate('ui.m_fc3095d46ae6', { p0: (r.unit), p1: (r.updated) }) : translate('ui.m_50db027e3a65'))
     if (r.unit) loadAsset(1)
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }

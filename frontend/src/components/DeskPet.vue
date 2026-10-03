@@ -11,10 +11,10 @@
     <transition name="bubble">
       <div v-if="chatOpen" class="dp-chat" @mousedown.stop @click.stop @dblclick.stop @contextmenu.stop.prevent>
         <input ref="chatInput" v-model="chatText" class="dp-chat-input" type="text"
-          :placeholder="sending ? '思考中…' : '和鲸鱼娘说点什么~'" :disabled="sending"
+          :placeholder="sending ? translate('ui.m_64088d8cd78a') : translate('ui.m_a52d329efbce')" :disabled="sending"
           @keyup.enter="sendChat" maxlength="500" />
-        <button class="dp-chat-send" :disabled="sending || !chatText.trim()" @click="sendChat">发送</button>
-        <button class="dp-chat-close" title="关闭" @click="closeChat">×</button>
+        <button class="dp-chat-send" :disabled="sending || !chatText.trim()" @click="sendChat">{{ translate('ui.m_edecf0ae6e51') }}</button>
+        <button class="dp-chat-close" :title="translate('ui.m_3fd47edce45b')" @click="closeChat">×</button>
       </div>
     </transition>
 
@@ -23,17 +23,17 @@
       <div v-if="menuOpen" class="dp-menu" :style="menuStyle"
         @mousedown.stop @click.stop @dblclick.stop @contextmenu.stop.prevent>
         <div class="dp-menu-item" @click="onMenuChat">
-          <span class="dp-menu-ico">💬</span>和 AI 对话
-          <span class="dp-menu-tag">{{ aiEnabled ? '双击也可' : '需先接入' }}</span>
+          <span class="dp-menu-ico">💬</span>{{ translate('ui.m_ff6a5729ab62') }}
+          <span class="dp-menu-tag">{{ aiEnabled ? translate('ui.m_04eb257b9e8e') : translate('ui.m_615d8f404306') }}</span>
         </div>
         <div class="dp-menu-item" @click="toggleAi">
-          <span class="dp-menu-ico">{{ aiEnabled ? '✓' : '○' }}</span>接入 AI
+          <span class="dp-menu-ico">{{ aiEnabled ? '✓' : '○' }}</span>{{ translate('ui.m_c1616d40c9d2') }}
         </div>
         <div class="dp-menu-item" @click="toggleCalm">
-          <span class="dp-menu-ico">{{ calm ? '✓' : '○' }}</span>安静模式<span class="dp-menu-tag">少走动</span>
+          <span class="dp-menu-ico">{{ calm ? '✓' : '○' }}</span>{{ translate('ui.m_5b31e21cdb56') }}<span class="dp-menu-tag">{{ translate('ui.m_8ca74ef8597b') }}</span>
         </div>
         <div class="dp-menu-sep"></div>
-        <div class="dp-menu-item" @click="onMenuHide"><span class="dp-menu-ico">🙈</span>隐藏桌宠</div>
+        <div class="dp-menu-item" @click="onMenuHide"><span class="dp-menu-ico">🙈</span>{{ translate('ui.m_fe24e149678a') }}</div>
       </div>
     </transition>
 
@@ -42,7 +42,7 @@
     <div class="dp-body" :class="'st-' + state">
       <img v-if="!svgFallback" class="dp-sprite" :src="spriteSrc" alt="DeepSeek 娘（女仆装）"
         draggable="false" @error="onSpriteError" />
-      <svg v-else viewBox="0 0 120 130" width="88" height="95" aria-label="DeepSeek 娘（女仆装）">
+      <svg v-else viewBox="0 0 120 130" width="88" height="95" :aria-label="translate('ui.m_f0d7a119504a')">
         <defs>
           <linearGradient id="dpDress" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stop-color="#4a72e8" /><stop offset="1" stop-color="#3355c4" />
@@ -102,10 +102,12 @@
     </div>
   </div>
   <!-- 被藏起来时的小唤回按钮 -->
-  <button v-else class="dp-recall" title="召回鲸鱼娘" @click="recall">🐳</button>
+  <button v-else class="dp-recall" :title="translate('ui.m_3fd2e95e5f02')" @click="recall">🐳</button>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { mascotChat, type MascotMsg } from '../api/mascot'
 

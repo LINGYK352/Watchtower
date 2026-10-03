@@ -1,22 +1,22 @@
 <template>
-  <PageContainer title="漏洞中心" kicker="Vulnerabilities"
-    description="统一查看漏洞与待验证线索。去重模式每个漏洞点展示一条；全部记录保留跨会话复测历史，验证状态独立标注。">
+  <PageContainer :title="translate('ui.m_756d8eeb32a5')" kicker="Vulnerabilities"
+    :description="translate('ui.m_daa256b9fb37')">
     <template #extra>
       <a-space>
         <a-switch v-model:checked="auto.enabled.value" checked-children="自动" un-checked-children="手动" size="small" />
-        <a-button @click="loadAll">刷新</a-button>
+        <a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button>
       </a-space>
     </template>
 
     <a-row :gutter="12" style="margin-bottom:16px">
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="AI 已验证漏洞" :value="stat.ai.verified" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="严重/高危" :value="(stat.ai.by_severity.critical || 0) + (stat.ai.by_severity.high || 0)" :value-style="{ color: '#a8071a' }" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_94cf4e239cf2')" :value="stat.ai.verified" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_7a668db4b7c8')" :value="(stat.ai.by_severity.critical || 0) + (stat.ai.by_severity.high || 0)" :value-style="{ color: '#a8071a' }" /></a-card></a-col>
       <a-col :span="6"><a-card :bordered="false"><a-statistic :value="stat.poc.total">
-        <template #title><span>系统扫描</span>
-          <a-tooltip title="PoC/Nuclei 为系统扫描来源，不区分单位；按单位筛选只作用于 AI 漏洞，此处始终为全量。">
+        <template #title><span>{{ translate('ui.m_e053a02071aa') }}</span>
+          <a-tooltip :title="translate('ui.m_68df28fde4b1')">
             <QuestionCircleOutlined style="margin-left:4px;color:#aaa" /></a-tooltip>
         </template></a-statistic></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="漏洞合计" :value="stat.combined_total" :value-style="{ color: '#1677ff' }" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_289346a2e212')" :value="stat.combined_total" :value-style="{ color: '#1677ff' }" /></a-card></a-col>
     </a-row>
 
     <div style="margin-bottom:12px">
@@ -24,27 +24,27 @@
     </div>
 
     <SearchBar :model="query" @search="reload" @reset="onReset">
-      <a-form-item label="搜索"><a-input v-model:value="query.keyword" allow-clear placeholder="漏洞名 / 目标" style="width:150px" /></a-form-item>
-      <a-form-item label="漏洞等级">
+      <a-form-item :label="translate('ui.m_44ce7ae909bb')"><a-input v-model:value="query.keyword" allow-clear :placeholder="translate('ui.m_0137c7675a0a')" style="width:150px" /></a-form-item>
+      <a-form-item :label="translate('ui.m_58c48802553a')">
         <a-select v-model:value="query.min_severity" style="width:130px" :options="minSevOptions" @change="reload" />
       </a-form-item>
-      <a-form-item label="显示">
+      <a-form-item :label="translate('ui.m_4e1449e7d5e5')">
         <a-select v-model:value="query.dedup" style="width:130px" :options="dedupOptions" @change="reload" />
       </a-form-item>
-      <a-form-item label="单位" v-if="query.source === '' || query.source === 'ai'">
-        <a-input v-model:value="query.unit" allow-clear placeholder="仅 AI 漏洞" style="width:150px" />
+      <a-form-item :label="translate('ui.m_80b19d68b149')" v-if="query.source === '' || query.source === 'ai'">
+        <a-input v-model:value="query.unit" allow-clear :placeholder="translate('ui.m_cc25ff071e10')" style="width:150px" />
       </a-form-item>
-      <a-form-item label="处理状态">
-        <a-select v-model:value="query.handle_status" allow-clear style="width:120px" :options="handleStatusOptions" placeholder="全部" />
+      <a-form-item :label="translate('ui.m_d5e74de3449e')">
+        <a-select v-model:value="query.handle_status" allow-clear style="width:120px" :options="handleStatusOptions" :placeholder="translate('ui.m_5c55a67935af')" />
       </a-form-item>
-      <a-form-item label="时间范围">
+      <a-form-item :label="translate('ui.m_07eb730af899')">
         <a-range-picker v-model:value="dateRange" value-format="YYYY-MM-DD" style="width:240px" @change="reload" />
       </a-form-item>
     </SearchBar>
 
     <div style="margin-bottom:8px">
-      <a-popconfirm :title="`确认删除选中的 ${selectedKeys.length} 条漏洞？`" :disabled="!selectedKeys.length" @confirm="batchDelete">
-        <a-button danger :disabled="!selectedKeys.length">批量删除{{ selectedKeys.length ? `(${selectedKeys.length})` : '' }}</a-button>
+      <a-popconfirm :title="translate('ui.m_8a1cb2428e96', { p0: (selectedKeys.length) })" :disabled="!selectedKeys.length" @confirm="batchDelete">
+        <a-button danger :disabled="!selectedKeys.length">{{ translate('ui.m_ddae7a0fc554') }}{{ selectedKeys.length ? `(${selectedKeys.length})` : '' }}</a-button>
       </a-popconfirm>
     </div>
 
@@ -59,17 +59,17 @@
           <div style="display:flex;align-items:center;gap:6px">
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ record.name }}</span>
             <a-tooltip v-if="record.suspect">
-              <template #title>该漏洞由「{{ record.mode_label || '快筛' }}模式」产出——此模式为快速筛查（不深入验证/不发或少发注入探针），产出多为待人工验证的疑似点，非已确证漏洞，请人工复核后再定性。</template>
-              <a-tag color="orange" style="flex-shrink:0">疑似</a-tag>
+              <template #title>{{ translate('ui.m_b9458c7f9fe9') }}{{ record.mode_label || translate('ui.m_d5fea62a17c5') }}{{ translate('ui.m_ad282cad6f59') }}</template>
+              <a-tag color="orange" style="flex-shrink:0">{{ translate('ui.m_f81286d3cf0a') }}</a-tag>
             </a-tooltip>
             <!-- 首次/重复发现（方案B）：抵右侧边栏。仅 AI 洞有 first_seen 语义 -->
             <a-tag v-if="record.source === 'ai'" :color="record.first_seen === true ? 'green' : record.first_seen === false ? 'gold' : 'default'"
-              style="margin-left:auto;flex-shrink:0">{{ record.first_seen === true ? '首次发现' : record.first_seen === false ? '重复发现' : '首次时间待核定' }}<template v-if="record.occurrence_count > 1"> · {{ record.occurrence_count }} 次</template></a-tag>
+              style="margin-left:auto;flex-shrink:0">{{ record.first_seen === true ? translate('ui.m_cfca89659bcb') : record.first_seen === false ? translate('ui.m_724fbde3a1b9') : translate('ui.m_436e50c97a21') }}<template v-if="record.occurrence_count > 1"> · {{ record.occurrence_count }} {{ translate('ui.m_172fb7e67b9b') }}</template></a-tag>
           </div>
         </template>
         <template v-else-if="column.key === 'verified'">
-          <a-tag v-if="record.source === 'ai'" :color="record.verified ? 'red' : 'orange'">{{ record.verified ? '已验证' : '线索' }}</a-tag>
-          <a-tag v-else color="cyan">命中</a-tag>
+          <a-tag v-if="record.source === 'ai'" :color="record.verified ? 'red' : 'orange'">{{ record.verified ? translate('ui.m_0a1b6f1b57f5') : translate('ui.m_bfc935ea3355') }}</a-tag>
+          <a-tag v-else color="cyan">{{ translate('ui.m_393df9bb13ea') }}</a-tag>
         </template>
         <template v-else-if="column.key === 'severity'">
           <a-tag :color="sevColor(record.severity)">{{ sevLabel(record.severity) }}</a-tag>
@@ -78,7 +78,7 @@
           </a-tooltip>
         </template>
         <template v-else-if="column.key === 'target'">
-          <a-tag v-if="record.asset_type === 'miniapp'" color="green" style="margin-right:4px">小程序</a-tag>
+          <a-tag v-if="record.asset_type === 'miniapp'" color="green" style="margin-right:4px">{{ translate('ui.m_68fba79b8508') }}</a-tag>
           <CopyText :text="String(record.target || '')" />
         </template>
         <template v-else-if="column.key === 'task_name'">
@@ -88,7 +88,7 @@
         <template v-else-if="column.key === 'unit'">
           <span v-if="record.unit">{{ record.unit }}</span>
           <!-- AI 来源:无单位=ICP 查不到备案(瞭望塔扫描来源本就无单位维度,只显 —) -->
-          <span v-else-if="record.source === 'ai'" class="muted">暂无备案</span>
+          <span v-else-if="record.source === 'ai'" class="muted">{{ translate('ui.m_6b7cdd34a561') }}</span>
           <span v-else class="muted">—</span>
         </template>
         <template v-else-if="column.key === 'handle_status'">
@@ -99,40 +99,40 @@
         </template>
         <template v-else-if="column.key === 'action'">
           <a-space size="small">
-            <a-button type="link" size="small" @click="showDetail(record)">详情</a-button>
+            <a-button type="link" size="small" @click="showDetail(record)">{{ translate('ui.m_979a332955c8') }}</a-button>
             <a-dropdown>
-              <a-button type="link" size="small">操作<DownOutlined /></a-button>
+              <a-button type="link" size="small">{{ translate('ui.m_ed31fbb483ee') }}<DownOutlined /></a-button>
               <template #overlay>
                 <a-menu @click="(info: any) => onAction(record, String(info.key))">
-                  <a-menu-item-group title="标记状态">
-                    <a-menu-item key="mark:submitted">标记</a-menu-item>
-                    <a-menu-item key="mark:false_positive">误报</a-menu-item>
-                    <a-menu-item key="mark:">重置</a-menu-item>
+                  <a-menu-item-group :title="translate('ui.m_f6cbf22628a5')">
+                    <a-menu-item key="mark:submitted">{{ translate('ui.m_269635727321') }}</a-menu-item>
+                    <a-menu-item key="mark:false_positive">{{ translate('ui.m_a456f5044e3b') }}</a-menu-item>
+                    <a-menu-item key="mark:">{{ translate('ui.m_cb5d682bac3d') }}</a-menu-item>
                   </a-menu-item-group>
-                  <a-menu-item-group v-if="record.source === 'ai'" title="降低危害等级(只降不升)">
-                    <a-menu-item key="downgrade:medium">降为 中危</a-menu-item>
-                    <a-menu-item key="downgrade:low">降为 低危</a-menu-item>
-                    <a-menu-item key="downgrade:info">降为 信息</a-menu-item>
+                  <a-menu-item-group v-if="record.source === 'ai'" :title="translate('ui.m_3a3a16e6f5c0')">
+                    <a-menu-item key="downgrade:medium">{{ translate('ui.m_140eb1dbbef2') }}</a-menu-item>
+                    <a-menu-item key="downgrade:low">{{ translate('ui.m_d8f356f57030') }}</a-menu-item>
+                    <a-menu-item key="downgrade:info">{{ translate('ui.m_60a6ab4881d3') }}</a-menu-item>
                   </a-menu-item-group>
                   <a-menu-divider />
-                  <a-menu-item-group title="生成报告">
+                  <a-menu-item-group :title="translate('ui.m_a62f22586ca0')">
                     <!-- 单条漏洞直接生成漏洞级报告（只依赖漏洞自身 _id，任意来源都可用） -->
                     <a-menu-item key="report:finding">
-                      生成漏洞报告
+                      {{ translate('ui.m_7db555f918fc') }}
                     </a-menu-item>
                     <!-- AI 来源才有来源会话，可生成/重生成该资产的会话级报告 -->
                     <a-menu-item key="report:session" :disabled="record.source !== 'ai' || !record.session_id">
-                      生成会话报告
+                      {{ translate('ui.m_39ccfb6e7fc9') }}
                     </a-menu-item>
                     <!-- 任意来源只要归属某任务，即可生成整任务级总结报告 -->
                     <a-menu-item key="report:task" :disabled="!record.task_id">
-                      生成任务报告
+                      {{ translate('ui.m_97f759e869a5') }}
                     </a-menu-item>
                   </a-menu-item-group>
                 </a-menu>
               </template>
             </a-dropdown>
-            <ConfirmAction v-if="record.source !== 'ai'" danger title="确认删除该记录？" @confirm="removeOne(record)">删除</ConfirmAction>
+            <ConfirmAction v-if="record.source !== 'ai'" danger :title="translate('ui.m_0e5aa0501737')" @confirm="removeOne(record)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
           </a-space>
         </template>
       </template>
@@ -142,32 +142,32 @@
       <a-spin :spinning="detailLoading">
         <!-- AI 渗透漏洞详情 -->
         <a-descriptions v-if="cur.source === 'ai'" :column="1" size="small" bordered>
-          <a-descriptions-item label="漏洞类型">{{ cur.vuln_type }}</a-descriptions-item>
-          <a-descriptions-item label="目标">{{ cur.target }}</a-descriptions-item>
-          <a-descriptions-item label="验证状态"><a-tag :color="cur.verified ? 'red' : 'orange'">{{ cur.verified ? '已验证(有证据)' : '线索(未实证)' }}</a-tag> <span class="muted">{{ evidenceLabel(cur) }}</span></a-descriptions-item>
-          <a-descriptions-item v-if="cur.pentest_mode" label="产出模式">
-            <a-tag color="blue">AI 渗透·{{ modeLabelCn(String(cur.pentest_mode)) }}</a-tag>
-            <a-tag v-if="isSuspectMode(String(cur.pentest_mode))" color="orange">疑似</a-tag>
-            <span v-if="isSuspectMode(String(cur.pentest_mode))" class="muted">快筛模式产出，未深入验证，请人工复核后定性</span>
+          <a-descriptions-item :label="translate('ui.m_5600494fad70')">{{ cur.vuln_type }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_57060c88a36b')">{{ cur.target }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_6a2176d9e5d9')"><a-tag :color="cur.verified ? 'red' : 'orange'">{{ cur.verified ? translate('ui.m_547c2da343ea') : translate('ui.m_fad75c57a8c3') }}</a-tag> <span class="muted">{{ evidenceLabel(cur) }}</span></a-descriptions-item>
+          <a-descriptions-item v-if="cur.pentest_mode" :label="translate('ui.m_6a98a90067ce')">
+            <a-tag color="blue">{{ translate('ui.m_859d3c618593') }}{{ modeLabelCn(String(cur.pentest_mode)) }}</a-tag>
+            <a-tag v-if="isSuspectMode(String(cur.pentest_mode))" color="orange">{{ translate('ui.m_f81286d3cf0a') }}</a-tag>
+            <span v-if="isSuspectMode(String(cur.pentest_mode))" class="muted">{{ translate('ui.m_2b4cde2e1e17') }}</span>
           </a-descriptions-item>
           <a-descriptions-item label="CVSS">{{ cur.cvss_vector || '—' }} <b v-if="cur.cvss_score != null">({{ cvssLabel(cur) }})</b></a-descriptions-item>
-          <a-descriptions-item label="风险评级">{{ String(cur.severity || 'unknown').toUpperCase() }}<span v-if="!cur.verified" class="muted"> · 待验证，不代表已确认漏洞</span></a-descriptions-item>
-          <a-descriptions-item v-if="curCalibrated" label="定级依据">
-            <a-tag color="orange">原始 {{ String(cur.cvss_severity).toUpperCase() }} → 校准 {{ String(cur.severity).toUpperCase() }}</a-tag>
-            <span class="muted">{{ cur.severity_basis || '信息型泄露务实校准(只降不升)' }}</span>
+          <a-descriptions-item :label="translate('ui.m_f8b6f7daacce')">{{ String(cur.severity || 'unknown').toUpperCase() }}<span v-if="!cur.verified" class="muted"> {{ translate('ui.m_6dc3d59bba2d') }}</span></a-descriptions-item>
+          <a-descriptions-item v-if="curCalibrated" :label="translate('ui.m_5f2cf12a79d0')">
+            <a-tag color="orange">{{ translate('ui.m_8cb7c0a54b21') }} {{ String(cur.cvss_severity).toUpperCase() }} {{ translate('ui.m_fdbbb8e6e278') }} {{ String(cur.severity).toUpperCase() }}</a-tag>
+            <span class="muted">{{ cur.severity_basis || translate('ui.m_bb787f05a6c4') }}</span>
           </a-descriptions-item>
-          <a-descriptions-item v-if="cur.chain_severity" label="攻击链提级">
-            <a-tag color="red">单点 {{ String(cur.severity).toUpperCase() }} → 链危害 {{ String(cur.chain_severity).toUpperCase() }}</a-tag>
-            <span class="muted">作为攻击链「{{ cur.chain_title || '—' }}」的关键环节,实际危害按整链计</span>
+          <a-descriptions-item v-if="cur.chain_severity" :label="translate('ui.m_ec59c0e05c98')">
+            <a-tag color="red">{{ translate('ui.m_2251eaf725bf') }} {{ String(cur.severity).toUpperCase() }} {{ translate('ui.m_34ec9ce513a4') }} {{ String(cur.chain_severity).toUpperCase() }}</a-tag>
+            <span class="muted">{{ translate('ui.m_f94e613acb14') }}{{ cur.chain_title || '—' }}{{ translate('ui.m_5de66bff0748') }}</span>
           </a-descriptions-item>
-          <a-descriptions-item label="危害">{{ cur.impact || '—' }}</a-descriptions-item>
-          <a-descriptions-item v-if="cur.verify_method" label="验证方式">{{ cur.verify_method }}</a-descriptions-item>
-          <a-descriptions-item v-if="cur.key_response" label="关键响应"><pre class="ev">{{ cur.key_response }}</pre></a-descriptions-item>
-          <a-descriptions-item label="任务名">{{ cur.task_name || '—' }}</a-descriptions-item>
-          <a-descriptions-item label="单位">{{ cur.unit || '暂无备案' }}</a-descriptions-item>
-          <a-descriptions-item label="复现请求 / 命令"><div class="muted">{{ pocLabel(cur) }}</div><pre class="ev">{{ cur.poc || '尚未提供完整请求或命令' }}</pre></a-descriptions-item>
-          <a-descriptions-item v-if="cur.poc_notes" label="影响接口与补充说明"><pre class="ev">{{ cur.poc_notes }}</pre></a-descriptions-item>
-          <a-descriptions-item label="证据(工具实抓请求/响应)">
+          <a-descriptions-item :label="translate('ui.m_fead3fda0b19')">{{ cur.impact || '—' }}</a-descriptions-item>
+          <a-descriptions-item v-if="cur.verify_method" :label="translate('ui.m_52373e434217')">{{ cur.verify_method }}</a-descriptions-item>
+          <a-descriptions-item v-if="cur.key_response" :label="translate('ui.m_6e2d27b6c077')"><pre class="ev">{{ cur.key_response }}</pre></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_2c43cd7db149')">{{ cur.task_name || '—' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_80b19d68b149')">{{ cur.unit || translate('ui.m_6b7cdd34a561') }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_1ce452c175aa')"><div class="muted">{{ pocLabel(cur) }}</div><pre class="ev">{{ cur.poc || translate('ui.m_97707f6d8e2b') }}</pre></a-descriptions-item>
+          <a-descriptions-item v-if="cur.poc_notes" :label="translate('ui.m_a7756b6295c1')"><pre class="ev">{{ cur.poc_notes }}</pre></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_804cdc8de9e1')">
             <template v-if="evToPackets(cur).length">
               <div v-for="(p, i) in evToPackets(cur)" :key="i" class="ev-packet">
                 <div class="ev-pkt-head">
@@ -176,11 +176,11 @@
                 </div>
                 <a-row :gutter="8">
                   <a-col :span="12">
-                    <div class="ev-label">请求包 Request</div>
+                    <div class="ev-label">{{ translate('ui.m_fd8725d9a3fb') }}</div>
                     <pre class="ev burp-req">{{ p.reqText }}</pre>
                   </a-col>
                   <a-col :span="12">
-                    <div class="ev-label">响应包 Response</div>
+                    <div class="ev-label">{{ translate('ui.m_a2f7c726b2c9') }}</div>
                     <pre class="ev burp-resp">{{ p.respText }}</pre>
                   </a-col>
                 </a-row>
@@ -191,44 +191,44 @@
         </a-descriptions>
         <!-- nuclei 扫描详情 -->
         <a-descriptions v-else-if="cur.source === 'nuclei'" :column="1" size="small" bordered>
-          <a-descriptions-item label="模版ID">{{ cur.template_id }}</a-descriptions-item>
-          <a-descriptions-item label="漏洞名">{{ cur.vuln_name }}</a-descriptions-item>
-          <a-descriptions-item label="等级"><a-tag :color="sevColor(String(cur.vuln_severity || ''))">{{ String(cur.vuln_severity || '-').toUpperCase() }}</a-tag></a-descriptions-item>
-          <a-descriptions-item label="漏洞URL"><CopyText :text="String(cur.vuln_url || '')" /></a-descriptions-item>
-          <a-descriptions-item label="目标">{{ cur.target }}</a-descriptions-item>
-          <a-descriptions-item label="curl 命令"><pre class="ev">{{ cur.curl_command || '—' }}</pre></a-descriptions-item>
-          <a-descriptions-item label="任务ID">{{ cur.task_id }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_2cbd51b8f743')">{{ cur.template_id }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_cb1049ef7a06')">{{ cur.vuln_name }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_337717173807')"><a-tag :color="sevColor(String(cur.vuln_severity || ''))">{{ String(cur.vuln_severity || '-').toUpperCase() }}</a-tag></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_53d4e9d01707')"><CopyText :text="String(cur.vuln_url || '')" /></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_57060c88a36b')">{{ cur.target }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_51bab09b2d4c')"><pre class="ev">{{ cur.curl_command || '—' }}</pre></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_aa2353039024')">{{ cur.task_id }}</a-descriptions-item>
         </a-descriptions>
         <!-- 系统 PoC 命中详情 -->
         <a-descriptions v-else :column="1" size="small" bordered>
-          <a-descriptions-item label="插件ID">{{ cur.plg_name }}</a-descriptions-item>
-          <a-descriptions-item label="类别">{{ cur.plg_type }}</a-descriptions-item>
-          <a-descriptions-item label="漏洞名">{{ cur.vul_name }}</a-descriptions-item>
-          <a-descriptions-item label="应用">{{ cur.app_name || '—' }}</a-descriptions-item>
-          <a-descriptions-item label="目标"><CopyText :text="String(cur.target || '')" /></a-descriptions-item>
-          <a-descriptions-item label="任务ID">{{ cur.task_id }}</a-descriptions-item>
-          <a-descriptions-item label="原始数据"><pre class="ev">{{ rawJson(cur) }}</pre></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_0d20b71f0684')">{{ cur.plg_name }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_0d12cbd6562b')">{{ cur.plg_type }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_cb1049ef7a06')">{{ cur.vul_name }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_63c73c4730f4')">{{ cur.app_name || '—' }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_57060c88a36b')"><CopyText :text="String(cur.target || '')" /></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_aa2353039024')">{{ cur.task_id }}</a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_17da5eb22d21')"><pre class="ev">{{ rawJson(cur) }}</pre></a-descriptions-item>
         </a-descriptions>
       </a-spin>
       <div style="margin-top:12px" v-if="cur.source === 'ai' && cur.session_id">
-        <a-button type="link" @click="goSession(String(cur.session_id))">查看来源渗透会话 →</a-button>
+        <a-button type="link" @click="goSession(String(cur.session_id))">{{ translate('ui.m_05dcf3142e02') }}</a-button>
       </div>
       <!-- 证据截图：按 finding 绑定，生成报告时自动嵌入证据/复现区 -->
       <a-divider style="margin:14px 0 10px" />
       <div>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <b>证据截图</b>
-          <span class="muted" style="font-size:12px">上传后，用模板生成本漏洞报告时会自动嵌入证据/复现区。</span>
+          <b>{{ translate('ui.m_c03d356dc0c9') }}</b>
+          <span class="muted" style="font-size:12px">{{ translate('ui.m_441b2d188a3f') }}</span>
           <a-upload :show-upload-list="false" :before-upload="beforeShotUpload" accept="image/*" style="margin-left:auto">
-            <a-button size="small" type="primary" :loading="shotUploading">上传截图</a-button>
+            <a-button size="small" type="primary" :loading="shotUploading">{{ translate('ui.m_3495f2cca5ab') }}</a-button>
           </a-upload>
         </div>
-        <a-empty v-if="!shots.length" description="暂无证据截图" />
+        <a-empty v-if="!shots.length" :description="translate('ui.m_ecdb192f8eb4')" />
         <div v-else style="display:flex;flex-wrap:wrap;gap:10px">
           <div v-for="s in shots" :key="s.name" class="shot-thumb">
             <a :href="s.url" target="_blank"><img :src="s.url" /></a>
-            <a-popconfirm title="删除这张截图？" ok-text="删除" cancel-text="取消" @confirm="delShot(s.name)">
-              <a-button danger size="small" type="link" class="shot-del">删除</a-button>
+            <a-popconfirm :title="translate('ui.m_a79ed3733c73')" :ok-text="translate('ui.m_2f9daa828907')" :cancel-text="translate('ui.m_2cd0f3be8738')" @confirm="delShot(s.name)">
+              <a-button danger size="small" type="link" class="shot-del">{{ translate('ui.m_2f9daa828907') }}</a-button>
             </a-popconfirm>
           </div>
         </div>
@@ -236,20 +236,22 @@
     </a-drawer>
 
     <!-- 报告生成：选模板（item5，会话/任务/漏洞级各按 scope 过滤） -->
-    <a-modal v-model:open="repOpen" :title="`用模板生成${repType === 'task' ? '任务级' : repType === 'finding' ? '漏洞级' : '会话级'}报告`"
-      :confirm-loading="reportGenerating" ok-text="生成报告" @ok="submitGenReport">
-      <a-form-item label="报告模板">
+    <a-modal v-model:open="repOpen" :title="translate('ui.m_be0402e8d9cd', { p0: (repType === 'task' ? '任务级' : repType === 'finding' ? '漏洞级' : '会话级') })"
+      :confirm-loading="reportGenerating" :ok-text="translate('ui.m_a62f22586ca0')" @ok="submitGenReport">
+      <a-form-item :label="translate('ui.m_c745b048ca51')">
         <a-select v-model:value="repTplId" :options="repTplOptions" :loading="repTplLoading"
-          placeholder="选择就绪模板" style="width:100%" />
-        <div style="margin-top:6px;color:#888;font-size:12px">生成后可在「报告编辑」页查看/导出 docx。</div>
+          :placeholder="translate('ui.m_ff93f9c4be69')" style="width:100%" />
+        <div style="margin-top:6px;color:#888;font-size:12px">{{ translate('ui.m_1a76c1a30677') }}</div>
       </a-form-item>
       <a-alert v-if="!repTplLoading && !repTplOptions.length" type="warning" show-icon
-        message="暂无就绪模板，请先在「报告编辑 · 模板学习」上传或使用内置模板。" />
+        :message="translate('ui.m_5e8fc6fb7515')" />
     </a-modal>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { cvssLabel, evidenceLabel, pocLabel } from '../../utils/findingDisplay'
 import { onMounted, reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -285,52 +287,52 @@ const query = reactive({
 const dateRange = ref<[string, string] | undefined>(undefined)   // 时间范围筛选 [from,to]
 
 const sourceOptions = [
-  { label: '全部来源', value: '' },
-  { label: 'AI 渗透', value: 'ai' },
-  { label: '系统 PoC', value: 'poc' },
+  { get label() { return translate('ui.m_9f357adb6100') }, value: '' },
+  { get label() { return translate('ui.m_fd02482a8251') }, value: 'ai' },
+  { get label() { return translate('ui.m_9c3cdde19ad9') }, value: 'poc' },
   { label: 'Nuclei', value: 'nuclei' }
 ]
 // 显示模式:漏洞去重(默认,同资产+同接口+同类型只留最新一条,隐藏重复) / 全部漏洞(含所有重复条目)
 const dedupOptions = [
-  { label: '漏洞去重', value: '1' },
-  { label: '全部漏洞', value: '0' }
+  { get label() { return translate('ui.m_32d2ca748e66') }, value: '1' },
+  { get label() { return translate('ui.m_9c5bb9f6b6a4') }, value: '0' }
 ]
 // 漏洞等级阈值:默认 LOW(隐藏 info);选"全部(含info)"= info 阈值不过滤
 const minSevOptions = [
-  { label: '全部(含 INFO)', value: 'info' },
-  { label: 'LOW 及以上', value: 'low' },
-  { label: 'MEDIUM 及以上', value: 'medium' },
-  { label: 'HIGH 及以上', value: 'high' },
-  { label: '仅 CRITICAL', value: 'critical' }
+  { get label() { return translate('ui.m_f07b1660fe1e') }, value: 'info' },
+  { get label() { return translate('ui.m_9fcd5a4b1d71') }, value: 'low' },
+  { get label() { return translate('ui.m_192f7943a931') }, value: 'medium' },
+  { get label() { return translate('ui.m_15e0a5dad5e9') }, value: 'high' },
+  { get label() { return translate('ui.m_ea483775f12e') }, value: 'critical' }
 ]
 const handleStatusOptions = [
-  { label: '未处理', value: 'unhandled' },
-  { label: '已提交', value: 'submitted' },
-  { label: '误报', value: 'false_positive' }
+  { get label() { return translate('ui.m_83fbf42f9e87') }, value: 'unhandled' },
+  { get label() { return translate('ui.m_bc37a6110a07') }, value: 'submitted' },
+  { get label() { return translate('ui.m_a456f5044e3b') }, value: 'false_positive' }
 ]
 const HANDLE_META: Record<string, { label: string; color: string }> = {
-  '': { label: '未处理', color: 'default' },
-  submitted: { label: '已提交', color: 'green' },
-  false_positive: { label: '误报', color: 'orange' }
+  '': { get label() { return translate('ui.m_83fbf42f9e87') }, color: 'default' },
+  submitted: { get label() { return translate('ui.m_bc37a6110a07') }, color: 'green' },
+  false_positive: { get label() { return translate('ui.m_a456f5044e3b') }, color: 'orange' }
 }
 function handleMeta(s?: string) { return HANDLE_META[s || ''] || HANDLE_META[''] }
 
 const columns = [
-  { title: '来源', key: 'source', width: 90 },
-  { title: '状态', key: 'verified', width: 90 },
-  { title: '漏洞名', key: 'name', ellipsis: true },
-  { title: '目标', key: 'target', ellipsis: true },
-  { title: '等级/CVSS', key: 'severity', width: 140 },
-  { title: '任务名', key: 'task_name', width: 150, ellipsis: true },
-  { title: '单位', key: 'unit', width: 140, ellipsis: true },
-  { title: '处理', key: 'handle_status', width: 110 },
-  { title: '时间', dataIndex: 'save_date', width: 160 },
-  { title: '操作', key: 'action', width: 150 }
+  { get title() { return translate('ui.m_a488e93d69cc') }, key: 'source', width: 90 },
+  { get title() { return translate('ui.m_6320b4a8722a') }, key: 'verified', width: 90 },
+  { get title() { return translate('ui.m_cb1049ef7a06') }, key: 'name', ellipsis: true },
+  { get title() { return translate('ui.m_57060c88a36b') }, key: 'target', ellipsis: true },
+  { get title() { return translate('ui.m_e54ebcd7ee6d') }, key: 'severity', width: 140 },
+  { get title() { return translate('ui.m_2c43cd7db149') }, key: 'task_name', width: 150, ellipsis: true },
+  { get title() { return translate('ui.m_80b19d68b149') }, key: 'unit', width: 140, ellipsis: true },
+  { get title() { return translate('ui.m_e99a6717b691') }, key: 'handle_status', width: 110 },
+  { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date', width: 160 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 150 }
 ]
 
 const SRC_META: Record<string, { label: string; color: string }> = {
-  ai: { label: 'AI 渗透', color: 'red' },
-  poc: { label: '系统 PoC', color: 'blue' },
+  ai: { get label() { return translate('ui.m_fd02482a8251') }, color: 'red' },
+  poc: { get label() { return translate('ui.m_9c3cdde19ad9') }, color: 'blue' },
   nuclei: { label: 'Nuclei', color: 'green' }
 }
 function srcMeta(s: string) { return SRC_META[s] || { label: s, color: 'default' } }
@@ -361,9 +363,9 @@ function isCalibrated(r: UnifiedFinding) {
 }
 function cvssNote(r: UnifiedFinding) {
   if (isCalibrated(r)) {
-    return `CVSS 基础分 ${r.cvss_score}(原始等级 ${String(r.cvss_severity).toUpperCase()}），因信息型泄露务实校准为 ${String(r.severity).toUpperCase()}。${r.severity_basis ? '依据:' + r.severity_basis : ''}`
+    return translate('ui.m_674078cbd5dd', { p0: (r.cvss_score), p1: (String(r.cvss_severity).toUpperCase()), p2: (String(r.severity).toUpperCase()), p3: (r.severity_basis ? '依据:' + r.severity_basis : '') })
   }
-  return `CVSS 基础分 ${r.cvss_score}`
+  return translate('ui.m_8360a471025b', { p0: (r.cvss_score) })
 }
 
 async function loadStat() {
@@ -387,7 +389,7 @@ async function loadList() {
     })
     rows.value = res.items; total.value = res.total
     selectedKeys.value = []
-  } catch (e) { message.error((e as Error).message || '加载失败') } finally { loading.value = false }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_d1d044826a45')) } finally { loading.value = false }
 }
 async function batchDelete() {
   if (!selectedKeys.value.length) return
@@ -404,9 +406,9 @@ async function batchDelete() {
       const res = await pentestApi.unifiedDelete(src, ids)
       n += res.deleted || 0
     }
-    message.success(`已删除 ${n} 条`)
+    message.success(translate('ui.m_925464646d44', { p0: (n) }))
     loadAll()
-  } catch (e) { message.error((e as Error).message || '删除失败') }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_c228558cf257')) }
 }
 function loadAll() { loadStat(); loadList() }
 function reload() { query.page = 1; loadAll() }
@@ -417,7 +419,7 @@ function onPage(page: number, size: number) { query.page = page; query.size = si
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const cur = reactive<Record<string, unknown>>({})
-const detailTitle = computed(() => `漏洞详情 · ${srcMeta(String(cur.source || '')).label}`)
+const detailTitle = computed(() => translate('ui.m_6f626d5c7ffb', { p0: (srcMeta(String(cur.source || '')).label) }))
 // 详情里是否发生了 triage 校准(原始 CVSS 等级 ≠ 展示等级)
 const curCalibrated = computed(() =>
   cur.source === 'ai' && !!cur.cvss_severity &&
@@ -435,7 +437,7 @@ async function showDetail(r: UnifiedFinding) {
     Object.assign(cur, doc)
     // task_name 是列表层反查回填的(原始文档无此字段),详情接口拉不到 → 用列表行的值补上
     if (!cur.task_name && r.task_name) cur.task_name = r.task_name
-  } catch (e) { message.error((e as Error).message || '详情加载失败') } finally { detailLoading.value = false }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_19a7ca44a09a')) } finally { detailLoading.value = false }
 }
 
 /* 漏洞证据截图（按 finding_id 全局绑定）：上传后用模板生成本漏洞报告时自动嵌入证据/复现区。 */
@@ -452,8 +454,8 @@ function beforeShotUpload(file: File) {
   if (!fid) return false
   shotUploading.value = true
   findingShotApi.upload(fid, file)
-    .then(() => { message.success('截图已上传'); return loadShots(fid) })
-    .catch((e: Error) => message.error(e.message || '上传失败'))
+    .then(() => { message.success(translate('ui.m_908dbd0eb037')); return loadShots(fid) })
+    .catch((e: Error) => message.error(e.message || translate('ui.m_219481a6dde7')))
     .finally(() => { shotUploading.value = false })
   return false   // 阻止 a-upload 默认上传，走自定义
 }
@@ -461,7 +463,7 @@ async function delShot(name: string) {
   try {
     await findingShotApi.remove(curFindingId.value, name)
     await loadShots(curFindingId.value)
-  } catch (e) { message.error((e as Error).message || '删除失败') }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_c228558cf257')) }
 }
 interface EvItem { tool: string; arguments: Record<string, unknown> | string; result: unknown; signal?: string }
 interface EvPacket { tool: string; signal?: string; reqText: string; respText: string }
@@ -499,7 +501,7 @@ function evToPackets(f: Record<string, unknown>): EvPacket[] {
 }
 function aiEvidenceText(f: Record<string, unknown>) {
   const ev = f.evidence as Array<{ tool: string; arguments: unknown; result: unknown }> | undefined
-  if (!ev || !ev.length) return f.verified ? '(已验证但证据为空)' : '(无实证证据,故降级为线索)'
+  if (!ev || !ev.length) return f.verified ? translate('ui.m_8adb320d6008') : translate('ui.m_46722c1a0692')
   return ev.map(e => `# ${e.tool} ${JSON.stringify(e.arguments)}\n${typeof e.result === 'string' ? e.result : JSON.stringify(e.result)}`).join('\n\n---\n\n')
 }
 function rawJson(f: Record<string, unknown>) {
@@ -513,17 +515,17 @@ function goSession(id: string) { if (id) router.push(`/pentest/${id}`) }
 async function doMark(r: UnifiedFinding, handleStatus: string) {
   try {
     await pentestApi.unifiedMark(r.source, [r._id], handleStatus)
-    message.success(handleStatus === 'false_positive' ? '已标记误报(默认列表将隐藏)' : handleStatus === 'submitted' ? '已标记' : '已重置')
+    message.success(handleStatus === 'false_positive' ? translate('ui.m_42750a3cb17b') : handleStatus === 'submitted' ? translate('ui.m_4330486d0805') : translate('ui.m_d2cd2e209c5f'))
     loadAll()   // 刷新列表+统计卡(标误报后该行从默认列表消失)
-  } catch (e) { message.error((e as Error).message || '标记失败') }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_9944cf73eb63')) }
 }
 function markOne(r: UnifiedFinding, handleStatus: string) {
   // 重置需二次确认(清除已标记/误报状态,防误点)
   if (handleStatus === '') {
     Modal.confirm({
-      title: '确认重置该记录？',
-      content: '将清除当前处理标记，恢复为未处理状态。',
-      okText: '确定', cancelText: '取消',
+      get title() { return translate('ui.m_104f5c9986ce') },
+      get content() { return translate('ui.m_e1c3b6fea19c') },
+      get okText() { return translate('ui.m_fac2a67ad878') }, get cancelText() { return translate('ui.m_2cd0f3be8738') },
       onOk: () => doMark(r, '')
     })
     return
@@ -544,16 +546,16 @@ function onAction(r: UnifiedFinding, key: string) {
 const sevCn: Record<string, string> = { critical: '严重', high: '高危', medium: '中危', low: '低危', info: '信息' }
 function doDowngrade(r: UnifiedFinding, target: string) {
   Modal.confirm({
-    title: `确认将该漏洞降为「${sevCn[target] || target}」？`,
-    content: `当前等级 ${sevCn[String(r.severity)] || r.severity}。只能降级不能升级；降级后记审计。`,
-    okText: '确认降级', cancelText: '取消',
+    title: translate('ui.m_4b6a1638309e', { p0: (sevCn[target] || target) }),
+    content: translate('ui.m_4cc1bc4f3a9d', { p0: (sevCn[String(r.severity)] || r.severity) }),
+    get okText() { return translate('ui.m_5c3b1e61e415') }, get cancelText() { return translate('ui.m_2cd0f3be8738') },
     onOk: async () => {
       try {
         const res = await pentestApi.unifiedDowngrade(r.source, [r._id], target)
-        if (res.updated) message.success(`已降为「${sevCn[target] || target}」`)
-        else message.warning('未降级（目标等级不低于当前等级）')
+        if (res.updated) message.success(translate('ui.m_f70ad7983b05', { p0: (sevCn[target] || target) }))
+        else message.warning(translate('ui.m_4ad9069ab343'))
         loadAll()
-      } catch (e) { message.error((e as Error).message || '降级失败') }
+      } catch (e) { message.error((e as Error).message || translate('ui.m_4678ffefb554')) }
     }
   })
 }
@@ -572,10 +574,10 @@ const repTplOptions = ref<SelectOption[]>([])
 // 会话报告选 scope=session 模板、任务报告选 scope=task 模板（list scope 过滤含无 scope 的学习模板）。
 async function genReport(r: UnifiedFinding, type: 'session' | 'task' | 'finding') {
   if (type === 'session' && (r.source !== 'ai' || !r.session_id)) {
-    return message.warning('仅 AI 渗透来源的漏洞可生成会话报告')
+    return message.warning(translate('ui.m_cfdca3a4095d'))
   }
   if (type === 'task' && !r.task_id) {
-    return message.warning('该记录未归属任务，无法生成任务报告')
+    return message.warning(translate('ui.m_6d892f57a8de'))
   }
   repType.value = type
   repSourceId.value = type === 'session' ? String(r.session_id)
@@ -590,14 +592,14 @@ async function genReport(r: UnifiedFinding, type: 'session' | 'task' | 'finding'
     const builtinId = type === 'task' ? 'builtin_task_v1' : type === 'finding' ? 'ncc_event_finding_v1' : 'builtin_session_v1'
     const builtin = ready.find((t: RowRecord) => t._id === builtinId)
     repTplId.value = builtin ? String(builtin._id) : (repTplOptions.value[0]?.value as string || '')
-  } catch (e) { message.error((e as Error).message || '加载模板失败') }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_ebf73320fa75')) }
   finally { repTplLoading.value = false }
 }
 
 async function submitGenReport() {
-  if (!repTplId.value) return message.warning('请选择报告模板')
+  if (!repTplId.value) return message.warning(translate('ui.m_3703d6ea60bf'))
   reportGenerating.value = true
-  const hide = message.loading('正在用模板生成报告…', 0)
+  const hide = message.loading(translate('ui.m_f249799849b9'), 0)
   try {
     const payload = repType.value === 'session'
       ? { template_id: repTplId.value, type: 'session' as const, session_id: repSourceId.value }
@@ -609,12 +611,12 @@ async function submitGenReport() {
     if ((res as { ok?: boolean }).ok) {
       repOpen.value = false
       Modal.success({
-        title: res.generation_warnings?.length ? '报告已生成，部分材料待补齐' : '报告已生成',
-        content: res.generation_warnings?.length ? res.generation_warnings.join('；') : `已用模板生成报告（${res.vuln_total ?? 0} 个漏洞）。可到「报告编辑」查看/导出。`,
-        okText: '去报告编辑', onOk: () => router.push('/report-edit')
+        title: res.generation_warnings?.length ? translate('ui.m_09264d910759') : translate('ui.m_515ecc202f78'),
+        content: res.generation_warnings?.length ? res.generation_warnings.join('；') : translate('ui.m_0f2b8d08bd2c', { p0: (res.vuln_total ?? 0) }),
+        get okText() { return translate('ui.m_33a1e21d248e') }, onOk: () => router.push('/report-edit')
       })
-    } else { message.error('生成失败') }
-  } catch (e) { hide(); message.error((e as Error).message || '生成报告失败') }
+    } else { message.error(translate('ui.m_470f92db3d64')) }
+  } catch (e) { hide(); message.error((e as Error).message || translate('ui.m_c069c3f5045d')) }
   finally { reportGenerating.value = false }
 }
 
@@ -624,8 +626,8 @@ async function removeOne(r: UnifiedFinding) {
     if (r.source === 'poc') await vulnApi.delete([r._id])
     else if (r.source === 'nuclei') await nucleiResultApi.delete([r._id])
     else return
-    message.success('已删除'); loadAll()
-  } catch (e) { message.error((e as Error).message || '删除失败') }
+    message.success(translate('ui.m_077a6d37719a')); loadAll()
+  } catch (e) { message.error((e as Error).message || translate('ui.m_c228558cf257')) }
 }
 const auto = useAutoRefresh(loadAll, 30000)
 onMounted(loadAll)

@@ -1,3 +1,4 @@
+import { t as translate } from '../i18n'
 import { request, getToken } from './request'
 
 export interface MiniAppResult {
@@ -55,7 +56,7 @@ export const miniappApi = {
     const resp = await fetch('/api/miniapp/unpack', { method: 'POST', body: fd, headers, cache: 'no-store' })
     const data = await resp.json().catch(() => ({}))
     if (!resp.ok || (data && data.code && data.code !== 200)) {
-      throw new Error((data && data.message) || `解包失败：${resp.status}`)
+      throw new Error((data && data.message) || translate('ui.m_92be8cee0164', { p0: (resp.status) }))
     }
     return (data && data.data) as MiniAppResult
   },

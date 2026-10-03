@@ -1,10 +1,10 @@
 <template>
-  <PageContainer title="更新检测" kicker="Update" description="查看当前版本并检测是否有可用更新。">
+  <PageContainer :title="translate('ui.m_db216ba9c123')" kicker="Update" :description="translate('ui.m_117fd8da5685')">
     <a-card class="page-card">
       <div class="ver-hero">
         <div class="ver-badge"><CloudSyncOutlined /></div>
         <div>
-          <div class="ver-label">当前版本</div>
+          <div class="ver-label">{{ translate('ui.m_837bc9576721') }}</div>
           <div class="ver-num">{{ version }}</div>
         </div>
       </div>
@@ -13,18 +13,18 @@
 
       <a-space direction="vertical" size="middle" style="width:100%">
         <a-button type="primary" :loading="checking" @click="doCheck">
-          <template #icon><CloudSyncOutlined /></template>检查更新
+          <template #icon><CloudSyncOutlined /></template>{{ translate('ui.m_7f68ebad19ba') }}
         </a-button>
 
         <!-- 发现新版本 -->
         <div v-if="checked && hasUpdate && !updating && !updateDone && !updateError" class="update-found">
           <a-alert type="success" show-icon>
-            <template #message>发现新版本 <a-tag color="blue">{{ latest }}</a-tag></template>
+            <template #message>{{ translate('ui.m_ac217e4d1ca4') }} <a-tag color="blue">{{ latest }}</a-tag></template>
             <template #description>
-              <a-tag color="green" style="margin-bottom:12px">热更新 · 不影响现有业务</a-tag>
+              <a-tag color="green" style="margin-bottom:12px">{{ translate('ui.m_432bb30c280d') }}</a-tag>
               <div v-if="changelogs.length" class="changelog-box">
                 <div class="changelog-title">
-                  将直接升级到最新版 {{ latest }}<span v-if="changelogs.length > 1">（一次到位，涵盖以下 {{ changelogs.length }} 个版本的更新内容）</span>
+                  {{ translate('ui.m_00d640b1490e') }} {{ latest }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
                 </div>
                 <div class="changelog-item" v-for="item in changelogs" :key="item.ver">
                   <span class="changelog-ver">{{ item.ver }}</span>
@@ -34,7 +34,7 @@
             </template>
           </a-alert>
           <a-button type="primary" size="large" @click="startUpdate" style="margin-top:12px">
-            立即更新
+            {{ translate('ui.m_12487befb4ba') }}
           </a-button>
         </div>
 
@@ -46,59 +46,62 @@
 
         <!-- 更新完成（自动刷新） -->
         <a-alert v-if="updateDone" type="success" show-icon
-          message="更新完成" description="更新已成功应用，正在刷新页面..." />
+          :message="translate('ui.m_d5e461beff13')" :description="translate('ui.m_af52baea4d35')" />
 
         <!-- 更新失败 -->
         <a-alert v-if="updateError" type="error" show-icon
-          message="更新失败" :description="updateError" />
-        <a-button v-if="updateError" @click="resetUpdateState">重试</a-button>
+          :message="translate('ui.m_ec99e5c45d64')" :description="updateError" />
+        <a-button v-if="updateError" @click="resetUpdateState">{{ translate('ui.m_b8784c8dd563') }}</a-button>
 
         <!-- 已是最新 -->
         <a-alert v-if="checked && !hasUpdate && !networkError && !authError" type="success" show-icon
-          message="已是最新版本"
-          :description="serverMessage || ('当前 ' + version + ' 已是最新版本。')" />
+          :message="translate('ui.m_bc310480b4ce')"
+          :description="serverMessage || (translate('ui.m_cb62ebd689ee') + version + translate('ui.m_b4f9b5812821'))" />
 
         <!-- 网络不可达 -->
         <a-alert v-if="checked && networkError" type="error" show-icon
-          message="无法连接到更新服务器"
-          description="请检查设备是否能够连接到网络。" />
+          :message="translate('ui.m_3cbf99883cfd')"
+          :description="translate('ui.m_ad6d34674b16')" />
 
         <!-- 凭证无效 -->
         <a-alert v-if="checked && authError" type="warning" show-icon
-          message="授权凭证无效或已过期"
-          description="无法检测更新，请前往「激活设置」重新激活系统。" />
+          :message="translate('ui.m_dc1508425319')"
+          :description="translate('ui.m_56f1a94d9a35')" />
 
-        <a-alert type="info" show-icon message="更新机制说明"
-          description="支持一键热更新，更新过程不影响现有业务。新版本发布后可手动触发或等待系统每小时自动检测。" />
+        <a-alert type="info" show-icon :message="translate('ui.m_6dc946916d90')"
+          :description="translate('ui.m_b261f12d9e1b')" />
       </a-space>
     </a-card>
 
     <!-- 历史版本与回退（版本仓） -->
     <a-card class="page-card" style="margin-top:16px" v-if="canRollback">
       <template #title>
-        <span><HistoryOutlined /> 历史版本</span>
-        <a-button type="link" size="small" :loading="loadingVersions" @click="loadVersions">刷新</a-button>
+        <span><HistoryOutlined /> {{ translate('ui.m_6fd29579ab66') }}</span>
+        <a-button type="link" size="small" :loading="loadingVersions" @click="loadVersions">{{ translate('ui.m_aee887434131') }}</a-button>
       </template>
       <a-alert type="warning" show-icon style="margin-bottom:12px"
-        message="回退是高危操作"
-        description="回退会把全站运行代码对齐到所选版本（含删除新版新增文件），并重启 worker/scheduler。仅在新版本出现严重问题时使用。" />
+        :message="translate('ui.m_cc52738ba3c0')"
+        :description="translate('ui.m_49d414078aa2')" />
+      <a-checkbox v-model:checked="fullRollback" style="margin-bottom:12px" :disabled="updating">
+        {{ translate('ui.m_3ef7e543fc93') }}
+      </a-checkbox>
       <a-alert v-if="versionsHint" type="info" show-icon style="margin-bottom:12px" :message="versionsHint" />
       <a-table :columns="versionColumns" :data-source="versions" :loading="loadingVersions"
         row-key="version" size="middle" :pagination="{ pageSize: 10 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'version'">
             <a-tag :color="record.version === version ? 'green' : 'blue'">{{ record.version }}</a-tag>
-            <a-tag v-if="record.version === version" color="green">当前</a-tag>
+            <a-tag v-if="record.version === version" color="green">{{ translate('ui.m_cb62ebd689ee') }}</a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a-button type="link" size="small" @click="viewChanges(record.version)">改动</a-button>
+            <a-button type="link" size="small" @click="viewChanges(record.version)">{{ translate('ui.m_582a8e42e44e') }}</a-button>
             <!-- 仅对“严格低于当前版本”的历史版本显示回退：等于当前=显示“当前”标签，
                  高于当前=前滚/升级（应走上方“检查更新→立即更新”），不在回退入口出现，避免误导。 -->
             <a-popconfirm
               v-if="isOlderThanCurrent(record.version)"
-              :title="`确认回退到 ${record.version}？此操作影响全站运行代码。`"
-              ok-text="回退" cancel-text="取消" @confirm="doRollback(record.version)">
-              <a-button type="link" danger size="small">回退</a-button>
+              :title="translate('ui.m_885df13560e0', { p0: (record.version) })"
+              :ok-text="translate('ui.m_8771e3682df1')" :cancel-text="translate('ui.m_2cd0f3be8738')" @confirm="doRollback(record.version)">
+              <a-button type="link" danger size="small">{{ translate('ui.m_8771e3682df1') }}</a-button>
             </a-popconfirm>
           </template>
         </template>
@@ -106,26 +109,26 @@
     </a-card>
 
     <!-- 改动详情抽屉 -->
-    <a-drawer v-model:open="changesOpen" :title="`版本改动 · ${changesVersion}`" width="520">
+    <a-drawer v-model:open="changesOpen" :title="translate('ui.m_7b421c218686', { p0: (changesVersion) })" width="520">
       <a-spin :spinning="loadingChanges">
         <template v-if="changes">
           <a-descriptions size="small" :column="1" bordered style="margin-bottom:12px">
-            <a-descriptions-item label="发布时间">{{ changes.published_at || '-' }}</a-descriptions-item>
-            <a-descriptions-item label="较上版">{{ changes.from || '（首版）' }} → {{ changes.to }}</a-descriptions-item>
-            <a-descriptions-item label="变更总数">{{ changes.total }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_e8ff4d335dee')">{{ changes.published_at || '-' }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_c3066077e363')">{{ changes.from || translate('ui.m_f8605f479658') }} → {{ changes.to }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_a8bab354dba5')">{{ changes.total }}</a-descriptions-item>
           </a-descriptions>
           <a-collapse>
-            <a-collapse-panel key="added" :header="`新增 (${changes.added.length})`">
+            <a-collapse-panel key="added" :header="translate('ui.m_56c7b458ec2b', { p0: (changes.added.length) })">
               <div v-for="f in changes.added" :key="f" class="change-file added">+ {{ f }}</div>
-              <a-empty v-if="!changes.added.length" :image="false" description="无" />
+              <a-empty v-if="!changes.added.length" :image="false" :description="translate('ui.m_484d55613910')" />
             </a-collapse-panel>
-            <a-collapse-panel key="changed" :header="`修改 (${changes.changed.length})`">
+            <a-collapse-panel key="changed" :header="translate('ui.m_6d0479a97f14', { p0: (changes.changed.length) })">
               <div v-for="f in changes.changed" :key="f" class="change-file changed">~ {{ f }}</div>
-              <a-empty v-if="!changes.changed.length" :image="false" description="无" />
+              <a-empty v-if="!changes.changed.length" :image="false" :description="translate('ui.m_484d55613910')" />
             </a-collapse-panel>
-            <a-collapse-panel key="removed" :header="`删除 (${changes.removed.length})`">
+            <a-collapse-panel key="removed" :header="translate('ui.m_5218bb5b6d7d', { p0: (changes.removed.length) })">
               <div v-for="f in changes.removed" :key="f" class="change-file removed">- {{ f }}</div>
-              <a-empty v-if="!changes.removed.length" :image="false" description="无" />
+              <a-empty v-if="!changes.removed.length" :image="false" :description="translate('ui.m_484d55613910')" />
             </a-collapse-panel>
           </a-collapse>
         </template>
@@ -135,6 +138,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { CloudSyncOutlined, HistoryOutlined } from '@ant-design/icons-vue'
@@ -178,11 +183,12 @@ function isOlderThanCurrent(v: string): boolean {
 const versions = ref<VersionItem[]>([])
 const loadingVersions = ref(false)
 const versionsHint = ref('')   // 空列表/不支持时的友好提示（不再弹 error）
+const fullRollback = ref(false)
 const versionColumns = [
-  { title: '版本', key: 'version', dataIndex: 'version' },
-  { title: '发布时间', dataIndex: 'published_at', key: 'published_at' },
-  { title: '文件数', dataIndex: 'files', key: 'files', width: 90 },
-  { title: '操作', key: 'action', width: 140 },
+  { get title() { return translate('ui.m_5f76b2bf82dd') }, key: 'version', dataIndex: 'version' },
+  { get title() { return translate('ui.m_e8ff4d335dee') }, dataIndex: 'published_at', key: 'published_at' },
+  { get title() { return translate('ui.m_b3fa95f830ed') }, dataIndex: 'files', key: 'files', width: 90 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 140 },
 ]
 async function loadVersions() {
   loadingVersions.value = true
@@ -222,20 +228,20 @@ async function viewChanges(v: string) {
   try {
     changes.value = await getVersionChanges(v)
   } catch (e) {
-    message.error(e instanceof Error ? e.message : '获取改动失败')
+    message.error(e instanceof Error ? e.message : translate('ui.m_604c41b3aa28'))
   }
   loadingChanges.value = false
 }
 
 async function doRollback(v: string) {
   try {
-    await rollbackTo(v)
-    message.info(`已开始回退到 ${v}，正在应用…`)
+    await rollbackTo(v, fullRollback.value)
+    message.info(translate('ui.m_db42c90f4a60', { p0: (v) }))
     updating.value = true
     updateError.value = ''
     pollProgress()
   } catch (e) {
-    message.error(e instanceof Error ? e.message : '回退失败')
+    message.error(e instanceof Error ? e.message : translate('ui.m_577da48e1938'))
   }
 }
 
@@ -287,7 +293,7 @@ const progressStatus = computed(() => progress.value.phase === 'error' ? 'except
 const progressMsg = computed(() => {
   const msg = progress.value.msg
   if (msg) { _prevMsgVal.value = msg; return msg }
-  return _prevMsgVal.value || '准备中...'
+  return _prevMsgVal.value || translate('ui.m_c68d88d6f41e')
 })
 const _prevMsgVal = ref('')
 

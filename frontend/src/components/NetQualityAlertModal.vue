@@ -6,32 +6,34 @@
   纯前端消费既有端点，无后端改动。数据源：overall_assessment 的 assess{score,dims,summary}。
 -->
 <template>
-  <a-modal v-model:open="open" title="⚠ 网络质量告警" :footer="null" :width="600" :mask-closable="false" wrap-class-name="netq-alert">
+  <a-modal v-model:open="open" :title="translate('ui.m_3c7627582daa')" :footer="null" :width="600" :mask-closable="false" wrap-class-name="netq-alert">
     <a-alert type="error" show-icon style="margin-bottom:14px"
-      :message="`当前网络质量评分 ${score} 分（${levelText}），已低于健康阈值（40 分）`"
+      :message="translate('ui.m_48b7ca863037', { p0: (score), p1: (levelText) })"
       :description="summary" />
     <div class="netq-dims" v-if="weakDims.length">
-      <div class="netq-sub">存在问题的检测项：</div>
+      <div class="netq-sub">{{ translate('ui.m_d0c165a344df') }}</div>
       <a-tag v-for="d in weakDims" :key="d.key" :color="d.grade==='dead' ? 'red' : 'orange'">
-        {{ d.label }}：{{ d.grade==='dead' ? '不可达' : '质量差' }}
+        {{ d.label }}：{{ d.grade==='dead' ? translate('ui.m_8d7c03019f1d') : translate('ui.m_7fe1099fbfc0') }}
       </a-tag>
     </div>
-    <div class="netq-time" v-if="alertTime">告警时间：{{ alertTime }}</div>
-    <div class="netq-sub" style="margin-top:14px">建议排查：</div>
+    <div class="netq-time" v-if="alertTime">{{ translate('ui.m_292332a83aa4') }}{{ alertTime }}</div>
+    <div class="netq-sub" style="margin-top:14px">{{ translate('ui.m_399fced38fdf') }}</div>
     <ul class="netq-tips">
       <li v-for="(t,i) in tips" :key="i">{{ t }}</li>
     </ul>
     <div style="text-align:right;margin-top:18px">
       <a-space>
-        <a-button @click="goProxy">去代理中心</a-button>
-        <a-button type="primary" @click="goNetCheck">去网络检测</a-button>
-        <a-button @click="dismiss">稍后处理</a-button>
+        <a-button @click="goProxy">{{ translate('ui.m_f0be8afa2783') }}</a-button>
+        <a-button type="primary" @click="goNetCheck">{{ translate('ui.m_c953f314de71') }}</a-button>
+        <a-button @click="dismiss">{{ translate('ui.m_bf639a51feec') }}</a-button>
       </a-space>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { request } from '../api/request'
@@ -49,7 +51,7 @@ const weakDims = ref<Array<{ key: string; label: string; grade: string }>>([])
 const alertTs = ref<number>(0)                   // 本次告警对应体检的 checked_ts（秒）
 let timer: number | null = null
 
-const DIM_LABEL: Record<string, string> = { deps: '平台依赖', stability: '出网稳定性', ping: '链路质量', dns: 'DNS 解析', proxy: '代理出口' }
+const DIM_LABEL: Record<string, string> = { get deps() { return translate('ui.m_0f1f1fa959ed') }, get stability() { return translate('ui.m_21be9efba97f') }, get ping() { return translate('ui.m_76f89bc31422') }, get dns() { return translate('ui.m_a6739d3803ef') }, get proxy() { return translate('ui.m_3632d795122a') } }
 
 // 秒级 Unix 时间戳 → 本地可读时间（Date 需毫秒，故 *1000）
 const alertTime = computed(() => {
@@ -63,12 +65,12 @@ const alertTime = computed(() => {
 const tips = computed<string[]>(() => {
   const keys = weakDims.value.map(d => d.key)
   const out: string[] = []
-  if (keys.includes('dns')) out.push('DNS 解析异常：检查系统/自定义 DNS 是否可达，可在「网络检测」页更换 DNS（如 223.5.5.5 / 114.114.114.114）后重测。')
-  if (keys.includes('stability') || keys.includes('deps')) out.push('出网不稳定/依赖不可达：确认主机能正常访问公网（TCP 出站是否被防火墙/NAT/VPN 拦截），检查默认路由与网关。')
-  if (keys.includes('ping')) out.push('链路质量差：丢包率高或延迟大，检查本地网络、网关到公网的链路（可能是无线信号弱或带宽拥塞）。')
-  if (keys.includes('proxy')) out.push('代理出口异常：到「代理中心」检查当前代理节点是否存活、订阅是否过期，或临时切换为直连。')
-  if (!out.length) out.push('各单项未明确标记短板但总分偏低：到「网络检测」页手动跑一次完整体检，查看各项明细。')
-  out.push('排查后可在「网络检测」页点击「开始体检」重新评估；若仍低于阈值，下一轮自动自检会再次提醒。')
+  if (keys.includes('dns')) out.push(translate('ui.m_8614dac2bce6'))
+  if (keys.includes('stability') || keys.includes('deps')) out.push(translate('ui.m_4428a7b6d1e7'))
+  if (keys.includes('ping')) out.push(translate('ui.m_87b9e774031c'))
+  if (keys.includes('proxy')) out.push(translate('ui.m_f3b8877dae10'))
+  if (!out.length) out.push(translate('ui.m_cf26eed0f82f'))
+  out.push(translate('ui.m_69fa47f250d3'))
   return out
 })
 

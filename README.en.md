@@ -29,22 +29,16 @@ Watchtower connects asset reconnaissance, AI tool use, human intervention, and e
 
 The project is maintained by an individual developer and is available free of charge under **GPL-3.0-only**. You can deploy it yourself; model calls and external data sources may require your own accounts or incur separate costs.
 
-> `main` contains official stable source, currently **v1.21.167**. The website source snapshot is also `167`; the prebuilt image base may be older and is currently `165`. Source and image versions are distinct. Test iterations are not pushed directly to the main branch. See [version.txt](version.txt) for the source version and the [website](https://watchtowers.info/) for installation packages and subsequent official releases.
+> `main` contains approved Linux Web source, currently **v1.21.169**, matching the website hot-update snapshot. The image base remains **v1.21.165**; code updates do not require downloading the image again. Windows is under separate testing and is not publicly distributed. Development started on **June 3, 2026**.
 
-## v1.21.167 highlights
+## v1.21.169 highlights
 
-- Fixes tool-message pairing after DeepSeek DSML text calls. Existing affected history is repaired on the next resume request while retaining text, reasoning and saved results.
-- Missing results are marked explicitly; orphan or duplicate results remain historical observations. Historical tools are never re-executed by the repair.
-- Durable parameter references reduce queue and prefetch duplication for large tasks. Monitoring avoids overlapping polls and resource admission re-samples after conflicts.
-- Hot updates download changed content; older versions without a historical manifest perform an initial full verification. This release covers the Linux Web edition only; Windows remains a local test build.
+- Repairs DeepSeek thinking/tool history replay, including follow-up instructions after failed turns. Existing history and evidence are preserved.
+- Counts reasoning and tool arguments in context estimates, handles repeated relay metadata and growing argument snapshots, and deduplicates identical text calls within one response.
+- Incomplete arguments are never executed. One format-correction request is allowed on the same model; persistent failures pause explicitly. Historical tools are not rerun.
+- Includes168's Chinese/English language packs, streamed automatic/manual sessions, asynchronous dispatch, incremental upgrades and owned-file rollback cleanup.
 
-## v1.21.166 highlights
-
-- Extension manifests include source and licensing information, with ZIP/tar.gz support and separate local-install and cloud-review flows.
-- Updated brand icons and streamed reasoning/reply previews for automatically dispatched sessions.
-- Fixes for manual sessions entering automatic recovery and repeated assessments of the same target being blocked.
-- Policy presets in the AI console, improved layout for long target names, and recovery of tool calls emitted as plain text by models.
-- Updated registration, privacy, and activation-related text.
+Validation covers258 relevant regressions, strict local HTTP fixtures on the VM, and actual browser clicks. Two existing legacy-contract failures were reproduced against168; this is not exhaustive platform or real-model certification. After updating, send a follow-up instruction in the affected session. Missing historical reasoning and truncated arguments are not invented.
 
 See the [full changelog — Chinese](CHANGELOG.md) and [version downloads](https://github.com/LINGYK352/Watchtower/releases).
 

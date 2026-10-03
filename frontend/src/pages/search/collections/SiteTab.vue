@@ -1,18 +1,18 @@
 <template>
   <AssetCollectionTable :ctx="ctx" :columns="columns">
     <template #filters>
-      <a-form-item label="站点"><a-input v-model:value="ctx.filters.site" allow-clear placeholder="站点 URL" /></a-form-item>
-      <a-form-item label="标题"><a-input v-model:value="ctx.filters.title" allow-clear placeholder="标题" /></a-form-item>
+      <a-form-item :label="translate('ui.m_a59fe62777ff')"><a-input v-model:value="ctx.filters.site" allow-clear :placeholder="translate('ui.m_fb952476c712')" /></a-form-item>
+      <a-form-item :label="translate('ui.m_c3405f8c7d9d')"><a-input v-model:value="ctx.filters.title" allow-clear :placeholder="translate('ui.m_c3405f8c7d9d')" /></a-form-item>
       <a-form-item label="IP"><a-input v-model:value="ctx.filters.ip" allow-clear placeholder="IP" /></a-form-item>
-      <a-form-item label="指纹"><a-input v-model:value="ctx.filters['finger.name']" allow-clear placeholder="指纹名" /></a-form-item>
-      <a-form-item label="状态码"><a-input v-model:value="ctx.filters.status" allow-clear placeholder="如 200" /></a-form-item>
-      <a-form-item label="任务ID"><a-input v-model:value="ctx.filters.task_id" allow-clear placeholder="task_id" /></a-form-item>
+      <a-form-item :label="translate('ui.m_0d6a14a9ab25')"><a-input v-model:value="ctx.filters['finger.name']" allow-clear :placeholder="translate('ui.m_49622332014e')" /></a-form-item>
+      <a-form-item :label="translate('ui.m_06f7d7341212')"><a-input v-model:value="ctx.filters.status" allow-clear :placeholder="translate('ui.m_6860be5ef3f4')" /></a-form-item>
+      <a-form-item :label="translate('ui.m_aa2353039024')"><a-input v-model:value="ctx.filters.task_id" allow-clear placeholder="task_id" /></a-form-item>
     </template>
     <template #bodyCell="{ column, record }">
       <template v-if="column.key === 'site'">
         <a :href="String(record.site)" target="_blank">{{ record.site }}</a>
-        <a-tooltip v-if="Number(record._group_count) > 1" title="同一站点(域名+端口)的多条记录(含 http/https、不同路径、多次扫描)已合并,删除会一并删除整组">
-          <a-tag color="default" style="margin-left:6px">合并 {{ record._group_count }} 条</a-tag>
+        <a-tooltip v-if="Number(record._group_count) > 1" :title="translate('ui.m_4550250f3e8b')">
+          <a-tag color="default" style="margin-left:6px">{{ translate('ui.m_b07ece270100') }} {{ record._group_count }} {{ translate('ui.m_f004f1d84cf9') }}</a-tag>
         </a-tooltip>
       </template>
       <template v-else-if="column.key === 'status'"><a-tag :color="statusColor(Number(record.status))">{{ record.status || '-' }}</a-tag></template>
@@ -22,11 +22,11 @@
       <template v-else-if="column.key === 'tag'">
         <a-space wrap size="small">
           <a-tag v-for="t in tags(record)" :key="t" closable color="orange" @close="removeTag(record, t)">{{ t }}</a-tag>
-          <a-tag style="cursor: pointer; border-style: dashed" @click="openTag(record)">+ 标签</a-tag>
+          <a-tag style="cursor: pointer; border-style: dashed" @click="openTag(record)">{{ translate('ui.m_c239db16cbba') }}</a-tag>
         </a-space>
       </template>
       <template v-else-if="column.key === 'shot'">
-        <a-tooltip v-if="!shotUrl(record) && record._shot_off" title="该任务策略未勾选“站点截图”(site_capture),故未采集截图——不是截图失败。需截图请在新建任务/策略里勾选“站点截图”。">
+        <a-tooltip v-if="!shotUrl(record) && record._shot_off" :title="translate('ui.m_7ec0a1b6336a')">
           <a-image :src="SHOT_OFF_PLACEHOLDER" :preview="false"
             :width="80" :height="48" style="object-fit: cover; border-radius: 2px" />
         </a-tooltip>
@@ -35,19 +35,21 @@
       </template>
       <template v-else-if="column.key === 'action'">
         <a-space size="small">
-          <a-button type="link" size="small" @click="ctx.showDetail(record)">详情</a-button>
-          <ConfirmAction danger title="确认删除？" @confirm="ctx.removeOne(String(record._id))">删除</ConfirmAction>
+          <a-button type="link" size="small" @click="ctx.showDetail(record)">{{ translate('ui.m_979a332955c8') }}</a-button>
+          <ConfirmAction danger :title="translate('ui.m_7e18d0731e35')" @confirm="ctx.removeOne(String(record._id))">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
         </a-space>
       </template>
     </template>
   </AssetCollectionTable>
 
-  <a-modal v-model:open="tagOpen" title="添加标签" @ok="submitTag">
-    <a-input v-model:value="tagValue" placeholder="标签内容" />
+  <a-modal v-model:open="tagOpen" :title="translate('ui.m_795cbff909c4')" @ok="submitTag">
+    <a-input v-model:value="tagValue" :placeholder="translate('ui.m_28b0d322da84')" />
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../../i18n'
+
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
 import AssetCollectionTable from '../AssetCollectionTable.vue'
@@ -79,27 +81,27 @@ function shotUrl(record: RowRecord) {
 const SHOT_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="48"><rect width="80" height="48" fill="#f0f0f0"/>' +
   '<path d="M20 30l8-8 6 6 8-10 12 14H20z" fill="#d0d0d0"/><circle cx="30" cy="18" r="3" fill="#d0d0d0"/>' +
-  '<text x="40" y="44" font-size="7" fill="#aaa" text-anchor="middle">无截图</text></svg>')
+  translate('ui.m_ca69ed251b9d'))
 // “策略未截图”占位图:该站所属任务未勾选“站点截图”(site_capture=false),截图阶段被门控跳过——
 // 与“截图失败/空白”区分,免得反复误以为截图功能坏了。虚线框 + 提示文案。
 const SHOT_OFF_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="48"><rect width="79" height="47" x="0.5" y="0.5" ' +
   'fill="#fafafa" stroke="#e0e0e0" stroke-dasharray="3 2"/>' +
-  '<text x="40" y="22" font-size="7" fill="#bbb" text-anchor="middle">策略未</text>' +
-  '<text x="40" y="34" font-size="7" fill="#bbb" text-anchor="middle">开启截图</text></svg>')
+  translate('ui.m_9b7bc48cfdef') +
+  translate('ui.m_556dac83524e'))
 // 无截图时选占位:任务策略未开截图(_shot_off) → “策略未截图”;否则 → 通用“无截图”。
 function shotPlaceholder(record: RowRecord) {
   return record._shot_off ? SHOT_OFF_PLACEHOLDER : SHOT_PLACEHOLDER
 }
 const columns = [
-  { title: '站点', key: 'site', ellipsis: true, fixed: 'left', width: 260 },
-  { title: '标题', dataIndex: 'title', key: 'title', ellipsis: true, width: 180 },
-  { title: '状态', key: 'status', width: 80 },
+  { get title() { return translate('ui.m_a59fe62777ff') }, key: 'site', ellipsis: true, fixed: 'left', width: 260 },
+  { get title() { return translate('ui.m_c3405f8c7d9d') }, dataIndex: 'title', key: 'title', ellipsis: true, width: 180 },
+  { get title() { return translate('ui.m_6320b4a8722a') }, key: 'status', width: 80 },
   { title: 'Server', dataIndex: 'http_server', key: 'http_server', width: 120, ellipsis: true },
-  { title: '指纹', key: 'finger', width: 200 },
-  { title: '截图', key: 'shot', width: 100 },
-  { title: '标签', key: 'tag', width: 180 },
-  { title: '操作', key: 'action', width: 110, fixed: 'right' }
+  { get title() { return translate('ui.m_0d6a14a9ab25') }, key: 'finger', width: 200 },
+  { get title() { return translate('ui.m_c95dc99afe57') }, key: 'shot', width: 100 },
+  { get title() { return translate('ui.m_1d0fd5f9336d') }, key: 'tag', width: 180 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 110, fixed: 'right' }
 ]
 
 /* 标签操作 */
@@ -109,11 +111,11 @@ const tagTarget = ref<RowRecord>({})
 function openTag(record: RowRecord) { tagTarget.value = record; tagValue.value = ''; tagOpen.value = true }
 async function submitTag() {
   if (!tagValue.value) return
-  try { await siteTagApi.addTag('site', String(tagTarget.value._id), tagValue.value); message.success('已添加'); tagOpen.value = false; ctx.load() }
+  try { await siteTagApi.addTag('site', String(tagTarget.value._id), tagValue.value); message.success(translate('ui.m_889839915c3f')); tagOpen.value = false; ctx.load() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
 }
 async function removeTag(record: RowRecord, tag: string) {
-  try { await siteTagApi.deleteTag('site', String(record._id), tag); message.success('已删除'); ctx.load() }
+  try { await siteTagApi.deleteTag('site', String(record._id), tag); message.success(translate('ui.m_077a6d37719a')); ctx.load() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
 }
 </script>

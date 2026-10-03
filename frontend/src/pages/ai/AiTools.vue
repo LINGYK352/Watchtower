@@ -1,9 +1,9 @@
 <template>
-  <PageContainer title="AI 工具" kicker="AI Tools" description="AI 渗透引擎当前可调用的全部工具。AI 在渗透会话中按需自主调用,此处仅供查阅。">
+  <PageContainer :title="translate('ui.m_c252814845e2')" kicker="AI Tools" :description="translate('ui.m_281721b3aa5f')">
     <a-card class="page-card">
       <div class="tools-head">
-        <span>共 <b>{{ total }}</b> 个工具,分 {{ categories.length }} 类</span>
-        <a-button size="small" @click="load" :loading="loading">刷新</a-button>
+        <span>{{ translate('ui.m_76e547a8fa54') }} <b>{{ total }}</b> {{ translate('ui.m_a51d6fa02ac0') }} {{ categories.length }} {{ translate('ui.m_4fb249b9d7ac') }}</span>
+        <a-button size="small" @click="load" :loading="loading">{{ translate('ui.m_aee887434131') }}</a-button>
       </div>
       <a-spin :spinning="loading">
         <div v-for="cat in categories" :key="cat.name" class="cat-block">
@@ -16,13 +16,13 @@
               <template #header>
                 <component :is="catIcon(cat.name)" class="tool-ic" />
                 <code class="tool-name">{{ t.name }}</code>
-                <a-tag :color="t.available ? 'green' : 'default'">{{ t.available ? '可调用' : '未接入' }}</a-tag>
+                <a-tag :color="t.available ? 'green' : 'default'">{{ t.available ? translate('ui.m_d59e47070f7f') : translate('ui.m_af33de3507b4') }}</a-tag>
                 <span class="tool-sum">{{ t.summary }}</span>
               </template>
               <div class="tool-full">{{ t.description }}</div>
               <a-alert v-if="!t.available && t.degraded_reason" type="warning" :message="t.degraded_reason" show-icon class="tool-alert" />
               <div v-if="t.params.length" class="tool-params">
-                参数:{{ t.params.map(p => p.name + (p.required ? '*' : '')).join('、') }}
+                {{ translate('ui.m_885be94c286d') }}{{ t.params.map(p => p.name + (p.required ? '*' : '')).join('、') }}
               </div>
             </a-collapse-panel>
           </a-collapse>
@@ -33,6 +33,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {

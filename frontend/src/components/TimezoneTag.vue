@@ -7,18 +7,19 @@
   <a-tooltip placement="bottom">
     <template #title>
       <div style="max-width:260px;line-height:1.6">
-        平台所有时间戳（检测时间、任务时间、日志等）均为<b>服务器操作系统时区</b>的本地时间。<br />
-        当前服务器时区：<b>{{ tzLabel || tzName }}</b>（{{ tzName }} · {{ offsetText }}）。<br />
-        如需改变时间显示，请调整服务器 / 容器的操作系统时区（平台不单独存储或转换时区）。
+        {{ t('timezone.systemDescription') }}<br />
+        {{ t('timezone.server') }}: <b>{{ localizedZone }}</b> ({{ tzName }} · {{ offsetText }})<br />
+        {{ t('timezone.changeDescription') }}
       </div>
     </template>
-    <a-tag :color="color" style="cursor:help;margin:0">🕓 当前时区：{{ label }}</a-tag>
+    <a-tag :color="color" style="cursor:help;margin:0">🕓 {{ t('timezone.current', { zone: label }) }}</a-tag>
   </a-tooltip>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getVersion } from '../api/meta'
+import { appLocale, t, hasMessage } from '../i18n'
 
 const props = defineProps<{ color?: string }>()
 const color = computed(() => props.color || 'default')
@@ -38,7 +39,12 @@ const offsetText = computed(() => {
 })
 
 // 标签：中文地理名 + UTC 偏移，如"协调世界时（UTC+0）"、"美国东部时间（UTC-5）"；无中文名则只显 UTC 偏移
-const label = computed(() => tzLabel.value ? `${tzLabel.value}（${offsetText.value}）` : offsetText.value)
+const localizedZone = computed(() => {
+  const key = `timezone.names.${tzName.value}`
+  if (hasMessage(key)) return t(key)
+  return appLocale.value === 'en-US' ? tzName.value : (tzLabel.value || tzName.value)
+})
+const label = computed(() => localizedZone.value ? `${localizedZone.value} (${offsetText.value})` : offsetText.value)
 
 onMounted(async () => {
   try {

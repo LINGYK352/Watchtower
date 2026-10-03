@@ -1,15 +1,15 @@
 <template>
-  <PageContainer title="API 密钥" kicker="API Keys" description="全系统统一的情报 API 密钥配置(FOFA / 鹰图 / Quake 等)。一处配置,子域名收集、ICP 备案、GitHub 监控全通用。">
+  <PageContainer :title="translate('ui.m_5f600b307b4e')" kicker="API Keys" :description="translate('ui.m_bf185f5af032')">
     <template #extra>
       <a-space>
-        <span v-if="dirty" class="dirty-flag">● 有未保存修改</span>
-        <a-button @click="load">刷新</a-button>
-        <a-button type="primary" :loading="loading" @click="saveAll">保存全部</a-button>
+        <span v-if="dirty" class="dirty-flag">{{ translate('ui.m_e08bdc3722e2') }}</span>
+        <a-button @click="load">{{ translate('ui.m_aee887434131') }}</a-button>
+        <a-button type="primary" :loading="loading" @click="saveAll">{{ translate('ui.m_10f830160cfd') }}</a-button>
       </a-space>
     </template>
 
     <a-alert type="info" show-icon style="margin-bottom:16px"
-      message="鹰图 Hunter 已合并:这一个 key 同时供「子域名收集插件」和「情报中心 ICP 备案查询」使用,不用再配两遍。" />
+      :message="translate('ui.m_ae494fbdb102')" />
 
     <a-card v-for="grp in groups" :key="grp" class="page-card" :title="grp" size="small">
       <a-form layout="vertical">
@@ -19,10 +19,10 @@
               <div class="key-head">
                 <span class="key-label">{{ item.label }}</span>
                 <a-switch v-model:checked="(forms[item.id].enabled as boolean)" size="small" checked-children="启用" un-checked-children="停用" />
-                <a v-if="item.site" :href="item.site" target="_blank" rel="noreferrer" class="key-site">获取 ↗</a>
+                <a v-if="item.site" :href="item.site" target="_blank" rel="noreferrer" class="key-site">{{ translate('ui.m_a6ba15ce6e34') }}</a>
               </div>
               <a-input v-if="item.fields.includes('email')" v-model:value="(forms[item.id].email as string)"
-                placeholder="邮箱(PassiveTotal)" style="margin-bottom:8px" />
+                :placeholder="translate('ui.m_1f00ddd207e9')" style="margin-bottom:8px" />
               <a-input-password v-if="item.fields.includes('key')" v-model:value="(forms[item.id].key as string)"
                 :placeholder="secretPlaceholder(item, 'key')" autocomplete="new-password" style="margin-bottom:8px" />
               <a-input-password v-if="item.fields.includes('token')" v-model:value="(forms[item.id].token as string)"
@@ -32,24 +32,24 @@
               <a-input-password v-if="item.fields.includes('secret')" v-model:value="(forms[item.id].secret as string)"
                 :placeholder="secretPlaceholder(item, 'secret')" autocomplete="new-password" style="margin-bottom:8px" />
               <div v-if="item.select && item.select['min_severity']" style="margin-top:8px">
-                <span style="margin-right:8px;color:#888;font-size:12px">推送阈值</span>
+                <span style="margin-right:8px;color:#888;font-size:12px">{{ translate('ui.m_a29dc96e5060') }}</span>
                 <a-select v-model:value="(forms[item.id].min_severity as string)" size="small" style="width:160px"
                   :options="item.select['min_severity']" />
               </div>
               <div v-if="item.fields.includes('vuln_feed_notify')" style="margin-top:8px;display:flex;align-items:center;gap:8px">
-                <span style="color:#888;font-size:12px">情报推送</span>
+                <span style="color:#888;font-size:12px">{{ translate('ui.m_8c17fa75cd55') }}</span>
                 <a-switch v-model:checked="(forms[item.id].vuln_feed_notify as boolean)" size="small" checked-children="开" un-checked-children="关" />
-                <span style="color:#aaa;font-size:11px">开启后漏洞情报库新增高危漏洞将自动推送</span>
+                <span style="color:#aaa;font-size:11px">{{ translate('ui.m_31fc29a6fdaa') }}</span>
               </div>
               <div v-if="item.fields.includes('proxy_down_notify')" style="margin-top:8px;display:flex;align-items:center;gap:8px">
-                <span style="color:#888;font-size:12px">代理告警推送</span>
+                <span style="color:#888;font-size:12px">{{ translate('ui.m_61bebff69a94') }}</span>
                 <a-switch v-model:checked="(forms[item.id].proxy_down_notify as boolean)" size="small" checked-children="开" un-checked-children="关" />
-                <span style="color:#aaa;font-size:11px">开启后代理连续失活/全部节点不可达将自动推送</span>
+                <span style="color:#aaa;font-size:11px">{{ translate('ui.m_782cf030d6cb') }}</span>
               </div>
               <div v-if="item.fields.includes('attack_alert_notify')" style="margin-top:8px;display:flex;align-items:center;gap:8px">
-                <span style="color:#888;font-size:12px">攻击告警推送</span>
+                <span style="color:#888;font-size:12px">{{ translate('ui.m_c20a3b53b329') }}</span>
                 <a-switch v-model:checked="(forms[item.id].attack_alert_notify as boolean)" size="small" checked-children="开" un-checked-children="关" />
-                <span style="color:#aaa;font-size:11px">开启后检测到攻击将推送攻击者 IP 等详情（同 IP 5 分钟内不重复推）</span>
+                <span style="color:#aaa;font-size:11px">{{ translate('ui.m_b2ef33f59b8f') }}</span>
               </div>
             </div>
           </a-col>
@@ -57,11 +57,13 @@
       </a-form>
     </a-card>
 
-    <p class="updated" v-if="updatedAt">最后更新:{{ updatedAt }}</p>
+    <p class="updated" v-if="updatedAt">{{ translate('ui.m_a43321c13e4c') }}{{ updatedAt }}</p>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { onMounted, reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -75,7 +77,7 @@ const forms = reactive<Record<string, Record<string, unknown>>>({})
 
 // 未保存提示（问题4）：编辑后未点「保存全部」就切走会静默丢失设置。
 const { dirty, markSaved } = useUnsavedGuard(() => JSON.stringify(forms),
-  { content: '当前 API 密钥配置尚未保存，直接离开将丢失这些修改。确定要离开吗？' })
+  { get content() { return translate('ui.m_dd05da5d1811') } })
 
 const groups = computed(() => {
   const seen: string[] = []
@@ -86,7 +88,7 @@ function itemsByGroup(grp: string) {
   return items.value.filter(it => it.group === grp)
 }
 function secretPlaceholder(item: ApiKeyItem, field: string) {
-  return item[field + '_set'] ? '已配置(留空或掩码不修改)' : '未配置'
+  return item[field + '_set'] ? translate('ui.m_aeba9e39c36b') : translate('ui.m_80a57e03f071')
 }
 
 function syncForms(list: ApiKeyItem[]) {
@@ -124,7 +126,7 @@ async function saveAll() {
     updatedAt.value = res.updated_at
     syncForms(res.items)
     markSaved()                           // 保存成功后更新基线，脏标记归零
-    message.success('已保存,各服务 30s 内自动生效')
+    message.success(translate('ui.m_514df589127f'))
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }
 

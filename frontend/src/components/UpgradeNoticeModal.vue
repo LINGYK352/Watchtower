@@ -5,24 +5,26 @@
   数据源：changelog.json 每条可选 upgrade_notice 字段(该版升级后需用户复查的事)。
 -->
 <template>
-  <a-modal v-model:open="open" title="更新提示 · 请复查以下配置" :footer="null" :width="560" :mask-closable="false">
+  <a-modal v-model:open="open" :title="translate('ui.m_a80ec42f8a47')" :footer="null" :width="560" :mask-closable="false">
     <a-alert type="info" show-icon style="margin-bottom:12px"
-      :message="`已更新到 ${curVer}。以下是本次更新途经版本需要你复查/知晓的事项：`" />
+      :message="translate('ui.m_a56c015b0fbd', { p0: (curVer) })" />
     <div v-for="item in notices" :key="item.ver" class="up-notice-item">
       <div class="up-notice-ver"><a-tag color="blue">{{ item.ver }}</a-tag></div>
       <div class="up-notice-text">{{ item.notice }}</div>
     </div>
     <div style="text-align:right;margin-top:16px">
       <a-space>
-        <a-button @click="goProxy">去代理中心</a-button>
-        <a-button @click="goPolicy">去策略配置</a-button>
-        <a-button type="primary" @click="confirm">我知道了</a-button>
+        <a-button @click="goProxy">{{ translate('ui.m_f0be8afa2783') }}</a-button>
+        <a-button @click="goPolicy">{{ translate('ui.m_4716cca157c4') }}</a-button>
+        <a-button type="primary" @click="confirm">{{ translate('ui.m_348f1cf1243e') }}</a-button>
       </a-space>
     </div>
   </a-modal>
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../i18n'
+
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getChangelog } from '../api/about'

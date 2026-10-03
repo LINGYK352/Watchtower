@@ -1,32 +1,32 @@
 <template>
-  <PageContainer title="日志监测" kicker="Log Monitor" description="监测各组件、模块、代码的报错与启动错误，自动入库(WARNING 及以上)。">
+  <PageContainer :title="translate('ui.m_74f80eb72df3')" kicker="Log Monitor" :description="translate('ui.m_ebe30d1f64ad')">
     <template #extra>
       <a-space>
-        <a-button @click="openMyReports"><MessageOutlined /> 我的上报<a-badge v-if="myReplyCount" :count="myReplyCount" :offset="[6,-2]" /></a-button>
-        <a-button @click="loadAll">刷新</a-button>
-        <a-button @click="openRetention">保留设置</a-button>
-        <ConfirmAction danger type="default" title="确认清空全部日志？" @confirm="clearAll">清空</ConfirmAction>
+        <a-button @click="openMyReports"><MessageOutlined /> {{ translate('ui.m_b1776ef7a9fc') }}<a-badge v-if="myReplyCount" :count="myReplyCount" :offset="[6,-2]" /></a-button>
+        <a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button>
+        <a-button @click="openRetention">{{ translate('ui.m_44078f405658') }}</a-button>
+        <ConfirmAction danger type="default" :title="translate('ui.m_87ef83205ba7')" @confirm="clearAll">{{ translate('ui.m_1ef3de06b32e') }}</ConfirmAction>
       </a-space>
     </template>
 
     <a-row :gutter="16" style="margin-bottom: 16px">
-      <a-col :span="6"><a-card :bordered="false"><a-statistic title="总数" :value="stat.total" /></a-card></a-col>
+      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_5953fc09384f')" :value="stat.total" /></a-card></a-col>
       <a-col :span="6"><a-card :bordered="false"><a-statistic title="ERROR" :value="stat.ERROR" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
       <a-col :span="6"><a-card :bordered="false"><a-statistic title="WARNING" :value="stat.WARNING" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
       <a-col :span="6"><a-card :bordered="false"><a-statistic title="CRITICAL" :value="stat.CRITICAL" :value-style="{ color: '#a8071a' }" /></a-card></a-col>
     </a-row>
 
     <SearchBar :model="query" @search="load" @reset="reset">
-      <a-form-item label="级别"><a-select v-model:value="query.level" allow-clear style="width: 130px" :options="levelOptions" /></a-form-item>
-      <a-form-item label="进程"><a-select v-model:value="query.process_type" allow-clear style="width: 130px" :options="processOptions" /></a-form-item>
-      <a-form-item label="模块"><a-input v-model:value="query.module" allow-clear placeholder="文件名" /></a-form-item>
-      <a-form-item label="关键词"><a-input v-model:value="query.message" allow-clear placeholder="日志内容" /></a-form-item>
+      <a-form-item :label="translate('ui.m_3d9d02e83d39')"><a-select v-model:value="query.level" allow-clear style="width: 130px" :options="levelOptions" /></a-form-item>
+      <a-form-item :label="translate('ui.m_9bfb43ada1f9')"><a-select v-model:value="query.process_type" allow-clear style="width: 130px" :options="processOptions" /></a-form-item>
+      <a-form-item :label="translate('ui.m_b07e5088eafa')"><a-input v-model:value="query.module" allow-clear :placeholder="translate('ui.m_a6e48adc26d6')" /></a-form-item>
+      <a-form-item :label="translate('ui.m_1f7f0db90f93')"><a-input v-model:value="query.message" allow-clear :placeholder="translate('ui.m_b97249cc8c2d')" /></a-form-item>
     </SearchBar>
 
     <a-card :bordered="false">
       <a-space style="margin-bottom: 12px">
-        <ConfirmAction danger type="primary" :disabled="!selectedRowKeys.length" title="确认删除选中日志？" @confirm="removeSelected">删除选中{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</ConfirmAction>
-        <a-button :disabled="!selectedRowKeys.length" @click="openReport"><CloudUploadOutlined /> 上传到云端{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</a-button>
+        <ConfirmAction danger type="primary" :disabled="!selectedRowKeys.length" :title="translate('ui.m_278d5f2da09f')" @confirm="removeSelected">{{ translate('ui.m_469f67cf665e') }}{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</ConfirmAction>
+        <a-button :disabled="!selectedRowKeys.length" @click="openReport"><CloudUploadOutlined /> {{ translate('ui.m_279d607a8f0f') }}{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</a-button>
       </a-space>
       <a-table :columns="columns" :data-source="items" :loading="loading" row-key="_id" :pagination="pagination"
         :scroll="{ x: 'max-content' }" size="middle" bordered
@@ -37,70 +37,70 @@
           <template v-else-if="column.key === 'loc'">{{ record.module }}:{{ record.lineno }}</template>
           <template v-else-if="column.key === 'message'"><span class="log-msg">{{ record.message }}</span></template>
           <template v-else-if="column.key === 'action'">
-            <a-button type="link" size="small" @click="showDetail(record)">详情</a-button>
+            <a-button type="link" size="small" @click="showDetail(record)">{{ translate('ui.m_979a332955c8') }}</a-button>
           </template>
         </template>
       </a-table>
     </a-card>
 
-    <a-drawer v-model:open="detailOpen" title="日志详情" width="55%">
+    <a-drawer v-model:open="detailOpen" :title="translate('ui.m_77af343f1fb7')" width="55%">
       <a-descriptions :column="1" size="small" bordered>
-        <a-descriptions-item label="时间">{{ current.save_date }}</a-descriptions-item>
-        <a-descriptions-item label="级别"><a-tag :color="levelColor(String(current.level))">{{ current.level }}</a-tag></a-descriptions-item>
-        <a-descriptions-item label="进程">{{ current.process_type }}</a-descriptions-item>
-        <a-descriptions-item label="位置">{{ current.module }}:{{ current.lineno }} ({{ current.func }})</a-descriptions-item>
-        <a-descriptions-item label="主机">{{ current.host }}</a-descriptions-item>
-        <a-descriptions-item label="内容"><pre class="log-pre">{{ current.message }}</pre></a-descriptions-item>
-        <a-descriptions-item v-if="current.exc_info" label="堆栈"><pre class="log-pre">{{ current.exc_info }}</pre></a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_8b6ff498515b')">{{ current.save_date }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_3d9d02e83d39')"><a-tag :color="levelColor(String(current.level))">{{ current.level }}</a-tag></a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_9bfb43ada1f9')">{{ current.process_type }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_1fb4d574da92')">{{ current.module }}:{{ current.lineno }} ({{ current.func }})</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_e87d9f23a3f5')">{{ current.host }}</a-descriptions-item>
+        <a-descriptions-item :label="translate('ui.m_7a688306423b')"><pre class="log-pre">{{ current.message }}</pre></a-descriptions-item>
+        <a-descriptions-item v-if="current.exc_info" :label="translate('ui.m_febcfbc22f89')"><pre class="log-pre">{{ current.exc_info }}</pre></a-descriptions-item>
       </a-descriptions>
     </a-drawer>
 
-    <a-modal v-model:open="retentionOpen" title="日志保留设置" :confirm-loading="retentionSaving" @ok="saveRetention" ok-text="保存" cancel-text="取消">
-      <p style="color: #888; margin-bottom: 16px">超过保留天数的日志自动删除(MongoDB TTL,运行时即时生效,无需重启)。最少保留 1 天，不设人为上限。</p>
+    <a-modal v-model:open="retentionOpen" :title="translate('ui.m_04a0c438902d')" :confirm-loading="retentionSaving" @ok="saveRetention" :ok-text="translate('ui.m_a3030bf8f16d')" :cancel-text="translate('ui.m_2cd0f3be8738')">
+      <p style="color: #888; margin-bottom: 16px">{{ translate('ui.m_c9d86e7a3247') }}</p>
       <a-form layout="horizontal" :label-col="{ span: 10 }" :wrapper-col="{ span: 14 }">
         <a-form-item v-for="(item, key) in retention" :key="key" :label="item.label">
-          <a-input-number v-model:value="item.days" :min="1" addon-after="天" style="width: 160px" />
-          <span style="color: #aaa; margin-left: 8px">默认 {{ item.default_days }} 天</span>
+          <a-input-number v-model:value="item.days" :min="1" :addon-after="translate('ui.m_49da61ceeea2')" style="width: 160px" />
+          <span style="color: #aaa; margin-left: 8px">{{ translate('ui.m_844b8cc8dff7') }} {{ item.default_days }} {{ translate('ui.m_49da61ceeea2') }}</span>
         </a-form-item>
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="reportOpen" title="上传报错到云端" :confirm-loading="reporting"
-      @ok="submitReport" ok-text="上传" cancel-text="取消" width="640px">
+    <a-modal v-model:open="reportOpen" :title="translate('ui.m_ce595c300fc2')" :confirm-loading="reporting"
+      @ok="submitReport" :ok-text="translate('ui.m_9e07e3c0532d')" :cancel-text="translate('ui.m_2cd0f3be8738')" width="640px">
       <a-alert type="info" show-icon style="margin-bottom:12px"
-        message="将把选中的报错日志上传到云端分发系统，供开发方定位问题。"
-        description="上传时会附带你的授权凭证归属、当前版本与出口 IP。请勿在描述中填写敏感信息。" />
+        :message="translate('ui.m_7d84631b1da0')"
+        :description="translate('ui.m_07b8f59c9080')" />
       <a-form layout="vertical">
-        <a-form-item label="问题描述（必填其一）">
+        <a-form-item :label="translate('ui.m_65c7d4155475')">
           <a-textarea v-model:value="reportDesc" :rows="3"
-            placeholder="简述触发场景、你的操作、期望结果等，便于定位" />
+            :placeholder="translate('ui.m_9d3ce37cb253')" />
         </a-form-item>
-        <a-form-item :label="`将上传 ${selectedRowKeys.length} 条日志`">
+        <a-form-item :label="translate('ui.m_e161fa2331e4', { p0: (selectedRowKeys.length) })">
           <pre class="log-pre" style="max-height:220px;background:#f6f8fa;padding:10px;border-radius:6px">{{ reportPreview }}</pre>
         </a-form-item>
       </a-form>
     </a-modal>
 
     <!-- 我的上报：本用户上传过的报错 + 开发者回复/修复进展 -->
-    <a-drawer v-model:open="myOpen" title="我的上报" width="640" @open="loadMyReports">
+    <a-drawer v-model:open="myOpen" :title="translate('ui.m_b1776ef7a9fc')" width="640" @open="loadMyReports">
       <a-spin :spinning="myLoading">
-        <a-empty v-if="!myReports.length" description="你还没有上传过报错" />
+        <a-empty v-if="!myReports.length" :description="translate('ui.m_3b8624c5b766')" />
         <div v-for="r in myReports" :key="r.id" class="mr-card">
           <div class="mr-head">
             <span class="mr-ts">{{ r.ts }}</span>
             <a-tag :color="r.reply ? 'green' : (r.handled ? 'blue' : 'orange')">
-              {{ r.reply ? '已回复' : (r.handled ? '已处理' : '待处理') }}
+              {{ r.reply ? translate('ui.m_6e764af4b09d') : (r.handled ? translate('ui.m_59f6c8369293') : translate('ui.m_999a459c3f3f')) }}
             </a-tag>
             <span v-if="r.version" class="mr-ver">{{ r.version }}</span>
           </div>
-          <div class="mr-desc">{{ r.description || '(无描述)' }}</div>
+          <div class="mr-desc">{{ r.description || translate('ui.m_b30520db7512') }}</div>
           <pre v-if="r.log_preview" class="mr-log">{{ r.log_preview }}{{ r.log_len > 200 ? ' …' : '' }}</pre>
           <div v-if="r.reply" class="mr-reply">
-            <div class="mr-reply-hd">开发者回复<span v-if="r.fix_version" class="mr-fix">已修复：{{ r.fix_version }}</span>
+            <div class="mr-reply-hd">{{ translate('ui.m_a96f1e40bb1e') }}<span v-if="r.fix_version" class="mr-fix">{{ translate('ui.m_9b1d46185c46') }}{{ r.fix_version }}</span>
               <span v-if="r.replied_at" class="mr-rat">{{ r.replied_at }}</span></div>
             <div class="mr-reply-body">{{ r.reply }}</div>
           </div>
-          <div v-else class="mr-noreply">开发者暂未回复，请留意后续版本更新。</div>
+          <div v-else class="mr-noreply">{{ translate('ui.m_25e740c08405') }}</div>
         </div>
       </a-spin>
     </a-drawer>
@@ -108,6 +108,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../i18n'
+
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { CloudUploadOutlined, MessageOutlined } from '@ant-design/icons-vue'
@@ -139,14 +141,14 @@ const processOptions = [
   { label: 'Worker', value: 'worker' }
 ]
 const columns = [
-  { title: '时间', dataIndex: 'save_date', key: 'save_date', width: 180 },
-  { title: '级别', key: 'level', width: 100 },
-  { title: '进程', key: 'process_type', width: 100 },
-  { title: '位置', key: 'loc', width: 220, ellipsis: true },
-  { title: '内容', key: 'message', ellipsis: true },
-  { title: '操作', key: 'action', width: 80, fixed: 'right' }
+  { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date', key: 'save_date', width: 180 },
+  { get title() { return translate('ui.m_3d9d02e83d39') }, key: 'level', width: 100 },
+  { get title() { return translate('ui.m_9bfb43ada1f9') }, key: 'process_type', width: 100 },
+  { get title() { return translate('ui.m_1fb4d574da92') }, key: 'loc', width: 220, ellipsis: true },
+  { get title() { return translate('ui.m_7a688306423b') }, key: 'message', ellipsis: true },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 80, fixed: 'right' }
 ]
-const pagination = computed(() => ({ current: query.page, pageSize: query.size, total: total.value, showSizeChanger: true, showTotal: (t: number) => `共 ${t} 条` }))
+const pagination = computed(() => ({ current: query.page, pageSize: query.size, total: total.value, showSizeChanger: true, showTotal: (t: number) => translate('ui.m_f292bcb94fe6', { p0: (t) }) }))
 
 function levelColor(level: string) {
   return ({ ERROR: 'red', CRITICAL: 'magenta', WARNING: 'orange' } as Record<string, string>)[level] || 'default'
@@ -173,11 +175,11 @@ function onChange(p: { current?: number; pageSize?: number }) { query.page = p.c
 function onSelectChange(keys: (string | number)[]) { selectedRowKeys.value = keys.map(String) }
 function showDetail(record: RowRecord) { current.value = record; detailOpen.value = true }
 async function removeSelected() {
-  try { await logMonitorApi.delete(selectedRowKeys.value); message.success('已删除'); loadAll() }
+  try { await logMonitorApi.delete(selectedRowKeys.value); message.success(translate('ui.m_077a6d37719a')); loadAll() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
 }
 async function clearAll() {
-  try { const r = await logMonitorApi.clear(); message.success(`已清空 ${r.delete_cnt} 条`); loadAll() }
+  try { const r = await logMonitorApi.clear(); message.success(translate('ui.m_228efe70b702', { p0: (r.delete_cnt) })); loadAll() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
 }
 
@@ -195,7 +197,7 @@ async function saveRetention() {
     const updates: Record<string, number> = {}
     Object.entries(retention.value).forEach(([k, v]) => { updates[k] = v.days })
     retention.value = await logMonitorApi.setRetention(updates)
-    message.success('已保存,即时生效')
+    message.success(translate('ui.m_123e648594da'))
     retentionOpen.value = false
   } catch (error) {
     message.error(error instanceof Error ? error.message : String(error))
@@ -215,23 +217,23 @@ const reportPreview = computed(() => {
   return _selectedLogs().map(r =>
     `[${r.save_date}] ${r.level} ${r.module}:${r.lineno} (${r.process_type})\n${r.message}` +
     (r.exc_info ? `\n${r.exc_info}` : '')
-  ).join('\n\n---\n\n') || '（未选中日志）'
+  ).join('\n\n---\n\n') || translate('ui.m_0cd60fe760af')
 })
 function openReport() {
-  if (!selectedRowKeys.value.length) { message.warning('请先勾选要上传的日志'); return }
+  if (!selectedRowKeys.value.length) { message.warning(translate('ui.m_25606f92bce4')); return }
   reportDesc.value = ''
   reportOpen.value = true
 }
 async function submitReport() {
   const logContent = reportPreview.value
-  if (!reportDesc.value.trim() && !logContent.trim()) { message.warning('请填写描述'); return }
+  if (!reportDesc.value.trim() && !logContent.trim()) { message.warning(translate('ui.m_0b7f9bff24a8')); return }
   reporting.value = true
   try {
     await reportError({ description: reportDesc.value.trim(), log_content: logContent, version: APP_VERSION })
-    message.success('已上传到云端，感谢反馈')
+    message.success(translate('ui.m_7889f6d75145'))
     reportOpen.value = false
   } catch (e) {
-    message.error(e instanceof Error ? e.message : '上传失败')
+    message.error(e instanceof Error ? e.message : translate('ui.m_219481a6dde7'))
   } finally {
     reporting.value = false
   }

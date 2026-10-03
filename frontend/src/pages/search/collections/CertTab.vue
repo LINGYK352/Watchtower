@@ -2,9 +2,9 @@
   <AssetCollectionTable :ctx="ctx" :columns="columns">
     <template #filters>
       <a-form-item label="IP"><a-input v-model:value="ctx.filters.ip" allow-clear placeholder="IP" /></a-form-item>
-      <a-form-item label="端口"><a-input v-model:value="ctx.filters.port" allow-clear placeholder="端口" /></a-form-item>
-      <a-form-item label="主题"><a-input v-model:value="ctx.filters['cert.subject_dn']" allow-clear placeholder="主题名称" /></a-form-item>
-      <a-form-item label="任务ID"><a-input v-model:value="ctx.filters.task_id" allow-clear placeholder="task_id" /></a-form-item>
+      <a-form-item :label="translate('ui.m_e71ac32b544b')"><a-input v-model:value="ctx.filters.port" allow-clear :placeholder="translate('ui.m_e71ac32b544b')" /></a-form-item>
+      <a-form-item :label="translate('ui.m_788db1cfec2a')"><a-input v-model:value="ctx.filters['cert.subject_dn']" allow-clear :placeholder="translate('ui.m_e479c05c94a1')" /></a-form-item>
+      <a-form-item :label="translate('ui.m_aa2353039024')"><a-input v-model:value="ctx.filters.task_id" allow-clear placeholder="task_id" /></a-form-item>
     </template>
     <template #bodyCell="{ column, record }">
       <template v-if="column.key === 'ip'"><CopyText :text="String(record.ip || '')" /></template>
@@ -13,8 +13,8 @@
       <template v-else-if="column.key === 'validity'">{{ validity(record) }}</template>
       <template v-else-if="column.key === 'action'">
         <a-space size="small">
-          <a-button type="link" size="small" @click="ctx.showDetail(record)">详情</a-button>
-          <ConfirmAction danger title="确认删除？" @confirm="ctx.removeOne(String(record._id))">删除</ConfirmAction>
+          <a-button type="link" size="small" @click="ctx.showDetail(record)">{{ translate('ui.m_979a332955c8') }}</a-button>
+          <ConfirmAction danger :title="translate('ui.m_7e18d0731e35')" @confirm="ctx.removeOne(String(record._id))">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
         </a-space>
       </template>
     </template>
@@ -22,6 +22,8 @@
 </template>
 
 <script setup lang="ts">
+import { t as translate } from '../../../i18n'
+
 import AssetCollectionTable from '../AssetCollectionTable.vue'
 import CopyText from '../../../components/CopyText.vue'
 import ConfirmAction from '../../../components/ConfirmAction.vue'
@@ -37,11 +39,11 @@ function validity(record: RowRecord) {
 }
 const columns = [
   { title: 'IP', key: 'ip', width: 150, fixed: 'left' },
-  { title: '端口', dataIndex: 'port', key: 'port', width: 80 },
-  { title: '主题', key: 'subject', ellipsis: true },
-  { title: '签发者', key: 'issuer', ellipsis: true },
-  { title: '有效期', key: 'validity', width: 260, ellipsis: true },
-  { title: '任务ID', dataIndex: 'task_id', key: 'task_id', width: 130, ellipsis: true },
-  { title: '操作', key: 'action', width: 110, fixed: 'right' }
+  { get title() { return translate('ui.m_e71ac32b544b') }, dataIndex: 'port', key: 'port', width: 80 },
+  { get title() { return translate('ui.m_788db1cfec2a') }, key: 'subject', ellipsis: true },
+  { get title() { return translate('ui.m_345f4e7931c6') }, key: 'issuer', ellipsis: true },
+  { get title() { return translate('ui.m_9c2a28e8f98f') }, key: 'validity', width: 260, ellipsis: true },
+  { get title() { return translate('ui.m_aa2353039024') }, dataIndex: 'task_id', key: 'task_id', width: 130, ellipsis: true },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 110, fixed: 'right' }
 ]
 </script>
