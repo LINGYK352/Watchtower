@@ -29,20 +29,19 @@ Watchtower connects asset reconnaissance, AI tool use, human intervention, and e
 
 The project is maintained by an individual developer and is available free of charge under **GPL-3.0-only**. You can deploy it yourself; model calls and external data sources may require your own accounts or incur separate costs.
 
-> `main` contains approved Linux Web source, currently **v1.21.170**, matching the website hot-update snapshot. The image base remains **v1.21.165**; code updates do not require downloading the image again. Windows remains under separate testing and is not publicly distributed. Development started on **June 3, 2026**.
+> `main` contains approved Linux Web source, currently **v1.21.171**, matching the website hot-update snapshot. The image base remains **v1.21.165**; this release changes no image dependencies. Windows is under separate testing and is not publicly distributed. Development started on **June 3, 2026**.
 
-## v1.21.170 highlights
+## v1.21.171 highlights
 
-- Confirm takeover once per session. Empty whiteboards stay on standby; returning from another menu restores the session and previous sidebar state.
-- Store each instruction and reply independently. Display history survives model-context compaction; empty replies receive explicit correction or failure status.
-- Separate the system context fallback from model-native limits and correct DeepSeek native-budget displays.
-- Capture findings promptly, review actual evidence, and deduplicate by endpoint and vulnerability type. Insufficient evidence remains a lead.
-- Check script syntax, report real exit codes and elapsed time, and clean up owned process trees on timeout or cancellation.
-- Add loading animation, mode labels, highlighted AI policy selection, dark-theme status icons, and task/session/finding report previews.
+- This guardian transition release changes the updater only. Older installations enter171 first; later upgrades and rollbacks proceed one release at a time.
+- Keep a fixed target and durable hop progress. Missing predecessors stop the operation with an explicit explanation.
+- Include the172 downloader for common and platform-specific change ZIPs. Verify both packages before committing and retain interrupted downloads for resumption.
+- Display the current and target versions, hop count, phase and failure reason. Restore progress after navigation or service reload.
+- Use a cross-process lock, transaction backup and recovery, and commit the version last. Check all Web processes, database and frontend before advancing.
 
-249 relevant regressions passed, alongside VM tests using owned mock providers/targets and actual browser clicks. Configuration, accounts and existing evidence are preserved. Send an explicit follow-up in an affected session after updating. Historical content already discarded by an older version cannot be reconstructed.
+Eight guardian HTTP checks and thirteen package regressions passed. Actual VM and installed Windows tests covered sequential upgrades and rollbacks, plus real interrupted-download resumption.171 itself arrives through the existing updater; production prebuilt packages start with172. Rollback below171 is currently blocked before mutation to avoid removing the guardian. Windows tool parity and Windows10 testing remain pending.
 
-See the [English changelog](CHANGELOG.en.md), [console behavior](docs/ai-console.md), and [version downloads](https://github.com/LINGYK352/Watchtower/releases).
+See the [English changelog](CHANGELOG.en.md), [update delivery contract](docs/update-delivery.md), and [downloads](https://github.com/LINGYK352/Watchtower/releases).
 
 ## Capabilities
 

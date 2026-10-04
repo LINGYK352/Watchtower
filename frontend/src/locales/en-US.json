@@ -2854,6 +2854,20 @@
     "native_update_note": "The application will close and reopen automatically. Configuration and user data are preserved.",
     "report_task_tab": "Task reports",
     "report_session_tab": "Session reports",
-    "report_finding_tab": "Vulnerability reports"
+    "report_finding_tab": "Vulnerability reports",
+    "update_route": "Update route",
+    "update_hop": "Step {current}/{total} · {version}",
+    "update_connection_lost": "Connection to the local service was lost; checking progress",
+    "update_preserved": "Downloads and the current step are preserved. Resume when the connection or service recovers.",
+    "update_paused": "Update paused",
+    "update_resume": "Resume update",
+    "update_status": "View update status",
+    "update_phase_checking": "Checking version and update chain",
+    "update_phase_downloading": "Downloading this step",
+    "update_phase_validating": "Validating this step",
+    "update_phase_applying": "Applying this step",
+    "update_phase_restarting": "Waiting for this step to pass runtime checks",
+    "update_phase_done": "Update complete; the target version is running",
+    "update_phase_error": "Update paused; you can resume"
   }
 }

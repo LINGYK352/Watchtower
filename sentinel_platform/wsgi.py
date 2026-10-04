@@ -16,6 +16,21 @@ web 侧只用 celery app 的 `.delay()` 把任务投 broker（不消费，消费
 """
 from __future__ import annotations
 
+# A killed updater may have left source replacements unfinished. Recover BEFORE
+# importing application modules, using a stdlib-only helper and the same OS lock.
+def _recover_update_before_import():
+    from pathlib import Path
+    import json,importlib.util
+    root=Path(__file__).resolve().parents[1];journal=root/'.update_stage/.commit.json'
+    if not journal.exists() or json.loads(journal.read_text()).get('phase')!='committing':return
+    import fcntl
+    with (root/'.update_stage/.apply.lock').open('a+b') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        spec=importlib.util.spec_from_file_location('watchtower_update_recovery',root/'sentinel_platform/core/update_commit.py')
+        helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper);helper.recover(root)
+
+_recover_update_before_import()
+
 from sentinel_platform.bootstrap import create_app
 from sentinel_platform.core import get_config, get_logger
 

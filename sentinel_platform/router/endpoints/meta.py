@@ -17,6 +17,17 @@ from ..openapi import register_envelope_models
 
 ns = Namespace("meta", description="平台元信息：健康/版本/模块就绪度")
 _models = register_envelope_models(ns)
+from pathlib import Path
+_UPDATE_ROOT=Path(__file__).resolve().parents[3]
+_BOOT_UPDATE_VERSION=(_UPDATE_ROOT/'version.txt').read_text(encoding='utf-8').strip()
+
+@ns.route('/health/update-ready')
+class UpdateReady(Resource):
+    @ns.doc(security=None)
+    def get(self):
+        from sentinel_platform.modules.about._update_chain import ready_status
+        try:return ok(ready_status(_UPDATE_ROOT,_BOOT_UPDATE_VERSION))
+        except Exception:return ok({'ready':False,'version':_BOOT_UPDATE_VERSION})
 
 # 探测的核心 ROLE（就绪度报告用）
 _PROBE_ROLES = [

@@ -2854,6 +2854,20 @@
     "native_update_note": "更新将自动关闭并重新打开程序，配置和用户数据保留。",
     "report_task_tab": "任务级报告",
     "report_session_tab": "会话级报告",
-    "report_finding_tab": "漏洞报告"
+    "report_finding_tab": "漏洞报告",
+    "update_route": "更新路径",
+    "update_hop": "第 {current}/{total} 步 · {version}",
+    "update_connection_lost": "暂时无法连接本机服务，仍在尝试读取进度",
+    "update_preserved": "已下载内容和更新位置已保留。网络或服务恢复后会继续，可点击继续更新。",
+    "update_paused": "更新已暂停",
+    "update_resume": "继续更新",
+    "update_status": "查看更新状态",
+    "update_phase_checking": "核对当前版本与更新链",
+    "update_phase_downloading": "下载本级更新",
+    "update_phase_validating": "校验本级内容",
+    "update_phase_applying": "提交本级更新",
+    "update_phase_restarting": "等待本级程序运行检查",
+    "update_phase_done": "更新完成，目标版本已运行",
+    "update_phase_error": "更新暂停，可继续"
   }
 }

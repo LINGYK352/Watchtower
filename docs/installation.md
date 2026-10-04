@@ -43,7 +43,11 @@ http://<服务器地址>:5555
 
 优先使用平台内“检查更新”提供的流程，并阅读对应版本说明。操作前保留配置、数据库和必要运行数据的备份。
 
-GitHub 的 `main` 当前为正式源码 `v1.21.167`，官网源码快照同为 `167`。官网完整镜像基板目前仍是 `165`；新安装应按官网流程准备运行环境，再通过平台更新流程获取适用的源码更新。源码版本与镜像基板版本不同，不能把源码版本号直接拼成镜像下载文件名。带 `-N` 的测试迭代不直接进入主分支，后续版本以官网实际提供的内容为准。
+GitHub 的 `main` 当前为正式Web源码 `v1.21.171`，官网源码快照同为 `171`。官网完整镜像基板目前仍是 `165`；新安装按官网流程准备运行环境，再进入171守门员。源码版本与镜像基板版本不同，不能把源码版本号直接拼成镜像下载文件名。带 `-N` 的测试迭代不直接进入主分支。
+
+171是更新机制过渡版。低于171先安装171，之后升级、回退都逐级执行；172起下载预制公共ZIP＋平台专属变更ZIP。进度和已完成级会保存，失败显示原因并支持继续更新。当前回退至171以前会在操作前拦截，防止删掉守门员；Windows仍在私有测试。首次进入171可能由旧更新器自动重启服务，本版不要求重建镜像。详见[更新契约](update-delivery.md)。
+
+The public Web source and hot-update snapshot are171; the image base remains165. Older installations receive the171 guardian first. Subsequent upgrades and rollbacks are sequential, with prepared common/platform change ZIPs from172 and visible resumable progress. Rollback below171 is currently blocked before mutation. Windows is not publicly distributed. The original updater may restart services when first installing171; no image rebuild is required.
 
 不要把再次执行“全新安装”当作普通升级，也不要仅因存在旧下载文件就认定下载完整。修复安装仍会替换运行代码，失败时可能需要人工恢复；备份不能省略。
 

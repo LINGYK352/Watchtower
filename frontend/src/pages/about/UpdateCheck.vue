@@ -38,11 +38,7 @@
           </a-button>
         </div>
 
-        <!-- 更新进度 -->
-        <div v-if="updating" style="margin-top:8px">
-          <a-progress :percent="percent" :status="progressStatus" size="small" />
-          <p style="font-size:12px;color:#8b949e;margin-top:6px">{{ progressMsg }}</p>
-        </div>
+        <UpdateProgressPanel v-if="updating || progress.resumable" :progress="progress" :network-lost="networkLost" @resume="startUpdate" />
 
         <!-- 更新完成（自动刷新） -->
         <a-alert v-if="updateDone" type="success" show-icon
@@ -51,7 +47,7 @@
         <!-- 更新失败 -->
         <a-alert v-if="updateError" type="error" show-icon
           :message="translate('ui.m_ec99e5c45d64')" :description="updateError" />
-        <a-button v-if="updateError" @click="resetUpdateState">{{ translate('ui.m_b8784c8dd563') }}</a-button>
+        <a-button v-if="updateError" @click="startUpdate">{{ translate('ui.update_resume') }}</a-button>
 
         <!-- 已是最新 -->
         <a-alert v-if="checked && !hasUpdate && !networkError && !authError" type="success" show-icon
@@ -144,6 +140,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { CloudSyncOutlined, HistoryOutlined } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
+import UpdateProgressPanel from '../../components/UpdateProgressPanel.vue'
 import { APP_VERSION } from '../../config/brand'
 import { checkUpdate, applyUpdate, getProgress, getChangelog,
   getVersions, getVersionChanges, rollbackTo, type VersionItem, type ChangesResult } from '../../api/about'
@@ -251,13 +248,19 @@ onMounted(async () => {
   // 若后台仍在更新，重新挂上进度轮询（不丢进度、不用重新点更新）。
   try {
     const p = await getProgress()
-    if (p && ['downloading', 'compiling', 'applying', 'checking'].includes(p.phase)) {
+    if (p) progress.value = p
+    if (p?.phase === 'error') updateError.value = p.error || translate('ui.update_paused')
+    if (p && ['downloading', 'compiling', 'applying', 'checking', 'validating', 'restarting'].includes(p.phase)) {
       progress.value = p
       updating.value = true
       updateError.value = ''
       pollProgress()
     }
-  } catch { /* 取不到进度=没有在跑，忽略 */ }
+  } catch {
+    networkLost.value = true
+    updating.value = true
+    pollProgress() // A worker reload is not evidence that the update stopped.
+  }
 })
 const checking = ref(false)
 const checked = ref(false)
@@ -272,7 +275,10 @@ const changelogs = ref<{ver: string, date: string, summary: string}[]>([])
 const updating = ref(false)
 const updateDone = ref(false)
 const updateError = ref('')
-const progress = ref<{phase: string, total: number, done: number, msg: string, ts?: number, error?: string}>({phase: 'idle', total: 0, done: 0, msg: ''})
+const progress = ref<any>({phase: 'idle', total: 0, done: 0, msg: ''})
+const networkLost = ref(false)
+let polling = false
+let lastContact = Date.now()
 let pollTimer: ReturnType<typeof setInterval> | null = null
 // 链式更新 stale 检测：跟踪后端 progress 最近一次「有推进」的本地墙钟（用前端本地时钟，免前后端时钟不同步）。
 // 非终结相位(applying/checking/downloading)持续 STALE_MS 无推进 → 判链断，给重试（不再死等）。
@@ -350,11 +356,19 @@ async function startUpdate() {
 
 function pollProgress() {
   _lastProgKey = ''; _lastProgWall = Date.now()   // 每次挂轮询重置 stale 基准
+  if (pollTimer) clearInterval(pollTimer)
   pollTimer = setInterval(async () => {
+    if (polling) return
+    polling = true
     try {
       const p = await getProgress()
       progress.value = p
-      if (p.phase === 'done') {
+      networkLost.value = false; lastContact = Date.now()
+      if (p.phase === 'idle') {
+        updating.value = false
+        if (pollTimer) clearInterval(pollTimer)
+      }
+      if (p.phase === 'done' && !p.chain_active) {
         if (pollTimer) clearInterval(pollTimer)
         updating.value = false
         updateDone.value = true
@@ -375,7 +389,8 @@ function pollProgress() {
           updateError.value = '更新似乎已中断（续跑未推进）。系统会自动尝试续跑，可点「重试」立即从当前版本继续，或稍后刷新页面查看。'
         }
       }
-    } catch { /* continue polling */ }
+    } catch { networkLost.value = Date.now() - lastContact > 6000 }
+    finally { polling = false }
   }, 1000)
 }
 

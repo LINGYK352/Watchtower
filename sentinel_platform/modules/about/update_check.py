@@ -95,6 +95,8 @@ def remote_version(source: str = "", key: str = "", timeout: int = _REMOTE_TIMEO
     for attempt in range(max(1, retry)):
         try:
             _h = {"X-Client-Version": server_version()}   # 上报自身版本 → 分发源台阶闸据此区分新老客户端
+            from sentinel_platform.core.update_platform import request_headers
+            _h.update(request_headers())
             if key:
                 _h["X-Update-Key"] = key
             req = Request(src + "/version", headers=_h)

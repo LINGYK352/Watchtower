@@ -91,7 +91,7 @@ def _launch_updater(source_url: str, key: str, current_root: str, target_version
     import sys
     _set_progress("checking", msg="正在启动更新进程...")
     args = [sys.executable, "-m", "sentinel_platform.modules.about._updater",
-            source_url, key, current_root]
+            source_url, '__activation__', current_root]
     if target_version:
         args.append(target_version)
     if full:
@@ -130,7 +130,7 @@ def _forward_get(path: str, timeout: int = 15, retry: int = _FWD_RETRY):
     last = None
     for attempt in range(max(1, retry)):
         try:
-            req = Request(_source_url() + path, headers={"X-Update-Key": key} if key else {})
+            req = Request(_source_url() + path, headers=_updater._auth_headers(key,_project_root()))
             with urlopen(req, timeout=timeout) as r:
                 return json.loads(r.read()), ""
         except urllib.error.HTTPError as e:
@@ -152,7 +152,8 @@ class _Apply(Resource):
     def post(self):
         """触发热更新（后台执行）"""
         p = _get_progress()
-        if p.get("phase") in ("downloading", "validating", "applying"):
+        if p.get("phase") in ("downloading", "validating", "applying", "checking", "restarting"):
+            _updater.tick_chain_watchdog(_project_root())
             return ok({"started": False, "msg": "更新正在进行中"})
         key = _read_update_key()
         if not key:
@@ -280,6 +281,7 @@ class _Progress(Resource):
     @ns.doc(security=None)
     def get(self):
         """热更新进度"""
+        _updater.tick_chain_watchdog(_project_root())
         return ok(_get_progress())
 
 

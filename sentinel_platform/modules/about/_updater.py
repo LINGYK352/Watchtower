@@ -25,7 +25,8 @@ from contextlib import contextmanager
 from urllib.request import Request, urlopen
 from urllib.parse import quote
 
-PROGRESS_FILE = "/tmp/.sentinel_update_progress.json"
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+PROGRESS_FILE = os.path.join(_ROOT,'.update_stage','progress.json')
 
 
 def _log(msg: str) -> None:
@@ -67,22 +68,23 @@ def _client_version(current_root: str) -> str:
 def _auth_headers(key: str, current_root: str) -> dict:
     """构造带鉴权 key + 客户端版本头的请求头（所有向分发源的请求统一走它）。"""
     h = {"X-Client-Version": _client_version(current_root)}
+    from sentinel_platform.core.update_platform import request_headers
+    h.update(request_headers())
     if key:
         h["X-Update-Key"] = key
     return h
 
 
-def set_progress(phase: str, total: int = 0, done: int = 0, msg: str = "", error: str = ""):
-    # ts=写入墙钟：scheduler 看门狗据此判「链式卡住」(applying 停滞超 _CHAIN_STALL)、前端据此判超时给重试。
-    data = {"phase": phase, "total": total, "done": done, "msg": msg, "error": error, "ts": time.time()}
-    try:
-        tmp = PROGRESS_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, PROGRESS_FILE)
-    except Exception:
-        pass
-
+def set_progress(phase, total=0, done=0, msg='', error=''):
+    from sentinel_platform.core.update_commit import write
+    state=_read_chain_state(_ROOT)
+    data={'phase':phase,'total':total,'done':done,'msg':msg,'error':error,'ts':time.time(),
+          'current_version':_client_version(_ROOT),'target_version':state.get('target',''),
+          'hop_version':state.get('current_target',''),'hop':min(state.get('cursor',0)+1,len(state.get('steps',[]))),
+          'hops':len(state.get('steps',[])),'completed':state.get('completed',[]),
+          'resumable':state.get('schema')==2 and state.get('cursor',0)<len(state.get('steps',[])),
+          'chain_active':state.get('active',False),'run_id':state.get('id','')}
+    write(PROGRESS_FILE,data)
 
 # ============================ 一级一级（链式）更新：每级重启 + 启动自续跑状态机 ============================
 # 规则（用户要求）：157→159 攀爬时，中间的 158 **必须被完整更新且其代码确实在运行**，才允许拉取 159。
@@ -123,19 +125,9 @@ def _read_chain_state(current_root: str) -> dict:
         return {}
 
 
-def _write_chain_state(current_root: str, st: dict) -> None:
-    """原子写链路状态（一级一级更新的全量状态：hops/cursor/stage/attempts 等，跨重启持久）。
-    落在 current_root/.update_stage/.chain_state.json（bind-mount 代码目录，跨容器重启保留，
-    不能放 /tmp——容器 recreate 会清 /tmp）。"""
-    try:
-        os.makedirs(os.path.dirname(_chain_state_path(current_root)), exist_ok=True)
-        tmp = _chain_state_path(current_root) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(st, f, ensure_ascii=False)
-        os.replace(tmp, _chain_state_path(current_root))
-    except Exception:
-        pass
-
+def _write_chain_state(current_root, st):
+    from sentinel_platform.core.update_commit import write
+    write(_chain_state_path(current_root),st)
 
 def _clear_chain_state(current_root: str) -> None:
     try:
@@ -186,26 +178,19 @@ def _safe_restart_worker():
 
 
 def _restart_web():
-    """重启 web 容器/服务加载新代码（v1.21.158 根治新端点模块 404 + 播种缺失）。
-    **为何不能只靠 gunicorn --reload**：--reload 只重导入**已变更**的模块，对**新增的端点模块**
-    （如 157 的 attack_alert.py，原进程启动时该文件还不存在）不保证重跑 `configure_namespaces`
-    挂载新 Namespace → 新端点恒 404；且 `ensure_indexes()`（含 seed_builtin_templates 报告模板播种）
-    只在 `create_app()` 真启动时跑，--reload 不触发 → 空库实例更新后模板不播种。故后端 .py 变更时
-    **显式重启 web** 让 create_app 全量重跑（挂全部 Namespace + 幂等 ensure_indexes 补播种）。
-    fire-and-forget：web 重启会杀掉本 _updater 进程（若本进程在 web 容器内），故调用方须先落完成态进度。
-    网络拓扑已解耦（mihomo 独立容器，无 network_mode:service:web 共享），独立重启 web 不再连带杀
-    worker/scheduler（Exit137 铁律已随 mihomo 独立容器化解除）。
-
-    返回 True=已发起重启；False=当前环境无重启能力（如 scheduler 兜底容器：无 docker.sock 也无
-    systemd）。返 False 时代码已落地，须靠有 sock 的 web 容器路径或 compose restart 拉起后生效。"""
-    if os.path.exists("/var/run/docker.sock"):
-        subprocess.run(["docker", "restart", "docker-web-1"], timeout=60, capture_output=True)
-        return True
+    """Reload Gunicorn workers; source updates do not restart the container."""
+    import psutil,signal
+    for process in psutil.process_iter(['pid','ppid','cmdline']):
+        command=' '.join(process.info['cmdline'] or [])
+        if 'gunicorn' not in command or 'sentinel_platform.wsgi:application' not in command:continue
+        try:
+            parent=' '.join(process.parent().cmdline()) if process.parent() else ''
+            if 'gunicorn' not in parent:
+                os.kill(process.pid,signal.SIGHUP);return True
+        except (psutil.Error,OSError):continue
     if _has_systemd():
-        subprocess.run(["systemctl", "restart", "sentinel-web"], timeout=30, capture_output=True)
-        return True
-    return False   # 无 docker.sock + 无 systemd（scheduler 兜底容器）：无法重启 web，代码已就位待生效
-
+        subprocess.run(['systemctl','reload','sentinel-web'],timeout=30,check=True,capture_output=True);return True
+    return False
 
 def _recreate_containers(compose_dir: str) -> tuple:
     """compose 变更（时区挂载/cap/端口/新服务等）后重建容器应用新配置。
@@ -399,7 +384,6 @@ def _apply_restart(current_root: str, backend_changed: bool, compose_changed: bo
                     pass
                 return
         if backend_changed:
-            _safe_restart_worker()
             set_progress(phase, msg=_msg("，正在重启服务应用新代码（约 5~15 秒，期间页面可能短暂断连，稍后刷新）"))
             try:
                 _restart_web()   # create_app 全量重跑（挂全部 Namespace + ensure_indexes 补播种 + 触发链式续跑钩子）
@@ -408,7 +392,6 @@ def _apply_restart(current_root: str, backend_changed: bool, compose_changed: bo
             return
     else:
         if backend_changed:
-            _safe_restart_worker()
             set_progress(phase, msg=_msg("，正在重启服务应用新代码（约 5~15 秒，期间页面可能短暂断连，稍后刷新）"))
             restarted = False
             try:
@@ -516,11 +499,23 @@ def _apply_lock(current_root):
 
 def run_update(source_url: str, key: str, current_root: str, target_version: str = "",
                chain_hop: bool = False, chain_final: bool = False, full: bool = False):
+    if not target_version or target_version!=_client_version(current_root):
+        from . import _update_chain
+        return _update_chain.begin(__import__(__name__,fromlist=['']),source_url,key,current_root,target_version)
     with _apply_lock(current_root) as acquired:
         if not acquired:
             _log("另一个更新进程正在应用；保留其进度，不启动第二个提交")
             return
-        return _run_update_impl(source_url, key, current_root, target_version, chain_hop, chain_final, full)
+        from sentinel_platform.core.update_commit import recover
+        recover(current_root)
+        import uuid
+        _write_chain_state(current_root,{'schema':2,'id':uuid.uuid4().hex,'active':True,'kind':'rollback','source_url':source_url,
+                          'origin':_client_version(current_root),'target':target_version,'steps':[target_version],'cursor':0,'completed':[],
+                          'phase':'checking','current_target':target_version})
+        _run_update_impl(source_url,key,current_root,target_version,chain_hop=True,full=full)
+        if get_progress().get('phase')=='error':
+            state=_read_chain_state(current_root);state.update(active=False,phase='error');_write_chain_state(current_root,state);return
+    _spawn_chain_step(source_url,key,current_root)
 
 
 def _run_update_impl(source_url: str, key: str, current_root: str, target_version: str = "",
@@ -541,18 +536,29 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
         set_progress("checking", msg="正在获取更新清单..." if not is_rollback
                      else "正在获取版本 {} 清单...".format(target_version))
         headers = _auth_headers(key, current_root)
-        headers["X-Update-Protocol"] = "2"
+        headers["X-Update-Protocol"] = "3"
         if full:
             headers["X-Update-Mode"] = "full"
 
-        manifest_url = source_url + "/manifest"
-        if is_rollback:
-            manifest_url += "?version=" + target_version
-        req = Request(manifest_url, headers=headers)
-        with urlopen(req, timeout=30) as r:
-            data = json.loads(r.read())
-        remote_manifest = data.get("manifest", {})
-        remote_version = data.get("version", "") or target_version
+        from sentinel_platform.core import update_policy,update_bundle
+        from . import _update_chain
+        backward=target_version and update_policy.key(target_version)<update_policy.key(headers['X-Client-Version'])
+        policy=_update_chain.fetch(__import__(__name__,fromlist=['']),source_url,key,current_root,target_version if backward else '')
+        requested=target_version or policy['next']
+        update_policy.allow(headers['X-Client-Version'],requested,policy)
+        remote_version=requested
+        bundle=None
+        if update_policy.uses_packages(headers['X-Client-Version'],requested):
+            bundle=update_bundle.fetch_plan(source_url,headers,'web-linux-amd64',requested,headers['X-Client-Version'],_validate_release_path,full)
+            if not bundle:raise ValueError('公共包与Web专属包尚未准备，禁止降级为逐文件更新')
+            remote_manifest=bundle['inventory']
+            selected={name:item['sha256'] for package in bundle['packages'] for name,item in package['members'].items()}
+            data={'manifest':remote_manifest,'download_manifest':selected,'download_mode':bundle['mode'],
+                  'base_version':bundle['base_version'],'version':requested,'remove_manifest':bundle['removed']}
+        else:
+            with urlopen(Request(source_url+'/manifest?version='+quote(requested,safe=''),headers=headers),timeout=30) as response:data=json.load(response)
+            remote_manifest=data.get('manifest',{})
+            if data.get('version')!=requested:raise ValueError('守门员清单版本不匹配')
 
         # 方向判定：is_rollback 仅表示「带 target_version、绕过防降级守卫」，不代表方向——
         # 一级一级更新的每一跳都带 target_version（升级方向），故不能用 is_rollback 判措辞。
@@ -567,7 +573,7 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
             pass
 
         # 防降级守卫（回退/前滚绕过）
-        if not is_rollback:
+        if not is_rollback and not full:
             try:
                 from sentinel_platform.modules.about.update_check import server_version, _cmp
                 local_version = server_version()
@@ -587,6 +593,13 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
             if not os.path.isfile(fp):
                 candidates[rel] = sha
         removed = _removed_candidates(data, headers["X-Client-Version"])
+        receipt_path=os.path.join(current_root,'.update_stage','.release_receipt.json')
+        if os.path.isfile(receipt_path):
+            with open(receipt_path,encoding='utf-8') as receipt_file:owned=json.load(receipt_file)
+            if owned.get('version')==headers['X-Client-Version']:
+                for rel,sha in owned.get('files',{}).items():
+                    if rel not in remote_manifest:
+                        _validate_release_path(rel,sha);data.setdefault('remove_manifest',{})[rel]=sha;removed.append(rel)
         removed = sorted(set(removed + _frontend_removed(current_root, remote_manifest)))
         for rel in removed:
             _release_file(current_root, rel)
@@ -595,7 +608,7 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
                          "增量" if data.get("download_mode") == "delta" else "完整",
                          len(candidates), len(remote_manifest), len(removed)))
         local_manifest = {}
-        for rel in candidates:
+        for rel in ([] if bundle and not full else candidates):
             fp = _release_file(current_root, rel)
             if os.path.isfile(fp):
                 h = hashlib.sha256()
@@ -604,7 +617,16 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
                         h.update(chunk)
                 local_manifest[rel] = h.hexdigest()
 
-        changed = [r for r, h in candidates.items() if local_manifest.get(r) != h]
+        if bundle:
+            packaged={n for p in bundle['packages'] for n in p['members']}
+            if not set(candidates).issubset(packaged):raise ValueError('未变动程序文件丢失或损坏，请修复基板安装；禁止临时逐文件拉取')
+            if full:
+                for rel,sha in remote_manifest.items():
+                    if rel not in packaged:
+                        fp=_release_file(current_root,rel)
+                        if not os.path.isfile(fp) or update_bundle.sha256(fp)!=sha:raise ValueError('完整核验发现未变动基板文件损坏，请修复安装：'+rel)
+            changed=list(candidates)
+        else:changed = [r for r, h in candidates.items() if local_manifest.get(r) != h]
         if not changed and not removed:
             set_progress("done", msg="已是最新，无需更新" if not is_rollback
                          else "本地已与版本 {} 一致".format(target_version))
@@ -647,7 +669,23 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
             return h.hexdigest()
 
         staged = []   # [(rel, staged_abs)]
-        for i, rel in enumerate(changed):
+        if bundle:
+            available = {n for p in bundle['packages'] for n in p['members']}
+            if not set(changed).issubset(available):
+                bundle = update_bundle.fetch_plan(source_url, headers, 'web-linux-amd64', remote_version,
+                                                   headers['X-Client-Version'], _validate_release_path, True)
+                if not bundle:raise ValueError('Full repair bundle unavailable')
+            expanded = sum(bundle['inventory_bytes'][n] for n in changed)
+            if shutil.disk_usage(stage_dir).free < expanded * 2 + sum(p['bytes'] for p in bundle['packages']) + 128*1024**2:
+                raise ValueError('Insufficient update staging and rollback space')
+            def package_progress(done, size):
+                set_progress('downloading', total=size, done=done, msg='下载公共包与Web专属包')
+            extracted = update_bundle.stage(bundle, source_url, headers, os.path.join(current_root,'.update_stage','package-cache'),
+                                            stage_dir, changed, package_progress)
+            for rel, spath in extracted.items():
+                if rel.endswith('.py'):py_compile.compile(spath, doraise=True)
+                staged.append((rel, spath))
+        for i, rel in enumerate([] if bundle else changed):
             fname = os.path.basename(rel)
             set_progress("downloading", total=total, done=i,
                          msg="下载校验 {}/{} {}".format(i + 1, total, fname))
@@ -702,58 +740,12 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
 
         # ---- Phase 2：全部通过 → 一次性提交（备份旧文件 + 原子替换）；提交中任一失败则回滚已替换的。----
         set_progress("downloading", total=total, done=total, msg="校验通过，正在提交 {} 个文件…".format(total))
-        committed = []   # [(dst, had_old)]
-        deleted = []
-        try:
-            for rel, spath in staged:
-                dst = _release_file(current_root, rel)
-                had_old = os.path.isfile(dst)
-                if had_old:
-                    bpath = os.path.join(backup_dir, rel)
-                    os.makedirs(os.path.dirname(bpath), exist_ok=True)
-                    shutil.copy2(dst, bpath)
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                os.replace(spath, dst)                 # 原子替换（staging→正式）
-                committed.append((rel, dst, had_old))
-                if "/bin/" in rel and not rel.endswith((".py", ".txt", ".json", ".yaml", ".yml")):
-                    os.chmod(dst, 0o755)
-            for rel in removed:
-                dst = _release_file(current_root, rel)
-                if os.path.isfile(dst):
-                    bpath = os.path.join(backup_dir, rel)
-                    os.makedirs(os.path.dirname(bpath), exist_ok=True)
-                    # 原子移入备份，删除失败也必须撤销本轮代码替换。
-                    os.replace(dst, bpath)
-                    deleted.append((rel, dst, bpath))
-        except Exception as exc:
-            # 提交阶段失败（磁盘满/权限等）→ 回滚已替换文件到备份，恢复到更新前状态
-            restore_errors = []
-            for rel, dst, bpath in reversed(deleted):
-                try:
-                    os.replace(bpath, dst)
-                except OSError:
-                    restore_errors.append(rel)
-            for rel, dst, had_old in reversed(committed):
-                try:
-                    if had_old:
-                        shutil.copy2(os.path.join(backup_dir, rel), dst)
-                    elif os.path.isfile(dst):
-                        os.remove(dst)   # 更新前不存在=新增文件，回滚即删除
-                except OSError:
-                    restore_errors.append(rel)
-            _cleanup_stage()
-            set_progress("error", total=total, done=total,
-                         error="提交替换/清理失败: {}。{}（备份见 {}）。".format(
-                             str(exc)[:120], "恢复失败: " + ", ".join(restore_errors) if restore_errors else "已恢复更新前文件",
-                             os.path.relpath(backup_dir, current_root)))
-            return
+        from sentinel_platform.core.update_commit import commit
+        removal_plan = {rel: data.get('remove_manifest', {}).get(rel, '') for rel in removed}
+        deleted, protected = commit(current_root, dict(staged), removal_plan, backup_dir, remote_version,remote_manifest)
         _cleanup_stage()
-
         pruned = len(deleted)
-
-        if remote_version:
-            with open(os.path.join(current_root, "version.txt"), "w", encoding="utf-8") as f:
-                f.write(remote_version)
+        if protected:_log('保留用户修改的旧文件: ' + ', '.join(protected))
 
         backend_changed = any(rel.endswith(".py") and not rel.startswith("docker/") for rel in changed + removed)
         compose_changed = any(rel.endswith(("docker-compose.yml", "nginx.conf")) for rel in changed + removed)
@@ -775,7 +767,9 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
                     _write_chain_state(current_root, st)
             except Exception:
                 pass
-            _release_claim(current_root, "hop-" + remote_version)
+            st=_read_chain_state(current_root)
+            st.update(phase='await_running',current_target=remote_version,frontend_sha=remote_manifest.get('docker/frontend/index.html',''))
+            _write_chain_state(current_root,st)
             set_progress("applying", total=total, done=total,
                          msg="第 {} 级已就绪，正在重启应用该级代码…".format(remote_version)
                              + ("，清理旧产物 {}个".format(pruned) if pruned else ""))
@@ -786,7 +780,7 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
         # 链式单跳收尾：**重启前**清链状态（重启杀本进程，返回后代码不可靠执行）。清链后重启，
         # 新 web 起来 resume 钩子见非 active 立即返回，不重复派发；version 已=最新，看门狗见 done 也不兜底。
         if chain_final:
-            _finish_chain(current_root)
+            raise ValueError('旧单跳收尾参数已经停用，必须通过运行确认收尾')
         set_progress("done", total=total, done=total,
                      msg=("已回退到 {}".format(remote_version) if going_back
                           else "更新完成！已升级到 {}".format(remote_version))
@@ -806,344 +800,28 @@ def _run_update_impl(source_url: str, key: str, current_root: str, target_versio
 
 # ============================ 一级一级（链式）更新驱动 ============================
 
-def _fetch_ordered_versions(source_url: str, key: str, current_root: str = "") -> list:
-    """向分发源 /versions 取版本仓已归档的历史版本列表（升序）。返回 ["v1.21.157", ...]。
-    只含 version_store 已归档 + 高于回退下限 floor 的版本；最新快照版另由 /version 给出。
-    取不到/不支持返回空列表（调用方降级为直接跳到最新）。"""
-    try:
-        req = Request(source_url + "/versions", headers=_auth_headers(key, current_root))
-        with urlopen(req, timeout=30) as r:
-            data = json.loads(r.read())
-        vers = [v.get("version", "") for v in (data.get("versions") or []) if v.get("version")]
-        # /versions 未必有序：用 update_check._parse 数值排序（升序），预发布号 -N < 正式版
-        try:
-            from sentinel_platform.modules.about.update_check import _parse
-            vers.sort(key=_parse)
-        except Exception:
-            vers.sort()
-        return vers
-    except Exception:
-        return []
-
-
-def _plan_chain(source_url: str, key: str, current_root: str) -> tuple:
-    """规划一级一级更新的跳序：从「本地当前版本」到「分发源最新版」逐级列出中间版本。
-    返回 (hops, latest, err)：hops=需依次更新到的版本列表（升序，含最终版），latest=最新快照版。
-    hops 为空 = 已最新或无法规划。"""
-    from sentinel_platform.modules.about.update_check import server_version, _cmp
-    local = server_version()
-    # 最新快照版
-    try:
-        req = Request(source_url + "/version", headers=_auth_headers(key, current_root))
-        with urlopen(req, timeout=15) as r:
-            latest = str((json.loads(r.read()) or {}).get("version", "") or "").strip()
-    except Exception as e:
-        return [], "", "无法获取最新版本：{}".format(str(e)[:80])
-    if not latest or _cmp(latest, local) <= 0:
-        return [], latest, ""     # 已是最新
-    # 版本仓已归档的中间版本（升序），只取「严格高于本地、且 <= 最新」的
-    archived = _fetch_ordered_versions(source_url, key, current_root)
-    hops = [v for v in archived if _cmp(v, local) > 0 and _cmp(v, latest) < 0]
-    hops.append(latest)           # 最终版（最新快照）永远作为最后一跳（走实时 manifest，无需归档）
-    # 去重保序（防 latest 恰好也在 archived 里重复）
-    seen, uniq = set(), []
-    for v in hops:
-        if v not in seen:
-            seen.add(v)
-            uniq.append(v)
-    return uniq, latest, ""
-
-
-def _chain_next_hop(source_url: str, key: str, current_root: str) -> tuple:
-    """算出「本次要更新到的目标」——**单跳直达最新版**（v1.21.160 起不再逐级落地中间版）。
-    返回 (target_arg, display_ver, is_latest, err)：
-      target_arg  = 传给 run_update 的 target_version（最新版已归档=版本号走版本仓精确取；
-                    未归档=""走实时 manifest 拉全量）。
-      display_ver = 目标版本号（进度显示 + 推进判定用）。为空=已是最新，无需再更。
-      is_latest   = 恒 True（单跳目标即最新，无更高级）。
-      err         = 非空=规划失败（网络等）。
-
-    **为何单跳而非逐级**（根治卡死）：原「逐级落地中间版」靠每跳重启 web → 新级启动钩子派发下一跳的
-    跨重启接力，续跑子进程会被 `docker restart web` 连带杀死 + 认领锁跨重启残留 → 静默死锁（实测卡在
-    158→159）。改单跳后：一次 run_update 直达最新、落 done、无接力=无卡死点。157+ 客户端过台阶闸后
-    `/version` 返真最新、拉裸 /manifest 得最新全量（Range 续传扛大文件），单跳在服务端走得通。
-
-    **台阶闸仍自然衔接**：<157 客户端问 /version 被闸返 157 → 单跳到 157；落地 157（过闸）→ 再问
-    /version 得最新 → 单跳 157→最新。两段都是单跳，天然无接力。archived 仅用于判 latest 是否已归档
-    （决定版本仓精确取 vs 实时 manifest），不再用于挑中间版。"""
-    from sentinel_platform.modules.about.update_check import server_version, _cmp
-    local = server_version()
-    try:
-        req = Request(source_url + "/version", headers=_auth_headers(key, current_root))
-        with urlopen(req, timeout=15) as r:
-            latest = str((json.loads(r.read()) or {}).get("version", "") or "").strip()
-    except Exception as e:
-        return "", "", False, "无法获取最新版本：{}".format(str(e)[:80])
-    if not latest or _cmp(latest, local) <= 0:
-        return "", "", True, ""     # 已是最新，无需更新
-    # 单跳直达最新：已归档→版本仓精确取（target=版本号）；未归档→""走实时 manifest（display 仍报 latest）
-    archived = _fetch_ordered_versions(source_url, key, current_root)
-    if latest in archived:
-        return latest, latest, True, ""
-    return "", latest, True, ""
-
-
-def _claim_path(current_root: str, tag: str) -> str:
-    safe = "".join(c if (c.isalnum() or c in ".-_") else "_" for c in tag)
-    return os.path.join(os.path.dirname(_chain_state_path(current_root)), ".claim." + safe)
-
-
-def _claim_stale(p: str) -> bool:
-    """锁文件是否为陈旧残留（内含 ts 距今超 _CLAIM_TTL）。读不到 ts/解析失败 → 保守判非陈旧（不误清活锁）。
-    治「子进程建了锁后被 docker restart 连带杀死→锁永留→claim 永失败→链永久无人推进」死锁。"""
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            ts = float((json.loads(f.read()) or {}).get("ts", 0))
-        return ts > 0 and (time.time() - ts) > _CLAIM_TTL
-    except Exception:
-        return False
-
-
-def _claim_once(current_root: str, tag: str) -> bool:
-    """原子认领（多 gunicorn worker 单飞）：O_CREAT|O_EXCL 只允许一个成功。异常不阻断（宁重复不卡死）。
-    **锁带时效**：锁文件写 {pid,ts}；建锁冲突时若旧锁已陈旧（超 _CLAIM_TTL，判为被杀进程残留）→ 删旧锁
-    重试建一次（自愈）；未过期=真有活进程在跑，返 False。跨重启持久锁（bind-mount）靠此不再永久死锁。"""
-    p = _claim_path(current_root, tag)
-    try:
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        try:
-            fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-        except FileExistsError:
-            if not _claim_stale(p):
-                return False                 # 锁新鲜：真有活进程在推进本级，不重复派发
-            try:
-                os.remove(p)                 # 陈旧残留（被杀进程遗留）→ 清掉自愈重建
-            except OSError:
-                return False
-            fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(json.dumps({"pid": os.getpid(), "ts": time.time()}))
-        return True
-    except FileExistsError:
-        return False                         # 自愈重建时被别的 worker 抢先（正常竞态）
-    except OSError:
-        return True                          # 其他 IO 异常 fail-open（宁重复不卡死，保留原语义）
-
-
-def _release_claim(current_root: str, tag: str) -> None:
-    try:
-        os.remove(_claim_path(current_root, tag))
-    except OSError:
-        pass
-
-
-def _finish_chain(current_root: str) -> None:
-    """结束链路：清链路状态 + 清所有认领锁（到达最新/失败/新链开始时调）。"""
-    _clear_chain_state(current_root)
-    d = os.path.dirname(_chain_state_path(current_root))
-    try:
-        for fn in os.listdir(d):
-            if fn.startswith(".claim."):
-                try:
-                    os.remove(os.path.join(d, fn))
-                except OSError:
-                    pass
-    except OSError:
-        pass
-
-
-def _spawn_chain_step(source_url: str, key: str, current_root: str) -> None:
-    """派发一个独立子进程执行「下一级」（哨兵 __chain_step__）。boot 钩子用——不阻塞 web 启动
-    （下载/网络都在子进程里），detached 免疫 --reload。"""
+def _spawn_chain_step(source_url, key, current_root):
     import sys
-    args = [sys.executable, "-m", "sentinel_platform.modules.about._updater",
-            source_url, key, current_root, "__chain_step__"]
-    kwargs = {"cwd": current_root, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
-    if os.name == "posix":
-        kwargs["start_new_session"] = True
-    else:
-        kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0)
-    subprocess.Popen(args, **kwargs)
+    args=[sys.executable,'-m','sentinel_platform.modules.about._updater',source_url,'__activation__',current_root,'__chain_step__']
+    kwargs={'cwd':current_root,'stdout':subprocess.DEVNULL,'stderr':subprocess.DEVNULL}
+    if os.name=='posix':kwargs['start_new_session']=True
+    else:kwargs['creationflags']=getattr(subprocess,'DETACHED_PROCESS',0)
+    subprocess.Popen(args,**kwargs)
 
+def run_chain_update(source_url,key,current_root):
+    from . import _update_chain
+    return _update_chain.begin(__import__(__name__,fromlist=['']),source_url,key,current_root)
 
-def _chain_apply_next_step(source_url: str, key: str, current_root: str) -> None:
-    """更新到最新版：算目标(单跳直达最新) → 认领(单飞) → run_update 下载/校验/提交/重启。
-    v1.21.160 起单跳：目标恒为最新版(is_latest=True)，用 chain_hop=False(terminal) 让 run_update
-    自己落 "done" 收尾——**不再依赖「重启后续跑落 done」**，彻底摆脱跨重启接力的卡死根因。
-    仍由 run_chain_update 入口 + resume_chain_if_pending 续跑 + scheduler 看门狗共同驱动（幂等：
-    单跳成功即 done+_finish_chain；中途被杀则重启后/看门狗兜底再单跳一次，锁 TTL 自愈防重复）。"""
-    st = _read_chain_state(current_root)
-    if not st.get("active"):
-        return   # 链路未激活（普通重启，非攀爬中）——不干活
-    if int(st.get("hops_done", 0)) >= _CHAIN_MAX_HOPS:
-        set_progress("error", error="一级一级更新超过最大级数（{}），已停止（疑似循环）".format(_CHAIN_MAX_HOPS))
-        _finish_chain(current_root)
-        return
-    from sentinel_platform.modules.about.update_check import server_version
-    local = server_version()
-    target_arg, display, is_latest, err = _chain_next_hop(source_url, key, current_root)
-    if err:
-        # 规划失败（网络抖动）：落 error 让前端展示；不清 active，但释放本地版本的 spawn 认领，
-        # 使下一次启动/用户重试可再派发（避免 spawn 锁悬挂堵住重试）。
-        set_progress("error", error=err)
-        _release_claim(current_root, "spawn-" + local)
-        return
-    if not display:
-        # 已是最新 → 完成整条链
-        set_progress("done", msg="一级一级更新完成，已升级到最新版本 {}".format(local))
-        _finish_chain(current_root)
-        return
-    # 推进/重试安全网：上一级目标与本级相同且本地版本没推进 → 上级重启后没生效（异常）。累计重试超上限则停。
-    if st.get("last_target") == display and st.get("last_local") == local:
-        retry = int(st.get("retry", 0)) + 1
-        if retry > _CHAIN_MAX_RETRY:
-            set_progress("error", error="升级到 {} 反复重启仍未生效（重试 {} 次），已停止一级一级更新".format(display, retry))
-            _finish_chain(current_root)
-            return
-    else:
-        retry = 0
-    # 单飞：多 worker 派发的多个 step 子进程里，只有一个真正下载提交本级（按目标版本认领）
-    if not _claim_once(current_root, "hop-" + display):
-        return
-    st.update({"hops_done": int(st.get("hops_done", 0)) + 1, "last_target": display,
-               "last_local": local, "retry": retry, "source_url": source_url})
-    _write_chain_state(current_root, st)
-    set_progress("checking", msg="正在更新到 {} …".format(display))
-    # 单跳直达最新：is_latest 恒 True → chain_final=True，run_update 落 "done" 前先清链状态（在重启杀本
-    # 进程之前，不依赖「返回后清」也不依赖「重启后续跑」——重启会杀本进程，返回后的代码执行不可靠）。
-    run_update(source_url, key, current_root, target_version=target_arg,
-               chain_hop=not is_latest, chain_final=is_latest)
-    # 走到这=run_update 未重启即返回（error/无变更）。error 时释放本级认领供重试/看门狗再来一次；
-    # 无变更(done 但没重启)时清链收尾（本地已=最新，无需再动）。
-    ph = get_progress().get("phase")
-    if ph == "error":
-        _release_claim(current_root, "hop-" + display)
-    elif is_latest and ph == "done":
-        _finish_chain(current_root)
+def _chain_apply_next_step(source_url,key,current_root):
+    from . import _update_chain
+    return _update_chain.step(__import__(__name__,fromlist=['']),source_url,key,current_root)
 
+def resume_chain_if_pending(current_root=''):
+    from . import _update_chain
+    return _update_chain.pending(__import__(__name__,fromlist=['']),current_root)
 
-def run_chain_update(source_url: str, key: str, current_root: str):
-    """更新入口（用户点「立即更新」→ /apply 传哨兵 __chain__ 触发本函数，独立子进程）。
-
-    **v1.21.160 起：单跳直达最新版**（不再逐级落地中间版）。初始化链状态(active) 后调
-    _chain_apply_next_step 一步到位——下载→校验→提交→写 version.txt→落 "done"（重启前清链）→重启。
-    **为何改单跳**（根治卡死）：原「逐级 156→157→158→159、每级重启后由启动钩子派发下一跳」靠跨重启
-    接力，续跑子进程会被 docker restart web 连带杀死 + 认领锁跨重启残留 → 静默死锁（实测卡 158→159）。
-    单跳无接力=无卡死点；157 修复后下载器（Range 续传+截断检测）能扛最新版大文件，中间站不再需要。
-    **台阶闸仍在 157**：<157 客户端被闸先单跳到 157（含本修复），过闸后再单跳到最新——两段皆单跳。
-    resume_chain_if_pending + scheduler 看门狗仍保留：作为「单跳中途被杀→重启后/超时兜底再单跳一次」
-    的自愈（锁 TTL 防重复），非推进主路径。"""
-    _finish_chain(current_root)   # 清上次未完成的链/残留认领锁，开新链
-    _write_chain_state(current_root, {"active": True, "source_url": source_url, "hops_done": 0,
-                                      "last_target": "", "last_local": "", "retry": 0})
-    _chain_apply_next_step(source_url, key, current_root)
-
-
-def resume_chain_if_pending(current_root: str = "") -> None:
-    """**启动续跑钩子**——每次 web 启动（create_app 跑到底）时调，是「本级代码确定完整运行」的锚点。
-    链路 active 时，派发独立子进程应用下一级；到达最新由子进程落 "done" 结束。
-
-    非攀爬中（无 active 状态）= 立即返回，普通重启零副作用。不做网络请求（放子进程里做），不阻塞启动。
-    多 gunicorn worker 各调本钩子 → 按本地版本 spawn 认领单飞，只一个真正派发。"""
-    if not current_root:
-        current_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    st = _read_chain_state(current_root)
-    if not st.get("active"):
-        return
-    try:
-        from sentinel_platform.modules.system import activation
-        key = activation.read_key()
-    except Exception:
-        key = ""
-    if not key:
-        set_progress("error", error="未激活，一级一级更新已中断，请激活系统后重新点击更新")
-        _finish_chain(current_root)
-        return
-    source_url = (st.get("source_url") or "").strip()
-    if not source_url:
-        try:
-            from sentinel_platform.core import get_config
-            source_url = (get_config().section("UPDATE", "SOURCE_URL", default="") or "").strip().rstrip("/")
-        except Exception:
-            source_url = ""
-        source_url = source_url or "https://watchtowers.info"
-    # 按「本地版本」单飞派发：本级只派发一次（多 worker 竞争，一个胜出）；下一级重启后本地版本变，
-    # 新 tag 再派发。spawn 锁悬挂由 _chain_apply_next_step 的 error 分支释放，不阻塞重试。
-    try:
-        from sentinel_platform.modules.about.update_check import server_version
-        local = server_version()
-    except Exception:
-        local = "unknown"
-    if not _claim_once(current_root, "spawn-" + local):
-        return
-    _spawn_chain_step(source_url, key, current_root)
-
-
-def _sweep_stale_claims(current_root: str) -> int:
-    """清理所有陈旧认领锁（持有超 _CLAIM_TTL，判为被杀进程残留）。返回清理数。
-    watchdog 兜底重派前调，解除「子进程被 docker restart 连带杀死→锁永留→claim 永失败」死锁。"""
-    d = os.path.dirname(_chain_state_path(current_root))
-    swept = 0
-    try:
-        for fn in os.listdir(d):
-            if not fn.startswith(".claim."):
-                continue
-            p = os.path.join(d, fn)
-            if _claim_stale(p):
-                try:
-                    os.remove(p)
-                    swept += 1
-                except OSError:
-                    pass
-    except OSError:
-        pass
-    return swept
-
-
-def tick_chain_watchdog(current_root: str = "") -> dict:
-    """**链式更新看门狗**——scheduler 每 tick 调（独立容器，不随 web 重启，天然是兜底锚点）。
-
-    治「续跑子进程被 docker restart web 连带杀死 → 没人推进 → progress 永停 applying」死锁：
-    链仍 active 且 progress 停在非终结相位、ts 停滞超 _CHAIN_STALL → 清陈旧锁 + 兜底重派下一跳。
-    全程 best-effort（任一步异常静默返回），非攀爬中零副作用（不联网、不写盘）。
-
-    返回摘要 dict（供 scheduler tick 汇总；{"active":False} = 未在攀爬）。"""
-    if not current_root:
-        current_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    st = _read_chain_state(current_root)
-    if not st.get("active"):
-        return {"active": False}
-    prog = get_progress()
-    phase = prog.get("phase", "")
-    if phase in ("done", "error"):
-        return {"active": True, "phase": phase, "action": "none"}   # 链正常收尾/已报错，不干预
-    # 非终结相位（applying/checking/downloading）停滞判定：ts 距今超 _CHAIN_STALL = 本跳断了。
-    # downloading 有 done/total 在推进则不算停滞（大文件慢传正常）——只有 ts 长时间不变才兜底。
-    age = time.time() - float(prog.get("ts", 0) or 0)
-    if age < _CHAIN_STALL:
-        return {"active": True, "phase": phase, "stalled": False}
-    # —— 判为卡住：清陈旧锁 + 兜底重派下一跳（fresh 读 key/source_url，同 resume_chain_if_pending）——
-    swept = _sweep_stale_claims(current_root)
-    try:
-        from sentinel_platform.modules.system import activation
-        key = activation.read_key()
-    except Exception:
-        key = ""
-    if not key:
-        return {"active": True, "phase": phase, "stalled": True, "action": "no_key"}
-    source_url = (st.get("source_url") or "").strip()
-    if not source_url:
-        try:
-            from sentinel_platform.core import get_config
-            source_url = (get_config().section("UPDATE", "SOURCE_URL", default="") or "").strip().rstrip("/")
-        except Exception:
-            source_url = ""
-        source_url = source_url or "https://watchtowers.info"
-    _log("chain watchdog: 链式更新停滞 {:.0f}s(phase={})，清陈旧锁 {} 个后兜底重派下一跳".format(age, phase, swept))
-    set_progress("checking", msg="检测到更新停滞，正在自动续跑下一级…")
-    _spawn_chain_step(source_url, key, current_root)
-    return {"active": True, "phase": phase, "stalled": True, "action": "respawn", "swept": swept}
-
+def tick_chain_watchdog(current_root=''):
+    return resume_chain_if_pending(current_root)
 
 if __name__ == "__main__":
     import sys
@@ -1152,6 +830,9 @@ if __name__ == "__main__":
         sys.exit(2)
     _source_url = sys.argv[1]
     _key = sys.argv[2]
+    if _key=='__activation__':
+        from sentinel_platform.modules.system import activation
+        _key=activation.read_key()
     _current_root = sys.argv[3]
     _target = sys.argv[4] if len(sys.argv) > 4 else ""
     # 哨兵：__chain__=一级一级更新入口（从当前版逐级升到最新）；__chain_step__=启动续跑派发的「下一级」；

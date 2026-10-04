@@ -1,4 +1,5 @@
 <template>
+  <a-button v-if="!showModal && (progress.chain_active || progress.resumable || networkLost)" class="update-status-pill" @click="showModal = true">{{ translate('ui.update_status') }} · {{ progress.hop_version || progress.target_version || '' }}</a-button>
   <a-modal :open="showModal" :closable="true" :maskClosable="false" :footer="null" centered width="500px" @cancel="dismiss">
     <div class="update-wrap">
       <div class="update-header">
@@ -17,11 +18,7 @@
         </div>
       </div>
 
-      <!-- Progress -->
-      <div v-if="updating" class="update-progress">
-        <a-progress :percent="percent" :status="progressStatus" size="small" />
-        <p class="progress-msg">{{ progressMsg }}</p>
-      </div>
+      <UpdateProgressPanel v-if="updating || progress.resumable" :progress="progress" :network-lost="networkLost" @resume="startUpdate" />
 
       <!-- Actions -->
       <div class="update-actions" v-if="!updating && !updateDone && !updateError">
@@ -34,7 +31,7 @@
       </div>
       <div v-if="updateError" class="update-error">
         <p style="color:#f85149;margin-bottom:8px">{{ translate('ui.m_4f2e8a8d4cb3') }}{{ updateError }}</p>
-        <a-button block @click="resetState">{{ translate('ui.m_b8784c8dd563') }}</a-button>
+        <a-button block @click="startUpdate">{{ translate('ui.update_resume') }}</a-button>
       </div>
     </div>
   </a-modal>
@@ -44,6 +41,7 @@
 import { t as translate } from '../i18n'
 
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import UpdateProgressPanel from './UpdateProgressPanel.vue'
 import { APP_VERSION } from '../config/brand'
 import { request } from '../api/request'
 import { fetchServerVersion } from '../composables/useServerVersion'
@@ -55,7 +53,7 @@ const changelogs = ref<{ver: string, date: string, summary: string}[]>([])
 const updating = ref(false)
 const updateDone = ref(false)
 const updateError = ref('')
-const progress = ref<{phase: string, total: number, done: number, msg: string}>({phase: 'idle', total: 0, done: 0, msg: ''})
+const progress = ref<any>({phase: 'idle', total: 0, done: 0, msg: ''})
 
 const percent = computed(() => {
   if (!progress.value.total) return prevPercent.value  // total=0 时保持上次进度，不回退到 0
@@ -76,6 +74,9 @@ const prevMsg = ref('')
 const DISMISS_KEY = 'update_dismissed_ver'
 const CHECK_INTERVAL = 1 * 3600 * 1000 // 1 hour (also serves as activation heartbeat)
 let timer: ReturnType<typeof setInterval> | null = null
+const networkLost = ref(false)
+let polling = false
+let statusTimer: ReturnType<typeof setInterval> | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let _unauthorizedConfirmed = false  // 防激活后竞态误弹：首次 unauthorized 延迟重试确认
 
@@ -163,11 +164,15 @@ async function startUpdate() {
 }
 
 function pollProgress() {
+  if (pollTimer) clearInterval(pollTimer)
   pollTimer = setInterval(async () => {
+    if (polling) return
+    polling = true
     try {
       const p = await request<any>('/api/about/progress')
       progress.value = p
-      if (p.phase === 'done') {
+      networkLost.value = false
+      if (p.phase === 'done' && !p.chain_active) {
         if (pollTimer) clearInterval(pollTimer)
         updating.value = false
         updateDone.value = true
@@ -177,18 +182,31 @@ function pollProgress() {
         updating.value = false
         updateError.value = p.error || '未知错误'
       }
-    } catch { /* continue polling */ }
+    } catch { networkLost.value = true }
+    finally { polling = false }
   }, 1000)
 }
 
 function reload() { window.location.reload() }
 function resetState() { updating.value = false; updateError.value = ''; updateDone.value = false }
 
+async function restoreStatus() {
+  if (updating.value) return
+  try {
+    const p = await request<any>('/api/about/progress')
+    progress.value = p; networkLost.value = false
+    if (p.chain_active || ['checking','downloading','validating','applying','restarting'].includes(p.phase)) { updating.value = true; pollProgress() }
+    else if (p.resumable) updateError.value = p.error || translate('ui.update_paused')
+  } catch { if (progress.value.chain_active || progress.value.resumable) networkLost.value = true }
+}
 onMounted(() => {
+  restoreStatus()
+  statusTimer = setInterval(restoreStatus, 10000)
   setTimeout(checkUpdate, 15000)  // 首次心跳延迟 15 秒（给激活流程写入 key 的时间窗口）
   timer = setInterval(checkUpdate, CHECK_INTERVAL)
 })
 onUnmounted(() => {
+  if (statusTimer) clearInterval(statusTimer)
   if (timer) clearInterval(timer)
   if (pollTimer) clearInterval(pollTimer)
 })
@@ -197,6 +215,7 @@ defineExpose({ checkUpdate })
 </script>
 
 <style scoped>
+.update-status-pill { position: fixed; bottom: 24px; right: 28px; z-index: 1000; box-shadow: var(--dt-shadow); }
 .update-wrap { padding: 8px 0; }
 .update-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px }
 .update-header h2 { font-size: 18px; font-weight: 700; margin: 0; color: var(--dt-text, #1f2328) }

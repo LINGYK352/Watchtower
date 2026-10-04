@@ -111,4 +111,8 @@ def create_app() -> Any:
     _mount_namespaces(api)
     api.init_app(app)            # 挂载后再 init，确保 Namespace 都进 swagger
     install_gateway(app)         # 网关最后装（before_request）
+    from pathlib import Path
+    from .endpoints.meta import _BOOT_UPDATE_VERSION
+    from sentinel_platform.modules.about._update_chain import runtime_ready
+    runtime_ready(Path(__file__).resolve().parents[2],_BOOT_UPDATE_VERSION)
     return app
