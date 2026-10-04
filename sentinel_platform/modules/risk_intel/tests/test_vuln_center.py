@@ -118,6 +118,11 @@ class _Coll:
             self.docs.append(t)
         if t is not None:
             t.update(update.get("$set") or {})
+            for key,value in (update.get('$addToSet') or {}).items():
+                values=value.get('$each',[]) if isinstance(value,dict) else [value]
+                current=t.setdefault(key,[])
+                current.extend(item for item in values if item not in current)
+            for key,value in (update.get('$inc') or {}).items():t[key]=t.get(key,0)+value
             for key, value in (update.get("$min") or {}).items():
                 if key not in t or value < t[key]:
                     t[key] = value
@@ -155,6 +160,13 @@ def _http_call(url, status_code=200, body="x" * 60, **extra):
     res = {"status_code": status_code, "body": body}
     res.update(extra)
     return {"name": "http_request", "arguments": {"url": url}, "result": _j.dumps(res)}
+
+def _scanner_call(url):
+    return {'name':'run_npoc','arguments':{'target':url},'result':{'count':1,'findings':[{'target':url,'fixture':'owned-positive'}]}}
+
+def _sqli_calls(url):
+    return [_http_call(url+'?id=1',200,'owned normal response '*4),
+            _http_call(url+'?id=1%27',200,'You have an error in your SQL syntax near owned input; MySQL database error '*2)]
 
 
 class VulnCenterTest(unittest.TestCase):
@@ -302,7 +314,7 @@ class VulnCenterTest(unittest.TestCase):
         im = self._impl()
         f = {"vuln_type": "SQL注入", "target": "http://t.com/api/x",
              "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-             "tool_log": [_http_call("http://t.com/api/x", 200, "database error near line 1" * 3)]}
+             "tool_log": _sqli_calls("http://t.com/api/x")}
         r = im.record_finding(f)
         self.assertTrue(r["ok"])
         self.assertTrue(r["verified"])
@@ -345,9 +357,8 @@ class VulnCenterTest(unittest.TestCase):
         self.assertFalse(r2["ok"])
 
     # —— 幂等 + lead 升级 ——
-    def test_first_seen_and_scheme_b_independent(self):
-        """方案B（用户设计）：同资产+同接口+同类型不再去重 skip，每次都 insert 独立条目；
-        首次 first_seen=True、后续 first_seen=False（重复发现）。不再有 upgraded/dup skip。"""
+    def test_first_seen_and_cross_session_identity(self):
+        """当前契约：同端点同类型一条，保留来源会话；不同端点仍是独立首次发现。"""
         from sentinel_platform.core.db import get_repo
         from sentinel_platform.modules.risk_intel.vuln_center import _oid
         im = self._impl()
@@ -358,11 +369,12 @@ class VulnCenterTest(unittest.TestCase):
         self.assertFalse(r1.get("dup"))                  # 方案B不 skip
         d1 = coll.find_one({"_id": _oid(r1["id"])})
         self.assertTrue(d1.get("first_seen"))            # 首次发现（未命中同 key）
-        # 同 key 再报 → 独立新条，first_seen=False（重复发现）
+        # 同 key 再报 → 同一规范记录，追加来源会话。
         r2 = im.record_finding({"session_id": "session2", "vuln_type": "SQL注入", "target": tgt, "cvss_vector": vec, "tool_log": []})
-        self.assertNotEqual(r1["id"], r2["id"])          # 独立成条，非同一条
+        self.assertEqual(r1["id"], r2["id"])
         d2 = coll.find_one({"_id": _oid(r2["id"])})
-        self.assertFalse(d2.get("first_seen"))           # 重复发现
+        self.assertTrue(d2.get("first_seen"))
+        self.assertEqual(set(d2['session_ids']),{'session1','session2'})
         # 不同接口（path 不同）→ 又是首次发现（去重键粒度=资产+接口+类型）
         r3 = im.record_finding({"vuln_type": "SQL注入", "target": "http://t.com/api/y",
                                 "cvss_vector": vec, "tool_log": []})
@@ -379,7 +391,7 @@ class VulnCenterTest(unittest.TestCase):
             "```bash\ncurl http://t.com/api/x\n```\n"
         )
         r = im.record_finding({"md_text": md,
-                               "tool_log": [_http_call("http://t.com/api/x", 200, "sql error" * 20)]})
+                               "tool_log": _sqli_calls("http://t.com/api/x")})
         self.assertTrue(r["ok"])
         self.assertEqual(r["ingested"], 1)
 
@@ -397,7 +409,7 @@ class VulnCenterTest(unittest.TestCase):
         im = self._impl()
         im.record_finding({"vuln_type": "RCE", "target": "http://t.com/rce",
                            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                           "tool_log": [_http_call("http://t.com/rce", 200, "uid=0(root)" * 10)]})
+                           "tool_log": [_scanner_call("http://t.com/rce")]})
         self.assertIn("msg", sent)              # 已推
         self.assertEqual(sent["kw"].get("channel"), "feishu")
 
@@ -406,7 +418,7 @@ class VulnCenterTest(unittest.TestCase):
         im = self._impl()   # 未注册 NOTIFY
         r = im.record_finding({"vuln_type": "RCE", "target": "http://t.com/rce",
                                "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                               "tool_log": [_http_call("http://t.com/rce", 200, "root" * 30)]})
+                               "tool_log": [_scanner_call("http://t.com/rce")]})
         self.assertTrue(r["verified"])          # 登记成功，推送降级静默不影响
 
     # —— 出洞低于阈值不推 ——
@@ -432,7 +444,7 @@ class VulnCenterTest(unittest.TestCase):
         tgt = "http://t.com/a"
         im.record_finding({"vuln_type": "RCE", "target": tgt,
                            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                           "tool_log": [_http_call(tgt, 200, "root" * 30)]})
+                           "tool_log": [_scanner_call(tgt)]})
         im.record_finding({"vuln_type": "XSS", "target": "http://t.com/b",
                            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
                            "tool_log": []})   # lead → 封顶 info
@@ -447,25 +459,25 @@ class VulnCenterTest(unittest.TestCase):
         names2 = [x["name"] for x in r2["items"]]
         self.assertIn("XSS", names2)           # 调到 info 阈值就能看到线索（不再被吞）
 
-    def test_unified_dedup_keeps_latest_only(self):
-        """方案B去重模式：同漏洞点(同资产+同接口+同类型)多条时，dedup=True 只返最新一条、dedup=False 返全部。"""
+    def test_unified_list_keeps_same_endpoint_unique(self):
+        """同端点同类型只落一条；列表切换筛选也不能显示重复漏洞。"""
         im = self._impl()
         tgt = "http://t.com/api/x"
         vec = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-        # 同 target+type 报两次 → 两条独立（方案B）
+        # 同 target+type 报两次 → 同一记录。
         im.record_finding({"session_id": "session1", "vuln_type": "RCE", "target": tgt, "cvss_vector": vec,
-                           "tool_log": [_http_call(tgt, 200, "root" * 30)]})
+                           "tool_log": [_scanner_call(tgt)]})
         im.record_finding({"session_id": "session2", "vuln_type": "RCE", "target": tgt, "cvss_vector": vec,
-                           "tool_log": [_http_call(tgt, 200, "root" * 30)]})
+                           "tool_log": [_scanner_call(tgt)]})
         from sentinel_platform.modules.risk_intel.vuln_center import list_unified_findings
         # 去重（默认）：同漏洞点只 1 条
         rd = list_unified_findings(source="ai", min_severity="low", dedup=True)
         rce = [x for x in rd["items"] if x["name"] == "代码执行"]
         self.assertEqual(len(rce), 1)          # 去重后只留最新一条
-        # 全部漏洞：两条都在
+        # 全部漏洞：仍只显示同一记录。
         ra = list_unified_findings(source="ai", min_severity="low", dedup=False)
         rce_all = [x for x in ra["items"] if x["name"] == "代码执行"]
-        self.assertEqual(len(rce_all), 2)
+        self.assertEqual(len(rce_all), 1)
 
     def test_unified_keyword_finds_old_record_beyond_page(self):
         """AUD-10：关键词命中的记录即使在首页窗口之外（最旧一条），也能被查到且 total 正确。
@@ -498,7 +510,7 @@ class VulnCenterTest(unittest.TestCase):
                            "tool_log": [_http_call("http://t.com/ver", 200, "Server: nginx" * 10)]})
         im.record_finding({"vuln_type": "RCE", "target": "http://t.com/rce",
                            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                           "tool_log": [_http_call("http://t.com/rce", 200, "root" * 30)]})
+                           "tool_log": [_scanner_call("http://t.com/rce")]})
         # PoC 命中：无 vuln_severity 字段（NPoC 插件常见）——绝不能被 min_severity 误杀
         from sentinel_platform.core.db import get_repo
         get_repo().collection("vuln").insert_one(
@@ -521,7 +533,7 @@ class VulnCenterTest(unittest.TestCase):
         tgt = "http://t.com/a"
         r = im.record_finding({"vuln_type": "RCE", "target": tgt,
                                "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                               "tool_log": [_http_call(tgt, 200, "root" * 30)]})
+                               "tool_log": [_scanner_call(tgt)]})
         from sentinel_platform.modules.risk_intel.vuln_center import mark_unified, list_unified_findings
         n = mark_unified("ai", [r["id"]], "false_positive", handle_by="tester")
         self.assertEqual(n, 1)
@@ -532,7 +544,7 @@ class VulnCenterTest(unittest.TestCase):
         im = self._impl()
         im.record_finding({"vuln_type": "RCE", "target": "http://t.com/a",
                            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-                           "tool_log": [_http_call("http://t.com/a", 200, "root" * 30)]})
+                           "tool_log": [_scanner_call("http://t.com/a")]})
         im.record_finding({"vuln_type": "XSS", "target": "http://t.com/b",
                            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N", "tool_log": []})
         from sentinel_platform.modules.risk_intel.vuln_center import finding_stat
@@ -545,18 +557,18 @@ class VulnCenterTest(unittest.TestCase):
 
         旧 finding_stat 用未去重 count_documents(仅同会话去重)→ 卡片数≥去重列表数。
         改用 _finding_index.statistics(同 point_key 分组)后,卡片 verified 必须等于
-        list_unified_findings(dedup=True) 的 total。用跨会话重复构造 2 条未去重记录来验证。"""
+        list_unified_findings(dedup=True) 的 total；跨会话再次发现只累计来源。"""
         im = self._impl()
         f = {"vuln_type": "RCE", "target": "http://t.com/x",
              "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-             "tool_log": [_http_call("http://t.com/x", 200, "root" * 30)]}
+             "tool_log": [_scanner_call("http://t.com/x")]}
         im.record_finding(dict(f, session_id="sess-A"))
         im.record_finding(dict(f, session_id="sess-B"))   # 不同会话、同漏洞点 → 2 条 duplicate_of=None
         from sentinel_platform.modules.risk_intel.vuln_center import (
             finding_stat, list_unified_findings, get_repo, COLL)
         raw = get_repo().collection(COLL).count_documents(
             {"source": "ai", "duplicate_of": None, "verified": True})
-        self.assertEqual(raw, 2, "前置:应有 2 条未去重记录(跨会话),否则测不到去重口径")
+        self.assertEqual(raw, 1, "跨会话报送必须只落一条规范记录")
         st = finding_stat()
         lst = list_unified_findings(source="ai", verified=1, dedup=True)
         self.assertEqual(st["ai"]["verified"], 1, "卡片应按 point_key 跨会话去重计 1")
@@ -583,7 +595,7 @@ class VulnCenterTest(unittest.TestCase):
         im = self._impl()
         f = {"vuln_type": "SQL注入", "target": "http://t.com/api/x",
              "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
-             "tool_log": [_http_call("http://t.com/api/x", 200, "you have an error in your SQL syntax" * 3)]}
+             "tool_log": _sqli_calls("http://t.com/api/x")}
         r = im.record_finding(f)
         self.assertTrue(r["verified"])
         from sentinel_platform.modules.risk_intel.vuln_center import get_repo, COLL

@@ -113,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -193,6 +193,13 @@ const { serverVersion } = useServerVersion()
 const router = useRouter()
 const route = useRoute()
 const collapsed = ref(false)
+provide('watchtower:sidebar-control',{
+  enterInteraction:()=>{
+    const previous=collapsed.value
+    collapsed.value=true
+    return ()=>{collapsed.value=previous}
+  }
+})
 const openKeys = ref(menuGroups.map(group => group.key))
 const username = computed(() => getUser() || t('common.administrator'))
 const licenseActivated = ref(false)

@@ -155,6 +155,7 @@ export const intelApi = {
   generatePentestReport: (payload: { type: 'task'; task_id: string; use_llm?: boolean } | { type: 'session'; session_id: string }) =>
     request<GenerateReportResult>(`${base}/pentest_report/generate`, { method: 'POST', body: JSON.stringify(payload) }),
   exportPentestDocx: (id: string) => exportReportDocx('pentest_report', id),
+  pentestReportDocx: (id: string) => tplArrayBuffer(`/pentest_report/${encodeURIComponent(id)}/export.docx`),
   assistPentestReport: (id: string, payload: { report_data: ReportData; instruction: string; provider_id?: string; only_empty: boolean }) =>
     request<ReportAiResult>(`${base}/pentest_report/${id}/assist`, { method: 'POST', body: JSON.stringify(payload) }),
   collect: (task_id: string) => request<{ task_id: string; site_total: number; new_asset: number; system_cnt: number }>(`${base}/collect/`, {

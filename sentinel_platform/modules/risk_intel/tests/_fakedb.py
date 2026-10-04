@@ -34,7 +34,7 @@ def _match(doc: Dict[str, Any], query: Dict[str, Any]) -> bool:
             if not _match_ops(val, cond):
                 return False
         else:
-            if val != cond:
+            if val != cond and not (isinstance(val,list) and cond in val):
                 return False
     return True
 
@@ -157,6 +157,7 @@ class FakeCollection:
             return type("R", (), {"modified_count": 0})()
         for k, v in (update.get("$set") or {}).items():
             target[k] = v
+        for k,v in (update.get('$inc') or {}).items():target[k]=target.get(k,0)+v
         for k, v in (update.get("$addToSet") or {}).items():
             cur = target.setdefault(k, [])
             vals = v["$each"] if isinstance(v, dict) and "$each" in v else [v]

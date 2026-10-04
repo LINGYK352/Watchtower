@@ -5,7 +5,7 @@
         <h2>{{ translate('ui.m_ac217e4d1ca4') }}</h2>
         <a-tag color="blue" class="update-ver">{{ latestVersion }}</a-tag>
       </div>
-      <a-tag color="green" class="update-badge">{{ translate('ui.m_432bb30c280d') }}</a-tag>
+      <a-tag color="green" class="update-badge">{{ translate(requiresRestart ? 'ui.native_update_note' : 'ui.m_432bb30c280d') }}</a-tag>
 
       <div class="update-changelog" v-if="changelogs.length">
         <div class="changelog-title">
@@ -50,6 +50,7 @@ import { fetchServerVersion } from '../composables/useServerVersion'
 
 const showModal = ref(false)
 const latestVersion = ref('')
+const requiresRestart=ref(false)
 const changelogs = ref<{ver: string, date: string, summary: string}[]>([])
 const updating = ref(false)
 const updateDone = ref(false)
@@ -105,6 +106,7 @@ async function checkUpdate() {
     const curVer = await fetchServerVersion()
     // check?client= 仍上报前端构建版本（后端据此判「刷新拿新构建」，是另一维度）
     const res = await request<any>('/api/about/check?client=' + APP_VERSION)
+    requiresRestart.value=!!res.requires_restart
     // If server explicitly says unauthorized → 延迟重试一次确认（排除激活后竞态：多 worker 间 key 同步需要时间）
     if (res.error_type === 'unauthorized') {
       if (!_unauthorizedConfirmed) {

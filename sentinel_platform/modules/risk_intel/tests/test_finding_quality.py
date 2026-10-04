@@ -23,6 +23,13 @@ class FindingQualityTests(unittest.TestCase):
         self.finding = {'session_id': self.sid, 'target': 'https://example.test/api/users',
                         'vuln_type': '未授权访问', 'cvss_vector': 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N'}
 
+    def confirmed_call(self):
+        call=_http_call(self.finding['target'])
+        result=json.loads(call['result']) if isinstance(call['result'],str) else call['result']
+        result['body']='{"passwordHash":"FAKEHASHFOROWNEDTEST1234567890","internalData":["owned-fixture"]}'
+        call['result']=json.dumps(result)
+        return call
+
     def test_high_lead_does_not_become_info(self):
         result = self.service.record_finding(self.finding)
         self.assertEqual(result['severity'], 'high')
@@ -36,7 +43,7 @@ class FindingQualityTests(unittest.TestCase):
         vc.reconcile_session_findings(self.sid)
         self.assertEqual(row['severity'], 'low')
         with mock.patch.object(vc, '_adversarial_review', return_value={'verdict': 'confirmed'}):
-            result = self.service.record_finding(dict(self.finding, tool_log=[_http_call(self.finding['target'])]))
+            result = self.service.record_finding(dict(self.finding, tool_log=[self.confirmed_call()]))
         self.assertTrue(result['verified'])
         self.assertEqual(result['severity'], 'low')
 
@@ -46,16 +53,16 @@ class FindingQualityTests(unittest.TestCase):
         vector = 'CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N'
         self.assertEqual(_cvss.calibrate_severity('medium', 5.3, '未授权访问', 'version 配置被修改', vector)[0], 'medium')
 
-    def test_alias_repeat_is_idempotent_but_other_sessions_and_parameters_are_not(self):
+    def test_alias_session_parameter_and_method_changes_keep_same_endpoint_type_unique(self):
         one = self.service.record_finding(self.finding)
         two = self.service.record_finding(dict(self.finding, vuln_type='未授权访问-管理员信息及密码哈希泄露'))
         self.assertEqual(one['id'], two['id'])
         self.assertTrue(two['dup'])
-        self.assertNotEqual(one['id'], self.service.record_finding(dict(self.finding, session_id=str(ObjectId())))['id'])
-        self.assertNotEqual(one['id'], self.service.record_finding(dict(self.finding, parameter='other'))['id'])
+        self.assertEqual(one['id'], self.service.record_finding(dict(self.finding, session_id=str(ObjectId())))['id'])
+        self.assertEqual(one['id'], self.service.record_finding(dict(self.finding, parameter='other'))['id'])
         get = self.service.record_finding(dict(self.finding, method='GET'))
         post = self.service.record_finding(dict(self.finding, method='POST'))
-        self.assertNotEqual(get['id'], post['id'])
+        self.assertEqual(get['id'], post['id'])
 
     def test_post_cannot_borrow_get_evidence(self):
         result = self.service.record_finding(dict(self.finding, method='POST', tool_log=[_http_call(self.finding['target'])]))
@@ -67,7 +74,7 @@ class FindingQualityTests(unittest.TestCase):
 
     def test_repeat_can_upgrade_evidence_without_creating_another_row(self):
         one = self.service.record_finding(self.finding)
-        finding = dict(self.finding, tool_log=[_http_call(self.finding['target'])])
+        finding = dict(self.finding, tool_log=[self.confirmed_call()])
         with mock.patch.object(vc, '_adversarial_review', return_value={'verdict': 'confirmed'}):
             two = self.service.record_finding(finding)
             three = self.service.record_finding(self.finding)
@@ -143,7 +150,8 @@ class FindingQualityTests(unittest.TestCase):
         self.assertEqual(len(preview['duplicates']), 1)
         self.assertTrue(all(row['severity'] == 'info' for row in coll.docs))
         vc.reconcile_session_findings(self.sid)
-        self.assertEqual(coll.count_documents({}), 2)
+        self.assertEqual(coll.count_documents({}), 3)  # 原始两条保留为历史别名，规范 ID 一条。
         self.assertEqual(coll.count_documents({'duplicate_of': None}), 1)
-        self.assertTrue(all(row['severity'] == 'high' for row in coll.docs))
+        self.assertEqual(coll.find_one({'duplicate_of':None})['severity'],'high')
+        self.assertEqual(coll.count_documents({'duplicate_of':None}),1)
         self.assertFalse(vc.reconcile_session_findings(self.sid)['updates'])

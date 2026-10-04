@@ -16,6 +16,7 @@ export interface UpdateCheckResult {
   remote_ok?: boolean
   source?: string
   error_type?: string  // 'unauthorized' | 'network'
+  requires_restart?: boolean
 }
 
 /** 服务端当前版本 */

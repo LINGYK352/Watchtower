@@ -126,15 +126,15 @@ onMounted(fetchInfo)
 <style scoped>
 .act-hero { display: flex; align-items: center; gap: 18px; }
 .act-badge { width: 60px; height: 60px; border-radius: 16px; font-size: 28px; display: flex; align-items: center; justify-content: center; flex: none; }
-.act-badge--ok { background: #f0fdf4; color: #16a34a; }
-.act-badge--off { background: #fef2f2; color: #dc2626; }
+.act-badge--ok { background: var(--dt-success-soft); color: var(--dt-success); }
+.act-badge--off { background: var(--dt-danger-soft); color: var(--dt-danger); }
 .act-label { color: var(--dt-muted); font-size: 13px; margin-bottom: 4px; }
 .act-tag { font-size: 14px; }
 .act-desc { max-width: 560px; }
 .key-masked { font-family: monospace; font-size: 12px; word-break: break-all; color: var(--dt-muted); }
-.danger-text { color: #dc2626; font-weight: 600; }
+.danger-text { color: var(--dt-danger); font-weight: 600; }
 .disc-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .disc-label { font-size: 13px; color: var(--dt-muted); }
-.disc-signed { background: #f0fdf4 !important; color: #16a34a !important; border-color: #bbf7d0 !important; }
+.disc-signed { background: var(--dt-success-soft) !important; color: var(--dt-success) !important; border-color: var(--dt-success-border) !important; }
 .disc-at { font-size: 12px; color: var(--dt-muted); }
 </style>

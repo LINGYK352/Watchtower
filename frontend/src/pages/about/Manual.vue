@@ -286,7 +286,7 @@ function renderInline(text: string): string {
 .manual-body { flex: 1; min-width: 0; }
 .doc-h1 { font-size: 22px; font-weight: 750; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
 .doc-lead { color: var(--dt-muted); font-size: 14px; margin-bottom: 18px; line-height: 1.7; }
-.disc-signed-tag { background: #f0fdf4 !important; color: #16a34a !important; border-color: #bbf7d0 !important; margin: 4px 0 12px; font-size: 13px; padding: 4px 12px; }
+.disc-signed-tag { background: var(--dt-success-soft) !important; color: var(--dt-success) !important; border-color: var(--dt-success-border) !important; margin: 4px 0 12px; font-size: 13px; padding: 4px 12px; }
 .doc-h2 { font-size: 16px; font-weight: 650; margin: 20px 0 8px; padding-left: 10px; border-left: 3px solid var(--dt-primary, #2f6bff); }
 .doc-p { font-size: 14px; line-height: 1.8; color: var(--dt-text, #333); margin: 6px 0; }
 .doc-list, .doc-steps { padding-left: 22px; margin: 6px 0; }

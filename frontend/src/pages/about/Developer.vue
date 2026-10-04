@@ -17,9 +17,6 @@
           <a-descriptions-item :label="translate('ui.m_73075237fd0f')">
             <CopyText :text="email" /> <span class="muted">{{ translate('ui.m_c457bcdb2faf') }}</span>
           </a-descriptions-item>
-          <a-descriptions-item :label="translate('ui.m_81b430b69643')">
-            <CopyText :text="wechat" /> <span class="muted">{{ translate('ui.m_c457bcdb2faf') }}</span>
-          </a-descriptions-item>
           <a-descriptions-item :label="translate('ui.m_837bc9576721')">
             <a-tag color="blue">{{ version }}</a-tag>
           </a-descriptions-item>
@@ -56,10 +53,6 @@
             <div class="credit-info">
               <div class="credit-name">{{ ct.name }}</div>
               <span class="credit-role">{{ ct.role }}</span>
-              <div v-if="ct.wechat" class="credit-wx">
-                <span class="wx-label">{{ translate('ui.m_81b430b69643') }}</span>
-                <CopyText :text="ct.wechat" />
-              </div>
             </div>
           </li>
         </ul>
@@ -80,11 +73,6 @@
               <div class="credit-name">{{ dv.name }}</div>
               <span class="credit-role">{{ dv.role }}</span>
               <div v-if="dv.contribution" class="credit-contrib">{{ dv.contribution }}</div>
-              <div class="credit-wx">
-                <span class="wx-label">{{ translate('ui.m_81b430b69643') }}</span>
-                <CopyText v-if="dv.wechat" :text="dv.wechat" />
-                <span v-else class="wx-private">{{ translate('ui.m_c99f141c23ed') }}</span>
-              </div>
             </div>
           </li>
         </ul>
@@ -106,20 +94,19 @@ import CopyText from '../../components/CopyText.vue'
 import { useServerVersion } from '../../composables/useServerVersion'
 
 const email = 'lingyangkang352@163.com'
-const wechat = 'LINGYK352'
 // 显示后端真实版本（version.txt），非编译进包的 APP_VERSION（跳板逐级更新时前端 brand 可能滞后/错配）
 const { serverVersion: version } = useServerVersion()
 
-// 特别贡献者（卡片网格展示，新增贡献者在此追加即可）。wechat 可空（不展示微信行）。
+// 特别贡献者。
 const contributors = [
-  { name: '辞旧迎新', role: '特别贡献', wechat: 'msf_kali', avatar: '/avatars/contributor.jpg' },
-  { name: 'LYX', role: '特别贡献', wechat: '', avatar: '/avatars/lyx.jpg' },
+  { name: '辞旧迎新', role: '特别贡献', avatar: '/avatars/contributor.jpg' },
+  { name: 'LYX', role: '特别贡献', avatar: '/avatars/lyx.jpg' },
 ]
 
 // 项目推进者（提出问题/建议并被采纳者，申请后在此追加）。contribution=被采纳的贡献简述，可空。
 // 头像缺省用通用占位（driver.jpg 未提供时复用 contributor.jpg）。空数组时页面显示"虚位以待"。
-const drivers: Array<{ name: string; role: string; contribution?: string; wechat?: string; avatar: string }> = [
-  { name: '尤里曾', role: '项目推进者', wechat: 'Cavanture', avatar: '/avatars/yulizeng.jpg' },
+const drivers: Array<{ name: string; role: string; contribution?: string; avatar: string }> = [
+  { name: '尤里曾', role: '项目推进者', avatar: '/avatars/yulizeng.jpg' },
 ]
 </script>
 
@@ -160,9 +147,6 @@ const drivers: Array<{ name: string; role: string; contribution?: string; wechat
 .credit-role { display: inline-block; padding: 2px 12px; border-radius: 999px;
   background: var(--dt-gradient-soft); color: var(--dt-primary); font-size: 12px; font-weight: 600;
   border: 1px solid var(--dt-border); }
-.credit-wx { color: var(--dt-muted); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
-.wx-label { opacity: .8; }
-.wx-private { color: var(--dt-muted); opacity: .7; }   /* 未公开微信的推进者显示"不公开" */
 .credit-contrib { color: var(--dt-muted); font-size: 12px; line-height: 1.5; max-width: 160px;
   word-break: break-word; overflow-wrap: anywhere; }
 .credits-foot { margin: 18px 0 0; color: var(--dt-muted); font-size: 12px; }

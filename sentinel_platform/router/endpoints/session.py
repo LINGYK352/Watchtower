@@ -239,7 +239,9 @@ def _stream_meta(sess: dict) -> dict:
             "tool_count": len(sess.get("tool_log") or []),
             # 流式逐字气泡（对齐 console observe 流）：run_agent 生成中经 on_delta 写入的 partial 文本/阶段
             "stream": sess.get("stream_buffer", "") or "",
-            "stream_phase": sess.get("stream_phase", "") or ""}
+            "stream_phase": sess.get("stream_phase", "") or "",
+            'active_tool':sess.get('active_tool',''),'active_tool_started':sess.get('active_tool_started',0),
+            'active_tool_timeout':sess.get('active_tool_timeout',0),'finding_revision':sess.get('finding_revision',0)}
 
 
 def _assist_text(content) -> str:
@@ -279,8 +281,8 @@ def _session_event_stream(session_id: str, svc):
             # v1.21.139 只处理了 str → claude 会话的思考文本全被 isinstance(str) 过滤掉 → 实时台只显
             # "AI执行中"看不到讲话。此处两种都提取（数组取所有 type=text 块 text 拼接）。
             msgs = sess.get("messages") or []
-            assist_texts = [_assist_text(m.get("content")) for m in msgs
-                            if m.get("role") == "assistant" and _assist_text(m.get("content"))]
+            from sentinel_platform.modules.ai_pentest import _console
+            assist_texts = [shown['content'] for shown in _console.display_messages(msgs) if shown['role']=='assistant']
             if len(assist_texts) > think_sent:
                 for txt in assist_texts[think_sent:]:
                     yield _sse("think", {"text": txt})
@@ -326,6 +328,7 @@ def _console_event_stream(session_id: str, svc):
     from sentinel_platform.modules.ai_pentest import _console
     start = time.time()
     dlg_sent = 0                  # 已推可展示对话条数（游标）
+    previous_dialogue=None
     tool_sent = 0                 # 已推工具数（游标）
     last_meta = None
     try:
@@ -342,17 +345,26 @@ def _console_event_stream(session_id: str, svc):
             disp = []
             for m in tail:
                 role = m.get("role")
-                txt = _console._msg_text(m.get("content"))
+                txt = _console._display_msg_text(m)
                 if role == "user":
                     if txt and _console._is_display_user_msg(txt):
                         disp.append(("user", txt))
                 elif role == "assistant":
                     if txt:
                         disp.append(("assistant", txt))
+            if 'console_dialogue' in sess:
+                disp=[(m['role'],m['content']) for m in _console.display_messages(sess.get('console_dialogue') or [])]
+            disp += [('user','【人工指令】'+str(text)) for text in sess.get('pending_user_msgs') or [] if str(text).strip()]
+            if previous_dialogue is None or disp[:len(previous_dialogue)]!=previous_dialogue:
+                # Reconnect/compaction can replace the list or shorten it. A
+                # count-only cursor misses later answers after that replacement.
+                yield _sse('snapshot',{'dialogues':[{'role':role,'content':txt} for role,txt in disp]})
+                dlg_sent=len(disp)
             if len(disp) > dlg_sent:
                 for role, txt in disp[dlg_sent:]:
                     yield _sse("dialogue", {"role": role, "content": txt})
                 dlg_sent = len(disp)
+            previous_dialogue=list(disp)
             # 工具增量
             tool_log = sess.get("tool_log") or []
             if len(tool_log) > tool_sent:
@@ -369,6 +381,12 @@ def _console_event_stream(session_id: str, svc):
                     "round": sess.get("round", 0), "total_tokens": sess.get("total_tokens", 0),
                     "window_tokens": sess.get("window_tokens", 0),
                     "token_budget": sess.get("token_budget", 0), "tool_count": len(tool_log),
+                    "context_mode":sess.get('context_mode','default'),
+                    "context_limit":sess.get('context_limit',0),'context_source':sess.get('context_source','system_default'),
+                    "takeover_confirmed":bool(sess.get('takeover_confirmed') or sess.get('console_taken_over') or sess.get('console_dispatch_at')),
+                    "finding_revision":sess.get('finding_revision',0),
+                    'active_tool':sess.get('active_tool',''),'active_tool_started':sess.get('active_tool_started',0),
+                    'active_tool_timeout':sess.get('active_tool_timeout',0),
                     "stream": sess.get("stream_buffer", "") or "",
                     "stream_phase": sess.get("stream_phase", "") or ""}
             if meta != last_meta:
@@ -657,6 +675,40 @@ class ConsoleSubmit(Resource):
         if isinstance(r, dict) and r.get("error"):
             return err(CODE_FORBIDDEN, r["error"]) if r.get("forbidden") else err(CODE_BAD_REQUEST, r["error"])
         return ok(r)
+
+
+@ns.route('/session/console/<string:resume_key>/takeover')
+class ConsoleTakeover(Resource):
+    @ns.doc(security='token',description='需pentest:write；确认接管，不启动回合、不改变自动执行状态')
+    def post(self,resume_key):
+        svc=_svc();body=request.get_json(silent=True) or {}
+        if not svc or not hasattr(svc,'console_takeover'):return err(CODE_ERROR,'会话服务未就绪')
+        want=body.get('max_context_tokens',0)
+        if type(want) is not int:return err(CODE_BAD_REQUEST,'max_context_tokens必须为整数')
+        result=svc.console_takeover(resume_key,caller=_current_username(),can_view_all=_can_view_all(),max_context_tokens=want)
+        if result.get('error'):return err(CODE_FORBIDDEN if result.get('forbidden') else CODE_BAD_REQUEST,result['error'])
+        return ok(result)
+
+
+@ns.route('/session/<string:session_id>/surface')
+class SessionSurface(Resource):
+    def get(self,session_id):
+        service=_svc()
+        if not service:return err(CODE_ERROR,'会话服务未就绪')
+        forbidden=_session_access_error(service,session_id)
+        if forbidden:return forbidden
+        result=service.session_surface(session_id)
+        if result.get('error'):return err(CODE_BAD_REQUEST,result['error'])
+        return ok(result)
+
+
+@ns.route('/finding/revision')
+class FindingRevision(Resource):
+    def get(self):
+        from sentinel_platform.core import get_repo
+        from sentinel_platform.contracts import Collections
+        value=get_repo().collection(Collections.FINDING_IDENTITY).find_one({'_id':'_finding_revision'}) or {}
+        return ok({'revision':int(value.get('revision',0))})
 
 
 @ns.route("/session/console/<string:resume_key>/observe")

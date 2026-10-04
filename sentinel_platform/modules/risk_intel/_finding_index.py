@@ -2,7 +2,7 @@
 from sentinel_platform.contracts import Collections
 from . import _finding_quality as quality
 
-VERSION = 1
+VERSION = 2
 
 
 def point_key(row):
@@ -27,6 +27,12 @@ def index_one(repo, row):
         if 'duplicate' not in str(exc).lower() and 'e11000' not in str(exc).lower():
             raise
     anchors.update_one({'_id': key, 'first_time': {'$gt': stamp}}, {'$set': first})
+    anchor=anchors.find_one({'_id':key}) or {}
+    if anchor.get('first_id') and anchor['first_id']!=str(row['_id']):
+        from bson import ObjectId
+        owner=ObjectId(anchor['first_id']) if ObjectId.is_valid(anchor['first_id']) else anchor['first_id']
+        alias=repo.collection(Collections.INTEL_FINDING).find_one({'_id':owner,'duplicate_of':str(row['_id'])})
+        if alias:anchors.update_one({'_id':key,'first_id':anchor['first_id']},{'$set':{'first_id':str(row['_id'])}})
     repo.collection(Collections.INTEL_FINDING).update_one({'_id': row['_id']}, {'$set': {
         'point_key': key, 'point_index_version': VERSION}})
     row['point_key'] = key
@@ -38,7 +44,7 @@ def ensure_legacy_index(repo):
     """幂等补齐存量记录；不改评级、PoC、人工状态或历史，不靠进程缓存判断是否完成。"""
     collection = repo.collection(Collections.INTEL_FINDING)
     count = 0
-    for row in collection.find({'source': 'ai', 'point_index_version': {'$ne': VERSION}}).sort([('save_date', 1), ('_id', 1)]):
+    for row in collection.find({'source': 'ai', 'duplicate_of':None,'point_index_version': {'$ne': VERSION}}).sort([('save_date', 1), ('_id', 1)]):
         index_one(repo, row)
         count += 1
     return count

@@ -29,18 +29,20 @@ Watchtower connects asset reconnaissance, AI tool use, human intervention, and e
 
 The project is maintained by an individual developer and is available free of charge under **GPL-3.0-only**. You can deploy it yourself; model calls and external data sources may require your own accounts or incur separate costs.
 
-> `main` contains approved Linux Web source, currently **v1.21.169**, matching the website hot-update snapshot. The image base remains **v1.21.165**; code updates do not require downloading the image again. Windows is under separate testing and is not publicly distributed. Development started on **June 3, 2026**.
+> `main` contains approved Linux Web source, currently **v1.21.170**, matching the website hot-update snapshot. The image base remains **v1.21.165**; code updates do not require downloading the image again. Windows remains under separate testing and is not publicly distributed. Development started on **June 3, 2026**.
 
-## v1.21.169 highlights
+## v1.21.170 highlights
 
-- Repairs DeepSeek thinking/tool history replay, including follow-up instructions after failed turns. Existing history and evidence are preserved.
-- Counts reasoning and tool arguments in context estimates, handles repeated relay metadata and growing argument snapshots, and deduplicates identical text calls within one response.
-- Incomplete arguments are never executed. One format-correction request is allowed on the same model; persistent failures pause explicitly. Historical tools are not rerun.
-- Includes168's Chinese/English language packs, streamed automatic/manual sessions, asynchronous dispatch, incremental upgrades and owned-file rollback cleanup.
+- Confirm takeover once per session. Empty whiteboards stay on standby; returning from another menu restores the session and previous sidebar state.
+- Store each instruction and reply independently. Display history survives model-context compaction; empty replies receive explicit correction or failure status.
+- Separate the system context fallback from model-native limits and correct DeepSeek native-budget displays.
+- Capture findings promptly, review actual evidence, and deduplicate by endpoint and vulnerability type. Insufficient evidence remains a lead.
+- Check script syntax, report real exit codes and elapsed time, and clean up owned process trees on timeout or cancellation.
+- Add loading animation, mode labels, highlighted AI policy selection, dark-theme status icons, and task/session/finding report previews.
 
-Validation covers258 relevant regressions, strict local HTTP fixtures on the VM, and actual browser clicks. Two existing legacy-contract failures were reproduced against168; this is not exhaustive platform or real-model certification. After updating, send a follow-up instruction in the affected session. Missing historical reasoning and truncated arguments are not invented.
+249 relevant regressions passed, alongside VM tests using owned mock providers/targets and actual browser clicks. Configuration, accounts and existing evidence are preserved. Send an explicit follow-up in an affected session after updating. Historical content already discarded by an older version cannot be reconstructed.
 
-See the [full changelog — Chinese](CHANGELOG.md) and [version downloads](https://github.com/LINGYK352/Watchtower/releases).
+See the [English changelog](CHANGELOG.en.md), [console behavior](docs/ai-console.md), and [version downloads](https://github.com/LINGYK352/Watchtower/releases).
 
 ## Capabilities
 

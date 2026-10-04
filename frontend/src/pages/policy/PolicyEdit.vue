@@ -93,7 +93,7 @@
         <a-space wrap>
           <a-checkbox v-model:checked="cfg.file_leak">{{ translate('ui.m_ddca902e3201') }}</a-checkbox>
           <a-checkbox v-model:checked="cfg.npoc_service_detection">{{ translate('ui.m_cc7415825f0d') }}</a-checkbox>
-          <a-checkbox v-model:checked="cfg.auto_pentest">{{ translate('ui.m_8607b3118600') }}</a-checkbox>
+          <a-checkbox v-model:checked="cfg.auto_pentest" class="ai-pentest-choice" :class="{ 'is-selected': cfg.auto_pentest }">{{ translate('ui.m_8607b3118600') }}</a-checkbox>
         </a-space>
         <a-collapse v-if="cfg.file_leak" ghost style="margin-top:8px">
           <a-collapse-panel key="fileleak" header="自定义文件泄露字典（可选，留空用内置默认）">
@@ -430,6 +430,10 @@ onMounted(() => {
 .source-ready { color: #52c41a; }
 .source-missing { color: #999; }
 .source-empty { margin-top: 6px; color: #d46b08; font-size: 12px; }
+.ai-pentest-choice { padding: 6px 10px; border: 1px solid transparent; border-radius: 6px; }
+.ai-pentest-choice.is-selected { background: rgba(250,173,20,.18); border-color: #faad14; color: #d48806; }
+.ai-pentest-choice.is-selected :deep(.ant-checkbox-inner) { background-color: #faad14; border-color: #faad14; }
+.ai-pentest-choice.is-selected :deep(.ant-checkbox-inner::after) { border-color: #262626; }
 @media (max-width: 900px) {
   .collect-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

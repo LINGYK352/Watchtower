@@ -21,7 +21,7 @@
           <a-alert type="success" show-icon>
             <template #message>{{ translate('ui.m_ac217e4d1ca4') }} <a-tag color="blue">{{ latest }}</a-tag></template>
             <template #description>
-              <a-tag color="green" style="margin-bottom:12px">{{ translate('ui.m_432bb30c280d') }}</a-tag>
+              <a-tag color="green" style="margin-bottom:12px">{{ translate(requiresRestart ? 'ui.native_update_note' : 'ui.m_432bb30c280d') }}</a-tag>
               <div v-if="changelogs.length" class="changelog-box">
                 <div class="changelog-title">
                   {{ translate('ui.m_00d640b1490e') }} {{ latest }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
@@ -262,6 +262,7 @@ onMounted(async () => {
 const checking = ref(false)
 const checked = ref(false)
 const hasUpdate = ref(false)
+const requiresRestart=ref(false)
 const networkError = ref(false)
 const authError = ref(false)
 const latest = ref('')
@@ -313,6 +314,7 @@ async function doCheck() {
       serverMessage.value = r.message || ''
     } else {
       hasUpdate.value = r.has_update
+      requiresRestart.value=!!r.requires_restart
       latest.value = r.latest_version || r.server_version || version.value
       serverMessage.value = r.message || ''
       // Fetch changelog if update available
@@ -385,17 +387,17 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
 
 <style scoped>
 .ver-hero { display: flex; align-items: center; gap: 18px; }
-.ver-badge { width: 60px; height: 60px; border-radius: 16px; background: #eef3f9; color: var(--dt-primary); font-size: 28px; display: flex; align-items: center; justify-content: center; flex: none; }
+.ver-badge { width: 60px; height: 60px; border-radius: 16px; background: var(--dt-gradient-soft); color: var(--dt-primary); font-size: 28px; display: flex; align-items: center; justify-content: center; flex: none; }
 .ver-label { color: var(--dt-muted); font-size: 13px; }
 .ver-num { font-size: 30px; font-weight: 750; letter-spacing: -.01em; margin-top: 2px; }
-.changelog-box { background: #f6f8fa; border-radius: 8px; padding: 12px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
-.changelog-title { font-size: 13px; font-weight: 600; color: #1f2328; margin-bottom: 8px; }
-.changelog-item { padding: 5px 0; border-bottom: 1px solid #e1e4e8; font-size: 12px; display: flex; gap: 8px; }
+.changelog-box { background: var(--dt-fill); border-radius: 8px; padding: 12px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
+.changelog-title { font-size: 13px; font-weight: 600; color: var(--dt-text); margin-bottom: 8px; }
+.changelog-item { padding: 5px 0; border-bottom: 1px solid var(--dt-border); font-size: 12px; display: flex; gap: 8px; }
 .changelog-item:last-child { border-bottom: none; }
-.changelog-ver { color: #0969da; font-weight: 600; flex-shrink: 0; }
-.changelog-text { color: #656d76; }
+.changelog-ver { color: var(--dt-primary); font-weight: 600; flex-shrink: 0; }
+.changelog-text { color: var(--dt-muted); }
 .change-file { font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 2px 0; word-break: break-all; }
-.change-file.added { color: #1a7f37; }
-.change-file.changed { color: #9a6700; }
-.change-file.removed { color: #cf222e; }
+.change-file.added { color: var(--dt-success); }
+.change-file.changed { color: var(--dt-warning); }
+.change-file.removed { color: var(--dt-danger); }
 </style>

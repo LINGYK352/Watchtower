@@ -604,7 +604,7 @@ def _try_upgrade_lead(coll, existed: Dict[str, Any], ev_level: str,
 
 
 def _persist_finding(coll, doc):
-    """会话内幂等，跨会话保留历史；Mongo _id 唯一约束防多 worker 并发重复。"""
+    """同端点同类型唯一；来源会话单独保留。Mongo _id 约束跨 worker 幂等。"""
     from bson import ObjectId
     from pymongo.errors import DuplicateKeyError
     sid = doc.get("session_id", "")
@@ -612,28 +612,25 @@ def _persist_finding(coll, doc):
                             doc["target"], doc["vuln_type"], doc.get("parameter", ""), doc.get("request_method", ""))
     oid = ObjectId(key)
     existed = coll.find_one({"_id": oid})
-    if not existed and sid:
-        # 兼容热更前的随机 _id；只在本会话、同物理端点、同类别内寻找，不跨会话吞并。
-        same_point = [row for row in coll.find({"session_id": sid, "duplicate_of": None})
-                      if _quality.endpoint(row.get("target", "")) == _quality.endpoint(doc["target"])
-                      and _quality.category(row.get("vuln_type", ""))[0] == doc["vuln_type"]
-                      and str(row.get("parameter") or "") == str(doc.get("parameter") or "")]
-        method = doc.get("request_method", "")
-        candidates = [row for row in same_point if _quality.request_method(row) == method]
-        if not candidates:
-            # 旧记录缺方法时，仅在无歧义情况下补齐；GET 与 POST 两条已知记录不能互相吸收。
-            candidates = [row for row in same_point if not _quality.request_method(row)]
-        if not candidates and not method and len(same_point) == 1:
-            candidates = same_point
-        if candidates:
-            existed = max(candidates, key=lambda row: (bool(row.get("verified")), row.get("save_date", ""), str(row["_id"])))
-            if method and not _quality.request_method(existed):
-                coll.update_one({"_id": existed["_id"], "request_method": {"$in": [None, ""]}},
-                                {"$set": {"request_method": method}})
-                claimed = coll.find_one({"_id": existed["_id"]})
-                existed = claimed if claimed and _quality.request_method(claimed) == method else None
+    # 无论规范 ID 是否已经存在，都收拢存量随机 ID。旧记录保留证据，详情重定向到规范记录。
+    same_point = [row for row in coll.find({'$or':[{'norm_target':doc.get('norm_target')},{'norm_target':None}],'duplicate_of': None})
+                  if row['_id'] != oid and _quality.endpoint(row.get("target", "")) == _quality.endpoint(doc["target"])
+                  and _quality.category(row.get("vuln_type", ""))[0] == doc["vuln_type"]]
+    sessions = {str(row.get('session_id')) for row in same_point+[doc] if row.get('session_id')}
+    for row in same_point: sessions.update(str(value) for value in row.get('session_ids',[]) if value)
+    if not existed:
+        if same_point:
+            best=max(same_point,key=lambda row:(bool(row.get('verified')),bool(row.get('manual_severity')),row.get('save_date','')))
+            migrated={**best,'_id':oid,'point_index_version':0,
+                      'session_ids':sorted(sessions)}
+            try:coll.insert_one(migrated)
+            except DuplicateKeyError:pass
+            existed=coll.find_one({'_id':oid})
     if not existed:
         doc["_id"] = oid
+        doc['session_ids']=[sid] if sid else []
+        doc['request_methods']=[doc['request_method']] if doc.get('request_method') else []
+        doc['parameters']=[doc['parameter']] if doc.get('parameter') else []
         try:
             coll.insert_one(doc)
             return doc, False, False
@@ -643,17 +640,28 @@ def _persist_finding(coll, doc):
                 raise
     # 旧 confirmed 不被后续 lead 降级；升级以数据库 CAS 判断，只有赢得升级的进程通知。
     upgraded = False
-    if doc.get("verified") and not existed.get("verified"):
-        fields = {k: v for k, v in doc.items() if k not in
-                  ("_id", "save_date", "first_seen", "handle_status", "handle_note")}
+    strongest=max([doc]+[row for row in same_point if row.get('verification_status')=='confirmed'],key=lambda row:(bool(row.get('verified')),bool(row.get('manual_severity')),row.get('save_date','')))
+    if strongest.get("verified") and not existed.get("verified"):
+        fields = {k: v for k, v in strongest.items() if k not in
+                  ("_id", "save_date", "first_seen", "handle_status", "handle_note","session_id","session_ids")}
         if existed.get("manual_severity"):
             fields["severity"] = existed["manual_severity"]
             fields["severity_basis"] = existed.get("severity_basis", "")
         res = coll.update_one({"_id": existed["_id"], "verified": {"$ne": True},
                                "manual_severity": existed.get("manual_severity")}, {"$set": fields})
         upgraded = bool(getattr(res, "modified_count", 0))
+    provenance={'reported_titles':doc.get("raw_vuln_type",doc["vuln_type"]),
+                'session_ids':{'$each':sorted(sessions)}}
+    methods={str(row.get('request_method')) for row in same_point+[doc] if row.get('request_method')}
+    parameters={str(row.get('parameter')) for row in same_point+[doc] if row.get('parameter')}
+    if methods:provenance['request_methods']={'$each':sorted(methods)}
+    if parameters:provenance['parameters']={'$each':sorted(parameters)}
+    if same_point:provenance['merged_finding_ids']={'$each':[str(row['_id']) for row in same_point]}
     coll.update_one({"_id": existed["_id"]}, {"$set": {"last_report_date": doc["update_date"]},
-                   "$addToSet": {"reported_titles": doc.get("raw_vuln_type", doc["vuln_type"])}})
+                   "$addToSet":provenance})
+    for row in same_point:
+        coll.update_one({'_id':row['_id'],'duplicate_of':None},{'$set':{'duplicate_of':str(oid),'duplicate_reason':'same_endpoint_same_type'}})
+    if same_point:coll.update_one({'_id':existed['_id']},{'$set':{'point_index_version':0}})
     saved = coll.find_one({"_id": existed["_id"]}) or existed
     return saved, True, upgraded
 
@@ -673,6 +681,37 @@ class FindingServiceImpl:
         except Exception:
             return []
 
+    def session_findings(self,session_id):
+        self.reconcile_session_findings(str(session_id))
+        rows=get_repo().collection(COLL).find({'$or':[{'session_id':str(session_id)},{'session_ids':str(session_id)}],'duplicate_of':None})
+        return [{'_id':str(row['_id']),'source':'ai',**{key:row.get(key) for key in
+                ('vuln_type','target','severity','verified','status','evidence_level','verification_status','verification_reason')}} for row in rows]
+
+    def verification_request(self,finding_id,context):
+        """Claim one scoped read verification, never run a model-authored PoC."""
+        from urllib.parse import urlsplit,parse_qs
+        row=get_repo().collection(COLL).find_one({'_id':_oid(finding_id)})
+        if not row or row.get('verified'):return None
+        target=str(row.get('target') or '');uri=urlsplit(target)
+        if uri.scheme not in ('http','https') or not uri.hostname:return None
+        allowed={urlsplit(str(context.get('site') or '')).hostname}
+        for entry in context.get('tool_log') or []:
+            if entry.get('name')=='http_request':allowed.add(urlsplit(str((entry.get('arguments') or {}).get('url') or '')).hostname)
+        if uri.hostname not in allowed:return None
+        # GET is not necessarily side-effect-free. Do not replay action endpoints
+        # or any previously observed write request automatically.
+        if re.search(r'delete|remove|reset|logout|purchase|transfer|send',uri.path,re.I):return None
+        if any(re.search(r'delete|remove|reset|action|cmd',k,re.I) for k in parse_qs(uri.query)):return None
+        before=next((entry for entry in reversed(context.get('tool_log') or []) if entry.get('name')=='http_request' and _quality.endpoint((entry.get('arguments') or {}).get('url',''))==_quality.endpoint(target)),None)
+        arguments=dict(before.get('arguments') or {}) if before else {'url':target,'method':'GET'}
+        if str(arguments.get('method') or 'GET').upper() not in ('GET','HEAD'):return None
+        arguments.update(url=target,timeout=10,window=4000)
+        coll=get_repo().collection(COLL)
+        claim=coll.update_one({'_id':row['_id'],'verified':{'$ne':True},'system_verification_started':{'$exists':False}},
+            {'$set':{'system_verification_started':True,'verification_status':'running'}})
+        if not getattr(claim,'modified_count',0):return None
+        return arguments
+
     def record_finding(self, finding: Dict[str, Any]) -> Dict[str, Any]:
         """登记一条 AI 渗透漏洞（幂等 norm_target+norm_type）。证据强制：无实抓正向证据 → status=lead 降级。
 
@@ -688,6 +727,28 @@ class FindingServiceImpl:
         if "md_text" in finding:
             return self._ingest_md(finding)
         return self._record_one(finding)
+
+    def capture_observations(self,text,context):
+        """Every mode records discoveries now, even if a model forgets report_finding."""
+        parsed=self.parse_findings_md(text or '')
+        # Capture explicit prose claims, never negative/conditional statements or
+        # instructions quoted inside executable tool/code blocks.
+        clean=re.sub(r'<[^>]*invoke\b[^>]*>.*?</[^>]*invoke\s*>','',text or '',flags=re.S|re.I)
+        clean=re.sub(r'```.*?```','',clean,flags=re.S)
+        for line in clean.splitlines():
+            if not re.search(r'发现|确认|存在|疑似',line) or re.search(r'未发现|没有|不存在|不构成|未确认',line):continue
+            for kind in ('认证绕过','未授权访问','用户枚举','SQL注入','源码泄露','敏感信息泄露','文件上传漏洞','目录遍历','SSRF','XSS'):
+                if kind not in line:continue
+                url=re.search(r'https?://[^\s<>\"\x27）)]+',line)
+                target=url.group(0).rstrip('。,;') if url else ''
+                if not target:
+                    target=next((str((entry.get('arguments') or {}).get('url')) for entry in reversed(context.get('tool_log') or []) if entry.get('name')=='http_request' and (entry.get('arguments') or {}).get('url')),context.get('site',''))
+                if target:parsed.append({'vuln_type':kind,'target':target,'impact':line[:1000]})
+        results=[]
+        for finding in parsed:
+            results.append(self.record_finding({**finding,**{key:context.get(key,'') for key in ('session_id','asset_key','unit')},'tool_log':context.get('tool_log') or []}))
+        self.reconcile_session_findings(str(context.get('session_id') or ''),tool_log=context.get('tool_log') or [])
+        return {'ok':True,'captured':len(results),'results':results}
 
     def _record_one(self, finding: Dict[str, Any], tool_log: Optional[List] = None,
                     ctx: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -707,6 +768,11 @@ class FindingServiceImpl:
         request_method = _quality.request_method({**finding, "poc": reproduction["poc"]})
         ev_level, evidence = match_evidence({"target": target, "method": request_method}, tool_log)
         verified = (ev_level == "confirmed")
+        from ._verification import assess
+        verification=assess({**finding,'vuln_type':vuln_type},tool_log)
+        verified=verification['confirmed']
+        if verified:ev_level='confirmed'
+        elif ev_level=='confirmed':ev_level='attempted'
         # 不确定性通过 verified/evidence_level 表达，不再通过篡改风险等级表达。
         severity_capped = False
         # 影响等级与证据置信度独立：未实证标 lead，不把 high/critical 改写成 info。
@@ -751,7 +817,7 @@ class FindingServiceImpl:
             }
 
             # 【v1.21.157-34】对抗式复核：verified=True 的 finding 入库前过复核 AI，治假阳性+虚高
-            if verified:
+            if verified and ctx.get('allow_model_review') is True:
                 review_input = {
                     "vuln_type": vuln_type, "target": target, "cvss_vector": cvss_vec,
                     "impact": impact, "evidence": evidence
@@ -781,7 +847,12 @@ class FindingServiceImpl:
                         cal_severity = sugg_sev  # 更新后续推送等级
                 # confirmed: 保持原样
 
+            doc.update(verification_status=verification['status'],verification_reason=verification['reason'])
             saved, duplicate, upgraded = _persist_finding(coll, doc)
+            repo=get_repo()
+            repo.collection(Collections.FINDING_IDENTITY).update_one({'_id':'_finding_revision'}, {'$inc':{'revision':1}},upsert=True)
+            for affected in set(saved.get('session_ids') or [saved.get('session_id')])-{None,''}:
+                repo.collection(Collections.PENTEST_SESSION).update_one({'_id':_oid(affected)},{'$inc':{'finding_revision':1}})
             try:
                 _finding_index.index_one(get_repo(), saved)
                 _finding_index.annotate(get_repo(), [saved])
@@ -1189,25 +1260,45 @@ def downgrade_severity(source: str, ids: List[str], target_severity: str, handle
     return {"ok": True, "updated": updated, "skipped": skipped}
 
 
-def reconcile_session_findings(session_id: str, dry_run: bool = False) -> Dict[str, Any]:
+def reconcile_session_findings(session_id: str, dry_run: bool = False, tool_log=None) -> Dict[str, Any]:
     """热更后的存量会话惰性修复；只更新派生质量字段，保留原文、证据与重复条目原始记录。"""
     repo = get_repo()
     sess = repo.collection(Collections.PENTEST_SESSION).find_one({"_id": _oid(session_id)})
     if not sess:
         return {"ok": False, "error": "session not found"}
-    logs = sess.get("tool_log") or []
+    logs = tool_log if tool_log is not None else sess.get("tool_log") or []
     coll = repo.collection(COLL)
-    rows = list(coll.find({"session_id": str(session_id), "duplicate_of": None}))
+    rows = list(coll.find({'$or':[{'session_id':str(session_id)},{'session_ids':str(session_id)}], "duplicate_of": None}))
     groups = {}
     updates = []
+    visited=set()
+    duplicates=[]
     for row in rows:
         canon, matched, _ = _quality.category(row.get("raw_vuln_type") or row.get("vuln_type", ""))
+        point=_quality.identity(session_id,row.get('target',''),canon)
+        if not dry_run and point in visited:continue
+        visited.add(point)
+        if not dry_run:
+            original_id=str(row['_id'])
+            row,_,_=_persist_finding(coll,{**row,'vuln_type':canon,'update_date':row.get('update_date') or time.strftime('%Y-%m-%d %H:%M:%S')})
+            if original_id!=str(row['_id']):
+                duplicates.append({'id':original_id,'duplicate_of':str(row['_id'])})
+                repo.collection(Collections.FINDING_IDENTITY).update_one({'_id':'_finding_revision'},{'$inc':{'revision':1}},upsert=True)
+                for affected in set(row.get('session_ids') or [row.get('session_id')])-{None,''}:
+                    repo.collection(Collections.PENTEST_SESSION).update_one({'_id':_oid(affected)},{'$inc':{'finding_revision':1}})
         original_poc = row.get("poc_original", row.get("poc", ""))
         reproduction = _quality.reproduction({**row, "poc": original_poc}, logs)
         method = _quality.request_method({**row, "poc": reproduction["poc"]})
         key = _quality.identity(session_id, row.get("target", ""), canon, row.get("parameter", ""), method)
         groups.setdefault(key, []).append(row)
-        if row.get("quality_version") == _quality.QUALITY_VERSION:
+        # 新的会话未带证据，不能抹掉其他会话已经实证的同一漏洞。
+        stored=[{'name':hit.get('tool'),'arguments':hit.get('arguments') or {},'result':hit.get('result') or {}}
+                for hit in row.get('evidence') or [] if hit.get('complete',True)]
+        from ._verification import assess
+        verification=assess(row,logs+stored)
+        if row.get('verified') and row.get('verification_status')=='confirmed' and not row.get('review_downgraded'):
+            verification={'confirmed':True,'status':'confirmed','reason':row.get('verification_reason','已保留既有实证')}
+        if row.get("quality_version") == _quality.QUALITY_VERSION and row.get('verification_status')==verification['status']:
             continue
         _, _, _, severity, basis = _grade(row.get("cvss_vector", ""), canon, row.get("impact", ""), row.get("target", ""))
         # 已有人工/对抗复核评级不以无证据理由覆盖；保留明确复核结论及说明。
@@ -1221,14 +1312,20 @@ def reconcile_session_findings(session_id: str, dry_run: bool = False) -> Dict[s
                   "quality_version": _quality.QUALITY_VERSION,
                   "request_method": method,
                   "supporting_evidence": _quality.script_support(row.get("target", ""), logs),
-                  "poc_original": original_poc, **reproduction}
+                  "poc_original": original_poc,'verified':verification['confirmed'],
+                  'status':'finding' if verification['confirmed'] else 'lead',
+                  'evidence_level':'confirmed' if verification['confirmed'] else 'attempted' if logs else 'none',
+                  'verification_status':verification['status'],'verification_reason':verification['reason'],**reproduction}
         updates.append({"id": str(row["_id"]), "severity_before": row.get("severity"), "severity_after": severity,
                         "poc_quality": fields["poc_quality"], "script_references": len(fields["supporting_evidence"])})
         if not dry_run:
-            coll.update_one({"_id": row["_id"], "quality_version": row.get("quality_version"),
+            updated=coll.update_one({"_id": row["_id"], "quality_version": row.get("quality_version"),
                              "cvss_vector": row.get("cvss_vector"), "poc": row.get("poc"),
                              "manual_severity": row.get("manual_severity")}, {"$set": fields})
-    duplicates = []
+            if getattr(updated,'modified_count',0):
+                repo.collection(Collections.FINDING_IDENTITY).update_one({'_id':'_finding_revision'},{'$inc':{'revision':1}},upsert=True)
+                for affected in set(row.get('session_ids') or [row.get('session_id')])-{None,''}:
+                    repo.collection(Collections.PENTEST_SESSION).update_one({'_id':_oid(affected)},{'$inc':{'finding_revision':1}})
     for group in groups.values():
         if len(group) < 2:
             continue
@@ -1239,7 +1336,7 @@ def reconcile_session_findings(session_id: str, dry_run: bool = False) -> Dict[s
             duplicates.append({"id": str(row["_id"]), "duplicate_of": str(canonical["_id"])})
             if not dry_run:
                 coll.update_one({"_id": row["_id"], "duplicate_of": None}, {"$set": {
-                    "duplicate_of": str(canonical["_id"]), "duplicate_reason": "同会话、端点、规范类别与参数重复",
+                    "duplicate_of": str(canonical["_id"]), "duplicate_reason": "same_endpoint_same_type",
                     "quality_version": _quality.QUALITY_VERSION}})
     return {"ok": True, "updates": updates, "duplicates": duplicates, "dry_run": dry_run}
 

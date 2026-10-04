@@ -253,7 +253,7 @@
 import { t as translate } from '../../i18n'
 
 import { cvssLabel, evidenceLabel, pocLabel } from '../../utils/findingDisplay'
-import { onMounted, reactive, ref, computed } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { DownOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue'
@@ -631,6 +631,18 @@ async function removeOne(r: UnifiedFinding) {
 }
 const auto = useAutoRefresh(loadAll, 30000)
 onMounted(loadAll)
+let revisionSeen=-1;let revisionBusy=false
+const revisionTimer=window.setInterval(async()=>{
+  if(document.hidden || revisionBusy)return
+  revisionBusy=true
+  try {
+    const value=await pentestApi.findingRevision()
+    if(revisionSeen>=0 && value.revision!==revisionSeen) {loadStat();if(!selectedKeys.value.length && !detailOpen.value)loadList()}
+    revisionSeen=value.revision
+  } catch {/* Existing manual refresh remains available. */}
+  finally {revisionBusy=false}
+},1000)
+onUnmounted(()=>window.clearInterval(revisionTimer))
 </script>
 
 <style scoped>

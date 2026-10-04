@@ -47,7 +47,8 @@ if os.name=='nt':
   finally:kernel.CloseHandle(snapshot)
 
 def popen(*args,**kwargs):
- if os.name!='nt':return subprocess.Popen(*args,**kwargs)
+ if os.name!='nt':
+  proc=subprocess.Popen(*args,**kwargs);proc._watchtower_own_group=bool(kwargs.get('start_new_session'));return proc
  kwargs.pop('start_new_session',None);kwargs['creationflags']=kwargs.get('creationflags',0)|0x4|subprocess.CREATE_NO_WINDOW
  job=Job();proc=None
  try:
@@ -76,7 +77,7 @@ def terminate_tree(proc):
    if proc.poll() is None:proc.kill()
  else:
   try:
-   group=os.getpgid(proc.pid)
+   group=proc.pid if getattr(proc,'_watchtower_own_group',False) else os.getpgid(proc.pid)
    if group==proc.pid:os.killpg(group,9)
    elif proc.poll() is None:proc.kill()
   except ProcessLookupError:pass

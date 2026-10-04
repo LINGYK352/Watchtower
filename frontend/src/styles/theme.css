@@ -5,6 +5,12 @@
   --dt-cyan: #06b6d4;
   --dt-gradient: linear-gradient(135deg, #06b6d4 0%, #1677ff 100%);
   --dt-gradient-soft: linear-gradient(135deg, rgba(6,182,212,.12) 0%, rgba(22,119,255,.12) 100%);
+  --dt-success: #15803d;
+  --dt-success-soft: #f0fdf4;
+  --dt-success-border: #bbf7d0;
+  --dt-danger: #dc2626;
+  --dt-danger-soft: #fef2f2;
+  --dt-warning: #9a6700;
 
   /* —— 中性背景/文字 —— */
   --dt-bg: #f6f8fc;

@@ -57,6 +57,12 @@ class ChromiumShot:
         if self._exec_ok is not None:
             return self._exec_ok
         try:
+            native=os.environ.get('SENTINEL_NATIVE_SERVICE','')
+            if native:
+                command=[native,'--root',os.environ['SENTINEL_NATIVE_ROOT'],'--boot','browser-probe','--browser-cli','probe']
+                r=subprocess.run(command,capture_output=True,timeout=25)
+                self._exec_ok=r.returncode==0
+                return self._exec_ok
             import importlib.util
             if importlib.util.find_spec("playwright") is None:
                 self._exec_ok = False
@@ -89,6 +95,9 @@ class ChromiumShot:
     def _build_argv(self, url: str, out_path: str) -> List[str]:
         """Playwright CLI 截图命令：chromium 无头，给页面渲染时间后截首屏，导航超时毫秒。
         只截首屏（默认非 full-page，对齐 phantomjs viewport，避免超长页巨图）。"""
+        native=os.environ.get('SENTINEL_NATIVE_SERVICE','')
+        if native:return [native,'--root',os.environ['SENTINEL_NATIVE_ROOT'],'--boot','browser-shot',
+                          '--browser-cli','screenshot','--url',url,'--image',out_path,'--browser-timeout',str(self.timeout)]
         return [sys.executable, "-m", "playwright", "screenshot",
                 "--browser", "chromium",
                 "--wait-for-timeout", "1500",

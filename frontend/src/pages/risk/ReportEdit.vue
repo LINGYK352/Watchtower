@@ -8,7 +8,7 @@
     <a-card :bordered="false">
       <a-tabs v-model:activeKey="activeTab" @change="onTabChange">
         <!-- 任务级报告 -->
-        <a-tab-pane key="task" tab="任务级报告">
+        <a-tab-pane key="task" :tab="translate('ui.report_task_tab')">
           <a-alert type="info" show-icon style="margin-bottom:12px"
             :message="translate('ui.m_06874e957bfd')" />
           <a-space style="margin-bottom:12px" wrap>
@@ -33,6 +33,7 @@
               </template>
               <template v-else-if="column.key === 'action'">
                 <a-space>
+                  <a-button type="link" size="small" @click="openReportPreview(record)">{{ translate('ui.m_13d61fea9f17') }}</a-button>
                   <a-button type="link" size="small" @click="openEditor(record)">{{ translate('ui.m_051836569928') }}</a-button>
                   <a-button type="link" size="small" @click="doExport(record)">{{ translate('ui.m_d6a145c6f147') }}</a-button>
                   <ConfirmAction danger type="link" size="small" :title="translate('ui.m_a00b1ca5af9f')" @confirm="removeReport(record, loadTaskReports)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
@@ -43,7 +44,7 @@
         </a-tab-pane>
 
         <!-- 会话级报告 -->
-        <a-tab-pane key="session" tab="会话级报告">
+        <a-tab-pane key="session" :tab="translate('ui.report_session_tab')">
           <a-alert type="info" show-icon style="margin-bottom:12px"
             :message="translate('ui.m_facc746d874a')" />
           <a-space style="margin-bottom:12px" wrap>
@@ -68,6 +69,7 @@
               </template>
               <template v-else-if="column.key === 'action'">
                 <a-space>
+                  <a-button type="link" size="small" @click="openReportPreview(record)">{{ translate('ui.m_13d61fea9f17') }}</a-button>
                   <a-button type="link" size="small" @click="openEditor(record)">{{ translate('ui.m_051836569928') }}</a-button>
                   <a-button type="link" size="small" @click="doExport(record)">{{ translate('ui.m_d6a145c6f147') }}</a-button>
                   <ConfirmAction danger type="link" size="small" :title="translate('ui.m_a00b1ca5af9f')" @confirm="removeReport(record, loadSessionReports)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
@@ -78,7 +80,7 @@
         </a-tab-pane>
 
         <!-- 漏洞报告（单个漏洞级） -->
-        <a-tab-pane key="finding" tab="漏洞报告">
+        <a-tab-pane key="finding" :tab="translate('ui.report_finding_tab')">
           <a-alert type="info" show-icon style="margin-bottom:12px"
             :message="translate('ui.m_acca6c3741b7')" />
           <a-space style="margin-bottom:12px" wrap>
@@ -103,6 +105,7 @@
               </template>
               <template v-else-if="column.key === 'action'">
                 <a-space>
+                  <a-button type="link" size="small" @click="openReportPreview(record)">{{ translate('ui.m_13d61fea9f17') }}</a-button>
                   <a-button type="link" size="small" @click="openEditor(record)">{{ translate('ui.m_051836569928') }}</a-button>
                   <a-button type="link" size="small" @click="doExport(record)">{{ translate('ui.m_d6a145c6f147') }}</a-button>
                   <ConfirmAction danger type="link" size="small" :title="translate('ui.m_a00b1ca5af9f')" @confirm="removeReport(record, loadFindingReports)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
@@ -164,6 +167,15 @@
         </a-tab-pane>
       </a-tabs>
     </a-card>
+
+    <a-drawer v-model:open="reportPreviewOpen" :title="reportPreviewTitle" width="80%" @close="closeReportPreview">
+      <template #extra><a-button :disabled="reportPreviewLoading" @click="intelApi.exportPentestDocx(reportPreviewId)">{{ translate('ui.m_d6a145c6f147') }}</a-button></template>
+      <a-spin :spinning="reportPreviewLoading">
+        <a-alert v-if="reportPreviewError" type="error" show-icon :message="reportPreviewError" />
+        <a-empty v-else-if="!reportPreviewLoading && !reportPreviewHtml" />
+        <div v-else class="cmp-doc report-preview" data-testid="generated-report-preview" v-html="reportPreviewHtml"></div>
+      </a-spin>
+    </a-drawer>
 
     <!-- 报告编辑抽屉：左编辑 Markdown 右实时预览 -->
     <a-drawer :open="editorOpen" @close="requestCloseEditor" :title="editorTitle" width="80%" :body-style="{ paddingTop: '8px' }">
@@ -292,12 +304,30 @@ import ReportAiAssist from './ReportAiAssist.vue'
 import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 import { aiConfigApi } from '../../api/aiConfig'
 import type { ListResult, RowRecord } from '../../api/types'
+import { safeReportHtml } from '../../utils/reportPreview'
 
 const loading = ref(false)
 const generating = ref(false)
 const saving = ref(false)
 const exporting = ref(false)
 const activeTab = ref<'task' | 'session' | 'finding' | 'template'>('task')
+const reportPreviewOpen=ref(false),reportPreviewLoading=ref(false),reportPreviewId=ref(''),reportPreviewTitle=ref(''),reportPreviewHtml=ref(''),reportPreviewError=ref('')
+let reportPreviewGeneration=0
+function closeReportPreview(){reportPreviewGeneration++;reportPreviewOpen.value=false;reportPreviewLoading.value=false;reportPreviewHtml.value=''}
+async function openReportPreview(record:RowRecord){
+  const generation=++reportPreviewGeneration
+  reportPreviewId.value=String(record._id);reportPreviewTitle.value=String(record.title || translate('ui.m_13d61fea9f17'))
+  reportPreviewOpen.value=true;reportPreviewLoading.value=true;reportPreviewHtml.value='';reportPreviewError.value=''
+  try {
+    const data=await intelApi.pentestReportDocx(reportPreviewId.value)
+    if(data.byteLength>20*1024*1024)throw new Error(translate('ui.report_preview_large'))
+    const mammoth=(await import('mammoth')).default
+    const result=await mammoth.convertToHtml({arrayBuffer:data})
+    if(generation===reportPreviewGeneration)reportPreviewHtml.value=safeReportHtml(result.value || '')
+  } catch(error){if(generation===reportPreviewGeneration)reportPreviewError.value=(error as Error).message || translate('ui.report_preview_failed')}
+  finally{if(generation===reportPreviewGeneration)reportPreviewLoading.value=false}
+}
+onUnmounted(()=>{reportPreviewGeneration++})
 // 多选（批量删除/批量导出）：任务级、会话级、漏洞级各一份选中键
 const taskSelected = ref<string[]>([])
 const sessionSelected = ref<string[]>([])
@@ -319,7 +349,7 @@ const taskColumns = [
   { get title() { return translate('ui.m_500e160b8b2b') }, key: 'max_severity', width: 90 },
   { get title() { return translate('ui.m_3c2e8a4c055a') }, key: 'edited', width: 70 },
   { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'update_date', width: 170 },
-  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 200 }
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 260 }
 ]
 const sessionColumns = [
   { get title() { return translate('ui.m_f7b18fa95a10') }, dataIndex: 'title', ellipsis: true },
@@ -328,7 +358,7 @@ const sessionColumns = [
   { get title() { return translate('ui.m_500e160b8b2b') }, key: 'max_severity', width: 90 },
   { get title() { return translate('ui.m_3c2e8a4c055a') }, key: 'edited', width: 70 },
   { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date', width: 170 },
-  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 200 }
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 260 }
 ]
 const findingColumns = [
   { get title() { return translate('ui.m_f7b18fa95a10') }, dataIndex: 'title', ellipsis: true },
@@ -337,7 +367,7 @@ const findingColumns = [
   { get title() { return translate('ui.m_f9868c752346') }, key: 'max_severity', width: 90 },
   { get title() { return translate('ui.m_3c2e8a4c055a') }, key: 'edited', width: 70 },
   { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date', width: 170 },
-  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 200 }
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 260 }
 ]
 
 // report 列表接口按 report_type 过滤（task/session）
@@ -651,13 +681,13 @@ async function renderCompare(id: string) {
   // 左：原报告（真实排版）
   try {
     const ab = await reportTemplateApi.docxArrayBuffer(id, 'origin')
-    originHtml.value = (await mammoth.convertToHtml({ arrayBuffer: ab })).value || '<div style="color:#999">（空）</div>'
-  } catch (e) { originHtml.value = `<div style="color:#c0392b">原报告加载失败：${(e as Error).message}</div>` }
+    originHtml.value = safeReportHtml((await mammoth.convertToHtml({ arrayBuffer: ab })).value || '')
+  } catch (e) { originHtml.value = safeReportHtml(`<p>${renderMarkdown((e as Error).message)}</p>`) }
   // 右：打标记模板（mammoth 会把 {{占位符}}/{%tr%} 当普通文字渲染出来，正是"去数据打标记"效果）
   try {
     const ab = await reportTemplateApi.docxArrayBuffer(id, 'template')
-    templateHtml.value = (await mammoth.convertToHtml({ arrayBuffer: ab })).value || '<div style="color:#999">（模板未生成，可能学习失败，请换模型重学）</div>'
-  } catch (e) { templateHtml.value = `<div style="color:#c0392b">模板加载失败（可能学习未完成/失败）：${(e as Error).message}</div>` }
+    templateHtml.value = safeReportHtml((await mammoth.convertToHtml({ arrayBuffer: ab })).value || '')
+  } catch (e) { templateHtml.value = safeReportHtml(`<p>${renderMarkdown((e as Error).message)}</p>`) }
 }
 
 async function openReview(record: RowRecord) {

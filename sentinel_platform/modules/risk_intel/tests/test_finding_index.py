@@ -53,12 +53,12 @@ class FindingIndexTests(unittest.TestCase):
         index.annotate(self.repo,[later,older])
         self.assertFalse(later['first_seen']);self.assertTrue(older['first_seen'])
 
-    def test_methods_parameters_and_distinct_targets_stay_separate(self):
+    def test_methods_and_parameters_merge_but_distinct_targets_stay_separate(self):
         self.add('https://example.test/a','2026-01-01',method='GET')
         self.add('https://example.test/a','2026-01-01',method='POST')
         self.add('https://example.test/a','2026-01-01',method='GET',parameter='id')
         self.add('https://other.test/a','2026-01-01',method='GET')
-        self.assertEqual(vc.list_unified_findings(source='ai',size=10)['total'],4)
+        self.assertEqual(vc.list_unified_findings(source='ai',size=10)['total'],2)
 
     def test_index_failure_does_not_report_successful_insert_as_failed(self):
         with mock.patch.object(index,'index_one',side_effect=RuntimeError('index offline')):

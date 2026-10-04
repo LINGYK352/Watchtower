@@ -6,7 +6,7 @@ import shlex
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from . import _hazard_table
 
-QUALITY_VERSION = 2
+QUALITY_VERSION = 3
 _METHOD = r"(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)"
 _SECRET = re.compile(r"password|passwd|secret|token|authorization|cookie|api[-_]?key|private[-_]?key", re.I)
 
@@ -32,8 +32,9 @@ def endpoint(url):
 
 
 def identity(session_id, target, vuln_type, parameter="", method=""):
-    return hashlib.sha256(json.dumps([str(session_id), endpoint(target), category(vuln_type)[0],
-                                     str(parameter or ''), str(method or '').upper()], ensure_ascii=False).encode()).hexdigest()[:24]
+    # The same endpoint/type is one finding. Sessions, methods and parameters
+    # remain provenance, never create another row for the same vulnerability.
+    return hashlib.sha256(json.dumps([endpoint(target),category(vuln_type)[0]],ensure_ascii=False).encode()).hexdigest()[:24]
 
 
 def request_method(finding):

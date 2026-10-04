@@ -7,6 +7,12 @@ html[data-theme="dark"] {
   --dt-cyan: #00e5ff;
   --dt-gradient: linear-gradient(135deg, #00e5ff 0%, #0091ff 100%);
   --dt-gradient-soft: linear-gradient(135deg, rgba(0,229,255,.10) 0%, rgba(0,145,255,.10) 100%);
+  --dt-success: #66d99a;
+  --dt-success-soft: #102a20;
+  --dt-success-border: #23543c;
+  --dt-danger: #ff8585;
+  --dt-danger-soft: #30191f;
+  --dt-warning: #e7bd63;
   --dt-bg: #0a0e17;
   --dt-card: #0d1424;
   --dt-text: #cfe6f5;

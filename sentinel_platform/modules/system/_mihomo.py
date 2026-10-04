@@ -439,6 +439,12 @@ def _proc_state(pid: int) -> str:
 def _pid_running(pid: int) -> bool:
     """PID 是否为**存活**进程。僵尸(Z)不算存活——僵尸对 os.kill(pid,0) 仍返成功（PID 表项还在），
     但它不是能干活的 mihomo，若据此判 is_running=True 会导致「已在跑」误判、真内核起不来。故显式排除 Z。"""
+    if os.name=='nt':
+        try:
+            import psutil
+            process=psutil.Process(pid)
+            return process.is_running() and process.status() not in (psutil.STATUS_ZOMBIE,psutil.STATUS_DEAD)
+        except (psutil.NoSuchProcess,psutil.AccessDenied):return False
     try:
         os.kill(pid, 0)
     except Exception:
