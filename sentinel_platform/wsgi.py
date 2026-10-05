@@ -31,6 +31,13 @@ def _recover_update_before_import():
 
 _recover_update_before_import()
 
+#172 installs a signed controller and a persistent read-only startup mount.
+#It survives historical business rollback; this one-time migration does not
+#rebuild the image or replace user configuration and databases.
+from pathlib import Path as _GuardianPath
+from sentinel_platform.core.persistent_guardian import ensure as _ensure_guardian
+_ensure_guardian(_GuardianPath(__file__).resolve().parents[1])
+
 from sentinel_platform.bootstrap import create_app
 from sentinel_platform.core import get_config, get_logger
 
@@ -51,7 +58,8 @@ def _install_celery_delivery() -> None:
         from sentinel_platform.modules.kernel import _celery_adapter
         _celery_adapter.make_celery(broker)                 # 建 app + 注册 sentinel.run_task（供 .delay 投递）
         installed = _celery_adapter.install_celery_executor()
-        logger.info("wsgi celery delivery installed=%s broker=%s", installed, broker)
+        from urllib.parse import urlsplit as _broker_split
+        logger.info("wsgi celery delivery installed=%s broker_host=%s", installed, _broker_split(broker).hostname or 'local')
         # broker 降级自愈：若上次已降级（Mongo 记录 mode=thread）→ 保持线程模式，不把已知坏的 broker 又用起来。
         try:
             from sentinel_platform.modules.kernel import _broker_health

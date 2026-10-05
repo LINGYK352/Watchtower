@@ -29,19 +29,20 @@ Watchtower connects asset reconnaissance, AI tool use, human intervention, and e
 
 The project is maintained by an individual developer and is available free of charge under **GPL-3.0-only**. You can deploy it yourself; model calls and external data sources may require your own accounts or incur separate costs.
 
-> `main` contains approved Linux Web source, currently **v1.21.171**, matching the website hot-update snapshot. The image base remains **v1.21.165**; this release changes no image dependencies. Windows is under separate testing and is not publicly distributed. Development started on **June 3, 2026**.
+> `main` contains **v1.21.172 Web source**. [Independent Windows source](https://github.com/LINGYK352/Watchtower/tree/codex/windows) and [both downloads](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.172) share release172. Website: [watchtowers.info](https://watchtowers.info/). Development began **June 3, 2026**. Original code: **GPL-3.0-only**.
 
-## v1.21.171 highlights
+## Choose your workspace
 
-- This guardian transition release changes the updater only. Older installations enter171 first; later upgrades and rollbacks proceed one release at a time.
-- Keep a fixed target and durable hop progress. Missing predecessors stop the operation with an explicit explanation.
-- Include the172 downloader for common and platform-specific change ZIPs. Verify both packages before committing and retain interrupted downloads for resumption.
-- Display the current and target versions, hop count, phase and failure reason. Restore progress after navigation or service reload.
-- Use a cross-process lock, transaction backup and recovery, and commit the version last. Check all Web processes, database and frontend before advancing.
+| Product | Designed for | Installation and updates |
+| --- | --- | --- |
+| Web | Long tasks, stable server execution, centralized deployment and remote browser access across platforms | Linux x64 / Docker; one-command setup and sequential updates after the171 guardian |
+| Windows | Immediate local work, a native window and desktop access | One complete setup EXE with necessary components; independent local services and Windows updates |
 
-Eight guardian HTTP checks and thirteen package regressions passed. Actual VM and installed Windows tests covered sequential upgrades and rollbacks, plus real interrupted-download resumption.171 itself arrives through the existing updater; production prebuilt packages start with172. Rollback below171 is currently blocked before mutation to avoid removing the guardian. Windows tool parity and Windows10 testing remain pending.
+172 introduces offline-prepared common and platform change ZIPs, including adjacent inverse packages. Verify both before committing; preserve configuration, tasks and browser data, show durable progress and failures, and resume interrupted downloads. An independent Web guardian preserves sequential updates after historical rollback and cold recreation. Sources, builds and extension channels are independent; version numbers and registration/activation accounts are shared.
 
-See the [English changelog](CHANGELOG.en.md), [update delivery contract](docs/update-delivery.md), and [downloads](https://github.com/LINGYK352/Watchtower/releases).
+Windows bundles Python, MongoDB, the proxy, Chromium and persistent browser, HTTPx, Nuclei, DNSX, native TCP/HTTP/TLS identification and NPoC. No manual Python/Docker/WSL deployment. Missing WebView2 is prepared automatically from Microsoft and publisher-verified. Windows11 was tested; Windows10 was not tested on a real machine. See [platform boundaries](docs/platforms.md).172 is the first public Windows release.
+
+Validation covers37 menus per product, language switching and asset actions, actual Windows updates/rollback, a six-hop Web rollback to170 and six-hop return after cold recreation, three-worker readiness, actual proxy traffic, bundled/persistent browsers, native tools, extension isolation, interrupted transfers, tamper rejection, transaction recovery and process concurrency. No paid model calls. See [delivery](docs/update-delivery.md) and [English changelog](CHANGELOG.en.md). The image base remains165 and is tracked separately.
 
 ## Capabilities
 

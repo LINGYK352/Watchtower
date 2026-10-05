@@ -30,3 +30,8 @@ Watchtower 原创代码采用 **GPL-3.0-only**。本文件解释源码仓库和�
 5. 排除密钥、运行数据、客户资料和无权分发的内容。
 
 如发现归属或许可证说明遗漏，请联系维护者核实。
+## Windows172 packaging / Windows172交付
+
+Nmap/Npcap and their libraries are excluded from the public Windows package. The original TCP/banner/HTTP/TLS identifier is included; user-installed Nmap/NSE remains supported under the user installation's license. The former assumption that a CLI boundary automatically avoids license conditions is withdrawn. See https://nmap.org/npsl/.
+
+Python and Chromium/Playwright, MongoDB Community, Mihomo, ProjectDiscovery tools and NPoC retain their own licenses. Runtime distributions retain license files. Modified NPoC source is included in the Windows source branch under `third_party/npoc`; the Python3.11 regex compatibility edit is identified there. Original Watchtower code remains GPL-3.0-only.

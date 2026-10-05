@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+import os
 
 from ..base import ExternalTool
 from ..models import IPRec, PortInfo
@@ -20,12 +21,17 @@ class Naabu(ExternalTool):
     def build_argv(self, ports: str = "top-1000", concurrency: int = 500,
                    **kwargs: Any) -> List[str]:
         argv = ["-silent", "-json", "-rate", str(concurrency)]
+        if os.name == "nt":
+            # Native per-user install: TCP connect does not require Npcap/raw
+            # packet privileges. Linux keeps its existing scanner default.
+            argv += ["-s", "c"]
         if ports == "full":
             argv += ["-p", "-"]
         elif ports in _PORT_PRESET:
             argv += ["-top-ports", _PORT_PRESET[ports]]
         else:
             argv += ["-p", ports]
+        if kwargs.get('exclude_ports'):argv+=['-ep',kwargs['exclude_ports']]
         return argv
 
     def parse_record(self, obj: Dict[str, Any]) -> Optional[Tuple[str, PortInfo, str]]:
@@ -40,9 +46,9 @@ class Naabu(ExternalTool):
         return (str(ip), PortInfo(port_id=port_id, protocol="tcp"), str(obj.get("host") or ""))
 
     def scan(self, targets: Iterable[str], ports: str = "top-1000",
-             concurrency: int = 500) -> List[IPRec]:
+             concurrency: int = 500,exclude_ports: str = '') -> List[IPRec]:
         agg: Dict[str, IPRec] = {}
-        for ip, port_rec, host in self.run(stdin_lines=targets, ports=ports, concurrency=concurrency):
+        for ip, port_rec, host in self.run(stdin_lines=targets, ports=ports, concurrency=concurrency,exclude_ports=exclude_ports):
             rec = agg.setdefault(ip, IPRec(ip=ip))
             if port_rec.port_id not in {p.port_id for p in rec.ports}:
                 rec.ports.append(port_rec)

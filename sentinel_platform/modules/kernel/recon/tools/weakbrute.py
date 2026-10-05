@@ -1,4 +1,4 @@
-"""弱口令 / 未授权对接 —— 基于 nmap NSE brute 脚本（nmap GPL，CLI 进程边界不传染）。
+"""弱口令 / 未授权对接 —— 基于Nmap NSE，使用与再分发须按其实际版本许可处理。
 
 对已识别的非 Web 服务（SSH/FTP/MySQL/Redis/MongoDB 等）跑对应 *-brute NSE + 未授权
 检测（redis-info/mongodb-info）。命中 → VulnRec(plg_type=brute/poc)。

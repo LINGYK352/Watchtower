@@ -1,0 +1,9 @@
+# Platform capability boundaries /平台能力
+
+Web: Linux x64/Docker services for continuous tasks and remote browser access. Windows: native x64 desktop window and local services, no Linux VM/WSL/Docker runtime required. Version172 is synchronized, but source/build/update/extension channels are independent and registration/activation accounts are shared.
+
+Windows11 installation, native window, single instance, actual hot update/rollback,37 menus, bilingual switching, proxy HTTP traffic, Chromium screenshots and persistent cookies were tested. HTTPx/Nuclei/DNSX, native TCP/HTTP/TLS service detection and NPoC were tested against owned fixtures. No paid model test. Windows10 has not been tested on a real machine and is not claimed as verified compatibility.
+
+The installer does not redistribute Nmap. Native TCP/banner/HTTP/TLS identification is included. User-installed Nmap can use `-sT -Pn --unprivileged`; NSE needs that external installation. raw/driver-dependent scanning and self-loopback behavior are not promised. Native massdns semantics use bundled DNSX. Bash/Linux-only programs and kernel facilities are not silently treated as Windows executables; missing capabilities return explicit explanations. Windows AppContainer extensions enforce permissions, working directories, child-process policy, timeout/cancel and output limits. An offline extension is rejected when host firewall isolation cannot be guaranteed; the program does not change global firewall settings. Built-in trusted tools and third-party extensions have separate execution boundaries.
+
+The full installer includes necessary tools, browser, database and runtime libraries. Model providers, external asset-search APIs and account activation require their own credentials/network. Third-party components retain separate licenses; original Watchtower code isGPL-3.0-only. See notices and corresponding sources.

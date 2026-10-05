@@ -127,7 +127,7 @@ def step(updater,source,key,root):
 
 
 def pending(updater,root=''):
-    root=root or str(Path(updater.__file__).resolve().parents[3])
+    root=root or os.environ['SENTINEL_GUARDIAN_ROOT']
     state=updater._read_chain_state(root)
     if not state.get('active'):return {'active':False}
     with updater._apply_lock(root) as acquired:

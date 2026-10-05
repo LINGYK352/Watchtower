@@ -3,7 +3,7 @@
 naabu 端口扫描只产出开放端口号（PortInfo.port_id），无 service_name/version。用 nmap -sV
 对已发现端口做服务/版本识别，回填 PortInfo.{service_name, version, product}，对齐 ip.port_info 结构。
 
-nmap 是 GPL 工具，subprocess CLI arm's-length 调用（进程边界，许可不传染，见 GPL 插件边界）。
+Nmap各版本有具体许可与再分发条款；独立CLI调用不自动豁免这些义务。
 输出用 -oG（grepable）行内自解析，无需 XML 依赖——非 JSONL，故不走 base.ExternalTool 的 JSONL run，
 自实现 locate/available/detect/parse（同 weakbrute 范式）。净室重写旧引擎 nmap_service.py，勿抄。
 

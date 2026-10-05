@@ -306,8 +306,12 @@ def _stage_portscan(ctx: ReconContext, t: Tools) -> StageResult:
         targets = ctx.ip_list() or ctx.hosts or list(ctx.targets)
     if not targets or not _avail(t.naabu):
         return StageResult("portscan", skipped=True)
-    ports = ctx.options.get("ports", "top-1000")
-    recs = t.naabu.scan(targets, ports=ports, concurrency=ctx.io_concurrency(500))
+    from ._port_policy import select,ranges
+    ports=select(ctx.options)
+    if not ports:return StageResult('portscan',status='disabled',reason='Port scanning is disabled by policy')
+    excluded=ctx.options.get('exclude_ports','') or ''
+    excluded=ranges(excluded) if excluded else ''
+    recs = t.naabu.scan(targets, ports=ports, concurrency=ctx.io_concurrency(500),exclude_ports=excluded)
     if not recs:
         return StageResult("portscan", skipped=True)
     ctx.ips.extend(recs)
@@ -439,9 +443,17 @@ def _stage_enrich(ctx: ReconContext, t: Tools) -> StageResult:
     site_rows = [asdict(r) if hasattr(r, "__dataclass_fields__") else dict(r) for r in ctx.sites]
     enricher.enrich_ips(ip_rows)
     enricher.enrich_sites(site_rows)
-    ctx.ip_enrichment.update({r.get("ip", ""): r for r in ip_rows if r.get("ip")})
-    ctx.site_enrichment.update({(r.get("url") or r.get("site") or ""): r for r in site_rows
-                                if r.get("url") or r.get("site")})
+    # Cache enrichment fields only. A complete snapshot here would overwrite
+    # ports updated by the later service stage when final records are merged.
+    for row in ip_rows:
+        if row.get("ip"):
+            ctx.ip_enrichment.setdefault(row["ip"], {}).update(
+                {k: v for k, v in row.items() if k not in IPRec.__dataclass_fields__})
+    for row in site_rows:
+        key = row.get("url") or row.get("site")
+        if key:
+            ctx.site_enrichment.setdefault(key, {}).update(
+                {k: v for k, v in row.items() if k not in SiteRec.__dataclass_fields__})
     return StageResult("enrich", count=len(ip_rows) + len(site_rows))
 
 

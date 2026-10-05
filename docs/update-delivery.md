@@ -1,29 +1,15 @@
-# Update delivery / 热更新契约
+#172 update delivery /172更新契约
 
-## Guardian transition171
+171 remains the bootstrap guardian for existing Web installations. From172, the build machine prepares changed content as one common ZIP plus one platform ZIP for each adjacent forward and inverse transition. The server never scans user installations or builds ZIPs on request. A signed index is activated only after every advertised edge, inverse, inventory and changelog is validated under an OS file lock. Missing or inconsistent resources prevent publication. Common members require an explicit compatibility review.
 
-171 replaces the old single-hop/latest fallback and transient continuation intent with a fixed target, durable cursor, a cross-process OS file lock, and per-hop readiness checks. Missing intermediate releases must stop rather than silently jumping to the latest. Only a historical installation below171 may bootstrap directly to the guardian.
+Upgrades and rollbacks both follow recorded predecessors. Persist a fixed target, completed hops, cache and transaction journal. Verify signature, product, ABI, baseline, package/member SHA and size, paths and Unix executable modes; stage both ZIPs before replacing anything. Remove only previously owned obsolete files, retaining local modifications and all credentials, configuration, tasks, evidence and browser data. Recovery runs before business imports. Completion requires the expected frontend and every Web worker to be ready.
 
-Upgrade and rollback both follow adjacent releases. Same-version repair remains available. Rollback below171 is currently rejected before mutation: it would remove the new updater, and an independent persistent legacy guardian is not yet implemented. This is an explicit temporary boundary, not support for the entire historical rollback range.
+The Web guardian is signed and stored outside business ownership under `.update_stage/guardian`. Its generated Compose override mounts a read-only startup hook; history rollback and cold recreation do not remove it or downgrade it. Initial migration recreates services once without rebuilding the image. Scheduler/worker continuations reach `web:5013`, not their own loopback. When they cannot signal a different PID namespace, touching the shared loaded WSGI entry triggers the standard Gunicorn `--reload`; readiness, not the notification, confirms the hop.
 
-The first installation of171 uses the existing delivery protocol. The old installed updater may restart application services. There are no new image dependencies. Later Web source changes use Gunicorn reload; the chain checks worker boot identities, database connectivity and frontend digest before advancing. State and progress are read from disk across workers, rather than trusting process-local flags. Interrupted commits are restored before application code imports.
+Windows stores a verified GUI/helper generation under `state/guardian`; it survives business rollback, opens one native window and preserves the desktop entry. Versions and accounts are shared across products; sources/builds/extensions are independent. Requests report OS/architecture/ABI; mismatches fail. Windows public history begins172; older private test builds are not advertised as public releases. The Web history floor is164, Windows172. Test labels never enter the stable index.
 
-## Prebuilt packages from172
+Normal updates are deltas, not full system images. Complete Windows setup is one EXE containing a signed ZIP payload; the installer reads its bounded range directly without copying a large temporary ZIP. External model/account services still require normal configuration and network access.
 
-The build machine prepares every adjacent forward AND reverse transition ahead of upload. Each hop has one common ZIP and one platform ZIP, signed plans, complete owned inventory, changes/removals and migration metadata. Normal packages contain the version's changed content, not the whole system. Shared members must have reviewed cross-platform compatibility and must not be duplicated in exclusive ZIPs. The distribution server validates, stores and serves prepared artifacts; it must not compare user files or build ZIPs on request.
+旧设计被替代：单文件逐次请求与请求时打包增加服务器负担；跨级差异包无法闭合逆向恢复；进程内状态在多worker不一致；回退业务会卸掉更新器。改为离线预制相邻正逆包、持久磁盘锁/游标/事务、独立守护与逐级运行确认。保留171入口用于存量Web过渡，正式172仅使用已准备的两包链路。更新会重载服务，Windows会重开程序，开始前请结束关键任务。
 
-Names: `Watchtower-common-vX.Y.Z-from-vA.B.C.zip`, `Watchtower-web-vX.Y.Z-update-from-vA.B.C.zip`, `Watchtower-win-vX.Y.Z-update-from-vA.B.C.zip`. Reverse transitions use the same target/from convention.172→171 also needs a prepared reverse package, not the legacy per-file route.
-
-Requests report client OS, architecture, ABI and current version. Legacy requests without OS route only to Web; unknown/conflicting platforms are rejected. Windows and Web have separate product sources, build/update/extension channels, synchronized version numbers and shared registration/activation accounts. This171 release publicly ships Web only.
-
-Both packages must be downloaded, verified and staged before any live file changes. Retain `.part` downloads for Range resumption. Reject signature/hash mismatches, path traversal, duplicate members, links, reserved names, excessive expansion and unsupported ABI. Never replace credentials, activation, user configuration, tasks or evidence. Remove only owned obsolete content; preserve user-modified files. A missing baseline produces a repair explanation, not a hidden fallback to per-file delivery.
-
-## Progress and continuation
-
-Show current version, fixed final target, current hop/total hops, phase, bytes and errors. Persist completed hops and cache state. Navigation, reload and connection resets must restore progress. Failure pauses the chain with a visible reason and resume action. Completion means the target application actually started, not merely that files were written.
-
-## 中文要点与边界
-
-旧单跳与短期认领会丢失续更信息，跨版本差异包也无法正确还原，因此改为相邻正向/逆向变更包、固定目标及持久事务。171为存量用户入口，172才正式切换公共＋专属ZIP。原来全历史版本回退能力目前被守门员安全边界限制：早于171的回退操作明确拒绝，独立守护方案列入下一阶段。
-
-真实测试覆盖两端逐级升级/回退、三Web worker就绪、真实HTTP断流与续传、坏签名/摘要、归属删除和提交恢复。Windows只在Win11实测；Linux专属工具适配、Win10及Windows公开分发尚未完成。源码附件不包含外部工具和完整离线运行环境。
+Background-process contract: the persistent supervisor keeps worker/scheduler containers running and sends TERM only to each child process. Celery drains active jobs before a fresh interpreter starts. Every hop requires fresh nonce-bound startup acknowledgements and a current supervisor heartbeat for both roles. A warm scheduler restart does not treat live worker jobs as dead; periodic lease recovery remains active. Long-running work can pause update completion at the readiness timeout; progress is retained for resumption. Checking only Gunicorn/frontend readiness has been replaced because it left task adapters cached at an older version.
