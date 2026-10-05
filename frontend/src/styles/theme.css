@@ -1,0 +1,40 @@
+:root {
+  /* —— 品牌色:青→蓝渐变(科技专业风核心) —— */
+  --dt-primary: #1677ff;
+  --dt-primary-hover: #4096ff;
+  --dt-cyan: #06b6d4;
+  --dt-gradient: linear-gradient(135deg, #06b6d4 0%, #1677ff 100%);
+  --dt-gradient-soft: linear-gradient(135deg, rgba(6,182,212,.12) 0%, rgba(22,119,255,.12) 100%);
+  --dt-success: #15803d;
+  --dt-success-soft: #f0fdf4;
+  --dt-success-border: #bbf7d0;
+  --dt-danger: #dc2626;
+  --dt-danger-soft: #fef2f2;
+  --dt-warning: #9a6700;
+
+  /* —— 中性背景/文字 —— */
+  --dt-bg: #f6f8fc;
+  --dt-card: #ffffff;
+  --dt-text: #0f1f33;
+  --dt-muted: #64748b;
+  --dt-border: #e8edf4;
+  --dt-border-strong: #d4ddea;
+
+  /* —— 深色侧栏:深蓝渐变 —— */
+  --dt-sider: #0a1628;
+  --dt-sider-grad: linear-gradient(180deg, #0d1b30 0%, #07101e 100%);
+
+  /* —— 浅色填充（chip/hover 等次级背景）—— */
+  --dt-fill: #fafafa;
+
+  /* —— 圆角:统一现代 16px 体系 —— */
+  --dt-radius: 16px;
+  --dt-radius-sm: 10px;
+  --dt-radius-lg: 20px;
+
+  /* —— 多层精致阴影 —— */
+  --dt-shadow-sm: 0 1px 3px rgba(15,23,42,.04), 0 1px 2px rgba(15,23,42,.06);
+  --dt-shadow: 0 2px 8px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.04);
+  --dt-shadow-hover: 0 8px 24px rgba(15,23,42,.1), 0 2px 8px rgba(15,23,42,.06);
+  --dt-shadow-primary: 0 2px 6px rgba(15,23,42,.12);
+}

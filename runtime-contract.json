@@ -1,0 +1,5 @@
+{
+  "schema": 1,
+  "deployment_contract": 1,
+  "runtime_abi": "linux-amd64-py311-v1"
+}

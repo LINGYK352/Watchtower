@@ -1,0 +1,12 @@
+# 路由 E2E 测试专用配置（仅测试加载，绝不用于生产）。
+# 目的：让 gateway.auth_enabled() 在测试环境确定性为 False——router E2E 测试测的是
+# 端点逻辑，不测网关鉴权；需要测鉴权的 test_user_auth_e2e 自行 mock.patch(auth_enabled=True)。
+# 历史坑：旧 gateway 只读 AUTH/ARL.AUTH（样例配置里没有）→ 恰好 auth 关，测试才过；
+# 修复 gateway 读 SENTINEL.AUTH 后，样例配置 SENTINEL.AUTH:true 会让无 token 的 E2E 全 401。
+# 根治=测试不依赖环境里恰好存在哪份 config，改用本确定性配置（AUTH 明确关）。
+MONGO:
+  URI: 'mongodb://127.0.0.1:27017/'
+  DB: 'sentinel_test'
+SENTINEL:
+  AUTH: false
+  API_KEY: ""

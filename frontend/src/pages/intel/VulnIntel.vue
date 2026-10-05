@@ -1,0 +1,312 @@
+<template>
+  <PageContainer :title="translate('ui.m_152ea9270e8d')" kicker="Vuln Intelligence" :description="translate('ui.m_f8aad8c4e6c7')">
+    <template #extra>
+      <a-space>
+        <span class="feed-meta">{{ translate('ui.m_71b5575e5eea') }}{{ cloudSource?.last_fetch || status.last_fetch || translate('ui.m_439e864e8324') }}</span>
+        <a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button>
+        <a-tooltip :title="translate('ui.m_b28d8e83811b')">
+          <a-button type="primary" ghost :loading="running" @click="runFeed">{{ translate('ui.m_36e7a43a1c67') }}</a-button>
+        </a-tooltip>
+      </a-space>
+    </template>
+
+    <!-- 情报来源：云端主来源(突出) + 本地可执行源 -->
+    <a-card size="small" class="page-card src-health" :bordered="false">
+      <div class="src-health-head">
+        <span class="sh-title">{{ translate('ui.m_271b89be4187') }}</span>
+        <span class="sh-interval">
+          {{ translate('ui.m_9060d076368a') }}
+          <a-select v-model:value="intervalSel" size="small" style="width: 120px" :options="intervalOptions" @change="saveInterval" />
+        </span>
+      </div>
+
+      <!-- 云端主来源 hero -->
+      <div v-if="cloudSource" class="cloud-hero" :class="cloudSource.health">
+        <div class="cloud-glyph">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M34 40H14A10 10 0 0 1 12 20.2 13 13 0 0 1 37 22a8 8 0 0 1-3 18Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 34V22m0 0-5 5m5-5 5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="cloud-main">
+          <div class="cloud-title">
+            <span class="cloud-name">{{ translate('ui.m_16165e40c5ba') }}</span>
+            <span class="cloud-badge" :class="cloudSource.health">{{ healthText(cloudSource.health) }}</span>
+          </div>
+          <div class="cloud-sub">
+            {{ translate('ui.m_5fd43ee6cb4f') }} <b>{{ (cloudSource.remote_count || cloudSource.fetched || stat.total) || 0 }}</b> {{ translate('ui.m_f004f1d84cf9') }}
+            <span v-if="cloudSource.last_fetch"> {{ translate('ui.m_bc74063b3467') }} {{ cloudSource.last_fetch }}</span>
+          </div>
+        </div>
+        <div class="cloud-metrics">
+          <div class="cm"><span class="cm-n">{{ stat.in_kev || 0 }}</span><span class="cm-l">{{ translate('ui.m_8f5c138a5a03') }}</span></div>
+          <div class="cm"><span class="cm-n">{{ stat.by_severity && stat.by_severity.critical || 0 }}</span><span class="cm-l">{{ translate('ui.m_73eb0e14e307') }}</span></div>
+        </div>
+      </div>
+
+      <!-- 本地可执行能力源 -->
+      <div v-if="localSources.length" class="local-src-wrap">
+        <div class="local-src-label">{{ translate('ui.m_bcfa821d6231') }}</div>
+        <div class="src-grid">
+          <div v-for="s in localSources" :key="s.name" class="src-chip" :class="s.health">
+            <span class="dot" :class="s.health"></span>
+            <div class="src-info">
+              <a v-if="s.url" :href="s.url" target="_blank" rel="noreferrer" class="src-name">{{ s.label }}</a>
+              <span v-else class="src-name">{{ s.label }}</span>
+              <div class="src-sub">
+                <span>{{ healthText(s.health) }}</span>
+                <span v-if="s.fetched"> · {{ s.fetched }} {{ translate('ui.m_f004f1d84cf9') }}</span>
+                <span v-if="s.error" class="src-err"> · {{ s.error.slice(0, 30) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </a-card>
+
+    <!-- 概览卡 -->
+    <a-row :gutter="16" class="stat-row">
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_e4246b7d0651')" :value="stat.total" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_350a4c722f51')" :value="stat.in_kev" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_2639efc862c1')" :value="stat.executable" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_73eb0e14e307')" :value="stat.by_severity.critical || 0" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_4aa71c570566')" :value="stat.by_severity.high || 0" :value-style="{ color: '#fa541c' }" /></a-card></a-col>
+      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_36a7c77b623b')" :value="stat.by_severity.medium || 0" :value-style="{ color: '#faad14' }" /></a-card></a-col>
+    </a-row>
+
+    <!-- 按组件查(AI 同款) -->
+    <a-card size="small" class="page-card" :title="translate('ui.m_60065844f714')">
+      <a-input-search v-model:value="comp" :placeholder="translate('ui.m_f3f859dc4de6')" enter-button="查询"
+        style="max-width: 480px" @search="doQuery" />
+      <div v-if="queryDone" class="query-hint">{{ translate('ui.m_393df9bb13ea') }} {{ queryResult.length }} {{ translate('ui.m_f004f1d84cf9') }}{{ queryResult.length ? translate('ui.m_850cc0f4acaa') : translate('ui.m_62df7b620997') }}</div>
+    </a-card>
+
+    <!-- 过滤 + 列表 -->
+    <SearchBar :model="query" @search="reload" @reset="onReset">
+      <a-form-item :label="translate('ui.m_1f7f0db90f93')"><a-input v-model:value="query.keyword" :placeholder="translate('ui.m_98a2e4ac3a0b')" allow-clear style="width: 200px" /></a-form-item>
+      <a-form-item :label="translate('ui.m_337717173807')">
+        <a-select v-model:value="query.severity" allow-clear style="width: 120px" :options="sevOptions" :placeholder="translate('ui.m_5c55a67935af')" />
+      </a-form-item>
+      <a-form-item :label="translate('ui.m_8f5c138a5a03')"><a-switch v-model:checked="kevOnly" @change="reload" /></a-form-item>
+      <a-form-item :label="translate('ui.m_7ab7815d503d')"><a-switch v-model:checked="execOnly" @change="reload" /></a-form-item>
+      <a-form-item :label="translate('ui.m_a96c9a854190')">
+        <a-switch v-model:checked="sortByExposure" checked-children="最新曝光" un-checked-children="在野优先" @change="reload" />
+      </a-form-item>
+    </SearchBar>
+
+    <AppTable :columns="columns" :data="rows" :loading="loading"
+      :page="query.page" :size="query.size" :total="total" row-key="_id" @change="onPage">
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'cve'">
+          <span v-if="record.cve_id">{{ record.cve_id }}</span>
+          <span v-else class="muted">{{ translate('ui.m_c7443bfcb656') }}</span>
+        </template>
+        <template v-else-if="column.key === 'severity'">
+          <a-tag :color="sevColor(record.severity)">{{ record.severity }}</a-tag>
+        </template>
+        <template v-else-if="column.key === 'flags'">
+          <a-tag v-if="record.in_kev" color="red">{{ translate('ui.m_8f5c138a5a03') }}</a-tag>
+          <a-tag v-if="record.executable" color="green">{{ translate('ui.m_68abf2b6a4fa') }}{{ record.exec_kind }}</a-tag>
+        </template>
+        <template v-else-if="column.key === 'products'">
+          <div class="prod-cell">
+            <a-tag v-for="p in record.products.slice(0, 3)" :key="p" class="prod-tag">{{ p }}</a-tag>
+            <a-tooltip v-if="record.products.length > 3" :title="record.products.join(', ')">
+              <a-tag>+{{ record.products.length - 3 }}</a-tag>
+            </a-tooltip>
+          </div>
+        </template>
+        <template v-else-if="column.key === 'sources'">
+          <span class="src-wt"><span class="src-wt-dot"></span>{{ translate('ui.m_16165e40c5ba') }}</span>
+        </template>
+        <template v-else-if="column.key === 'poc'">
+          <a v-for="(u, i) in record.poc_urls.slice(0, 2)" :key="i" :href="u" target="_blank" rel="noreferrer" class="poc-link">PoC{{ i + 1 }}</a>
+          <span v-if="record.executable" class="exec-ref">[{{ record.exec_ref }}]</span>
+        </template>
+        <template v-else-if="column.key === 'exposure'">
+          <span :class="{ muted: !record.published_date }">{{ toDay(record.published_date) }}</span>
+        </template>
+        <template v-else-if="column.key === 'fetched'">
+          <span class="muted">{{ toDay(record.fetched_date) }}</span>
+        </template>
+      </template>
+    </AppTable>
+  </PageContainer>
+</template>
+
+<script setup lang="ts">
+import { t as translate } from '../../i18n'
+
+import { computed, onMounted, reactive, ref } from 'vue'
+import { message } from 'ant-design-vue'
+import PageContainer from '../../layouts/PageContainer.vue'
+import SearchBar from '../../components/SearchBar.vue'
+import AppTable from '../../components/AppTable.vue'
+import { vulnIntelApi, type VulnIntelItem, type VulnIntelStat, type FeedStatus, SEVERITY_COLOR } from '../../api/vulnIntel'
+
+const loading = ref(false)
+const running = ref(false)
+const rows = ref<VulnIntelItem[]>([])
+const total = ref(0)
+const stat = reactive<VulnIntelStat>({ total: 0, in_kev: 0, executable: 0, by_severity: {}, by_source: {} })
+const status = reactive<FeedStatus>({ last_fetch: '', interval_seconds: 21600, interval_hours: 6, sources: [] })
+
+// 云端主来源(kind=cloud) 与 本地可执行源分离展示
+const cloudSource = computed<any>(() => (status.sources || []).find((s: any) => s.kind === 'cloud') || null)
+const localSources = computed(() => (status.sources || []).filter((s: any) => s.kind !== 'cloud'))
+
+const intervalSel = ref(21600)
+const intervalOptions = [
+  { value: 1800, get label() { return translate('ui.m_a01a28d147ac') } }, { value: 3600, get label() { return translate('ui.m_5482d1abc42f') } },
+  { value: 10800, get label() { return translate('ui.m_9148f7dd3f6f') } }, { value: 21600, get label() { return translate('ui.m_f65d1130354c') } },
+  { value: 43200, get label() { return translate('ui.m_796225b96c1e') } }, { value: 86400, get label() { return translate('ui.m_9248356749d6') } }
+]
+function healthText(h: string) {
+  return { get ok() { return translate('ui.m_296de0e31f8c') }, get error() { return translate('ui.m_428fb8bfeecf') }, get empty() { return translate('ui.m_736c3f124d28') }, get unknown() { return translate('ui.m_971f5b8ca048') } }[h] || h
+}
+
+const comp = ref('')
+const queryResult = ref<VulnIntelItem[]>([])
+const queryDone = ref(false)
+
+const kevOnly = ref(false)
+const execOnly = ref(false)
+const sortByExposure = ref(true)   // 默认按最新曝光时间排序（用户要求最新曝光在前）
+const query = reactive({ keyword: '', severity: undefined as string | undefined, source: undefined as string | undefined, page: 1, size: 20 })
+
+const sevOptions = ['critical', 'high', 'medium', 'low'].map(v => ({ value: v, label: v }))
+function sevColor(s: string) { return SEVERITY_COLOR[s] || 'default' }
+// 时间只保留到天(YYYY-MM-DD),去掉时分秒
+function toDay(v: unknown) {
+  const s = v ? String(v) : ''
+  return s ? s.slice(0, 10) : '—'
+}
+
+const columns = [
+  { title: 'CVE', key: 'cve', width: 150 },
+  { get title() { return translate('ui.m_c3405f8c7d9d') }, dataIndex: 'title', ellipsis: true, width: 280 },
+  { get title() { return translate('ui.m_337717173807') }, key: 'severity', width: 90 },
+  { get title() { return translate('ui.m_269635727321') }, key: 'flags', width: 140 },
+  { get title() { return translate('ui.m_783d638053ea') }, key: 'products', width: 220 },
+  { get title() { return translate('ui.m_a488e93d69cc') }, key: 'sources', width: 180, ellipsis: true },
+  { get title() { return translate('ui.m_32e5556f0437') }, key: 'poc', width: 150 },
+  { get title() { return translate('ui.m_914f2e69ec51') }, key: 'exposure', width: 160 },
+  { get title() { return translate('ui.m_1aed7ae9b020') }, key: 'fetched', width: 160 }
+]
+
+async function loadStat() {
+  try {
+    Object.assign(stat, await vulnIntelApi.stat())
+  } catch (e) { message.error((e as Error).message || translate('ui.m_6a9f4d2dd7f0')) }
+}
+
+async function loadStatus() {
+  try {
+    Object.assign(status, await vulnIntelApi.status())
+    intervalSel.value = status.interval_seconds
+  } catch { /* 状态非关键,忽略 */ }
+}
+
+async function saveInterval(v: number) {
+  try {
+    await vulnIntelApi.setInterval(v)
+    message.success(translate('ui.m_e5862999e13c'))
+    loadStatus()
+  } catch (e) { message.error((e as Error).message || translate('ui.m_bf76bc819550')) }
+}
+
+async function loadList() {
+  loading.value = true
+  try {
+    const res = await vulnIntelApi.list({
+      keyword: query.keyword || undefined, severity: query.severity, source: query.source,
+      in_kev: kevOnly.value ? '1' : undefined, executable: execOnly.value ? '1' : undefined,
+      sort: sortByExposure.value ? 'exposure' : 'kev',
+      page: query.page, size: query.size
+    })
+    rows.value = res.items; total.value = res.total
+  } catch (e) { message.error((e as Error).message || translate('ui.m_1c9ed3475e81')) } finally { loading.value = false }
+}
+
+function loadAll() { loadStat(); loadStatus(); loadList() }
+function reload() { query.page = 1; loadList() }
+function onReset() { query.keyword = ''; query.severity = undefined; query.source = undefined; kevOnly.value = false; execOnly.value = false; sortByExposure.value = true; reload() }
+function onPage(page: number, size: number) { query.page = page; query.size = size; loadList() }
+
+async function doQuery() {
+  if (!comp.value) return
+  try {
+    const r = await vulnIntelApi.query(comp.value)
+    queryResult.value = r.vulns; queryDone.value = true
+    // 命中结果直接填进列表展示
+    rows.value = r.vulns; total.value = r.vulns.length
+  } catch (e) { message.error((e as Error).message || translate('ui.m_bf4cedf76a4e')) }
+}
+
+async function runFeed() {
+  running.value = true
+  try {
+    const r = await vulnIntelApi.run()
+    message.success(translate('ui.m_2666b22d5702') + JSON.stringify(r))
+    loadAll()
+  } catch (e) { message.error((e as Error).message || translate('ui.m_61e2203a8042')) } finally { running.value = false }
+}
+
+onMounted(loadAll)
+</script>
+
+<style scoped>
+.stat-row { margin-bottom: 16px; }
+/* 让概览行各卡等高对齐（来源分布内容多不再撑高整行） */
+.stat-row > .ant-col { display: flex; }
+.stat-row .ant-card { width: 100%; }
+.stat-row :deep(.ant-card) { height: 100%; }
+/* 表格「来源」列：统一 Watchtower 云端情报库标签 */
+.src-wt { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #00a7c4; white-space: nowrap; }
+.src-wt-dot { width: 6px; height: 6px; border-radius: 50%; background: #00c8e6; box-shadow: 0 0 5px rgba(0,229,255,.5); flex-shrink: 0; }
+.query-hint { margin-top: 8px; color: #888; font-size: 13px; }
+.muted { color: #aaa; }
+.poc-link { margin-right: 8px; }
+.exec-ref { color: #3f8600; font-size: 12px; }
+.feed-meta { color: #888; font-size: 12px; margin-right: 4px; }
+
+/* 来源健康可视化 */
+.src-health { margin-bottom: 16px; }
+.src-health-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.sh-title { font-weight: 600; }
+.sh-interval { font-size: 13px; color: var(--dt-muted); }
+/* 云端主来源 hero */
+.cloud-hero { display: flex; align-items: center; gap: 13px; padding: 10px 15px; border-radius: 9px; margin-bottom: 10px; position: relative; overflow: hidden;
+  background: linear-gradient(120deg, rgba(0,229,255,.11), rgba(24,144,255,.05)); border: 1px solid rgba(0,229,255,.30); }
+.cloud-hero::after { content: ""; position: absolute; right: -40px; top: -46px; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, rgba(0,229,255,.13), transparent 70%); pointer-events: none; }
+.cloud-hero.unknown { background: linear-gradient(120deg, rgba(150,150,150,.10), rgba(150,150,150,.03)); border-color: rgba(150,150,150,.28); }
+.cloud-glyph { width: 34px; height: 34px; color: #00c8e6; flex-shrink: 0; filter: drop-shadow(0 0 6px rgba(0,229,255,.35)); }
+.cloud-glyph svg { width: 34px; height: 34px; }
+.cloud-main { flex: 1; min-width: 0; }
+.cloud-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cloud-name { font-size: 16px; font-weight: 650; color: var(--dt-text); letter-spacing: .3px; }
+.cloud-badge { font-size: 11px; padding: 1px 9px; border-radius: 10px; }
+.cloud-badge.ok { background: rgba(82,196,26,.16); color: #52c41a; }
+.cloud-badge.unknown { background: rgba(150,150,150,.18); color: #999; }
+.cloud-sub { font-size: 12.5px; color: var(--dt-muted); margin-top: 4px; }
+.cloud-sub b { color: #00c8e6; font-weight: 600; }
+.cloud-metrics { display: flex; gap: 22px; padding-left: 10px; flex-shrink: 0; }
+.cm { display: flex; flex-direction: column; align-items: center; }
+.cm-n { font-size: 20px; font-weight: 700; color: var(--dt-text); line-height: 1.15; }
+.cm-l { font-size: 11px; color: var(--dt-muted); }
+.local-src-label { font-size: 12px; color: var(--dt-muted); margin: 2px 0 8px; }
+.src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+/* 半透明色调 + 主题文字变量：日/夜都可读（原写死浅色底在夜间字看不见） */
+.src-chip { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--dt-border); border-radius: 6px; background: var(--dt-fill, #fafafa); color: var(--dt-text); }
+.src-chip.error { border-color: rgba(255,77,79,.45); background: rgba(255,77,79,.10); }
+.src-chip.empty { border-color: rgba(250,173,20,.45); background: rgba(250,173,20,.10); }
+.src-chip.ok { border-color: rgba(82,196,26,.45); background: rgba(82,196,26,.10); }
+.dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.dot.ok { background: #52c41a; }
+.dot.error { background: #ff4d4f; }
+.dot.empty { background: #faad14; }
+.dot.unknown { background: #bfbfbf; }
+.src-name { font-size: 13px; font-weight: 500; }
+.src-sub { font-size: 12px; color: #999; margin-top: 2px; }
+.src-err { color: #ff4d4f; }
+.prod-cell { display: flex; flex-wrap: nowrap; overflow: hidden; }
+.prod-tag { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+

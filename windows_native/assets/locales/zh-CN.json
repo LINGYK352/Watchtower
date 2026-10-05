@@ -1,0 +1,22 @@
+{
+  "startup": {
+    "caption": "瞭望塔 · WINDOWS",
+    "progress": "启动进度",
+    "checking": "正在检查运行组件",
+    "database": "正在启动本地数据库",
+    "service": "正在启动平台服务",
+    "workspace": "正在加载工作台",
+    "failed": "启动未完成",
+    "firstRunHint": "首次准备可能需要数分钟，后台会继续完成初始化。",
+    "readyHint": "本地服务正在启动，请稍候。",
+    "failureHint": "请查看本机 state/service.log 后重试，已有数据会保留。",
+    "version": "{version} · 本机测试版",
+    "stableVersion": "{version} · Windows原生版"
+  },
+  "menu": {
+    "application": "应用",
+    "update": "检查更新",
+    "exit": "停止并退出"
+  },
+  "windowTitle": "瞭望塔 Watchtower · Windows 原生版"
+}

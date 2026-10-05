@@ -1,0 +1,22 @@
+{
+  "startup": {
+    "caption": "WATCHTOWER · WINDOWS",
+    "progress": "Startup progress",
+    "checking": "Checking runtime components",
+    "database": "Starting the local database",
+    "service": "Starting platform services",
+    "workspace": "Loading the workspace",
+    "failed": "Startup did not complete",
+    "firstRunHint": "First-time preparation may take a few minutes. Initialization will continue in the background.",
+    "readyHint": "Local services are starting. Please wait.",
+    "failureHint": "Review the local state/service.log and retry. Existing data is retained.",
+    "version": "{version} · Local test build",
+    "stableVersion": "{version} · Windows native edition"
+  },
+  "menu": {
+    "application": "Application",
+    "update": "Check for updates",
+    "exit": "Stop and exit"
+  },
+  "windowTitle": "Watchtower · Windows native"
+}
