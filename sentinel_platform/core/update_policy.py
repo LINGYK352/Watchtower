@@ -71,6 +71,7 @@ def build(current, latest, releases, target='', guardian=GUARDIAN,persistent=Fal
 
 def allow(current, requested, plan):
     key(requested)
+    if current and key(current)[:3]>=(1,21,175) and key(requested)[:3]<(1,21,175):raise ValueError('Rollback below175 is disabled')
     if current and requested==current:return  # same-version repair has no hop
     if requested != plan['next']:raise ValueError('Version skipping is forbidden; update to '+plan['next']+' first')
 

@@ -5,15 +5,35 @@ mount survives a business rollback AND container recreation. Only the first
 installation needs service recreation; later source hops continue using HUP.
 """
 from pathlib import Path
-import base64,hashlib,json,os,shutil,sysconfig
+import base64,hashlib,json,os,shutil,sysconfig,time
 from sentinel_platform.core.update_bundle import PUBLIC_KEY,canonical
 from sentinel_platform.core.update_commit import write
+
+class GuardianMigrationError(RuntimeError):
+    """Operational migration failure; application routes must remain available."""
+
+def revision(data):
+    value=data.get('engine_revision',1)
+    if type(value) is not int or not 1<=value<=10000:raise ValueError('Invalid signed guardian revision')
+    return value
+
+def accepts(candidate,previous):
+    """Control revision wins before business version; both descriptors are signed."""
+    from sentinel_platform.core.update_policy import key
+    left,right=revision(candidate),revision(previous)
+    return left>right or left==right and key(candidate['version'])>=key(previous['version'])
+
+def installed_descriptor(home,state):
+    pointer=state.get('generation','')
+    if not isinstance(pointer,str) or not __import__('re').fullmatch('[0-9a-f]{16}',pointer):raise ValueError('Invalid installed guardian generation')
+    return verify(Path(home)/'generations'/pointer)
 
 def verify(source):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
     envelope=json.loads((source/'manifest.json').read_text(encoding='utf-8'));data=envelope['descriptor']
     Ed25519PublicKey.from_public_bytes(base64.b64decode(PUBLIC_KEY)).verify(base64.b64decode(envelope['signature'],validate=True),canonical(data))
     if data.get('schema')!=1 or data.get('product')!='watchtower-persistent-web-guardian' or data.get('engine_api')!=1:raise ValueError('Invalid persistent guardian manifest')
+    revision(data)
     for name,digest in data['files'].items():
         if name.startswith('/') or '..' in name.split('/') or '\\' in name:raise ValueError('Invalid guardian path')
         path=source/name;path.resolve().relative_to(source.resolve())
@@ -28,9 +48,8 @@ def install(root):
     engine=home/'generations'/generation
     if state.exists():
         previous=json.loads(state.read_text(encoding='utf-8'))
-        from sentinel_platform.core.update_policy import key
         # A business rollback must never downgrade the independent updater.
-        if previous.get('installed') and key(data['version'])<key(previous['source_version']):return previous
+        if previous.get('installed') and not accepts(data,installed_descriptor(home,previous)):return previous
         if previous.get('generation')==generation and ('guardian_runtime.py' not in data['files'] or previous.get('background_api')==1):return previous
     engine.mkdir(parents=True,exist_ok=True)
     for name in data['files']:
@@ -68,7 +87,7 @@ def install(root):
             if old and old!=entry:raise ValueError('Custom background entrypoint requires an explicit process adapter')
             service['entrypoint']=entry
     temporary=override.with_name(override.name+'.guardian-incoming');temporary.write_text(yaml.safe_dump(value,sort_keys=False),encoding='utf-8');os.replace(temporary,override)
-    result={'installed':True,'engine_api':1,'generation':generation,'manifest_sha':hashlib.sha256((source/'manifest.json').read_bytes()).hexdigest(),
+    result={'installed':True,'engine_api':1,'engine_revision':revision(data),'generation':generation,'manifest_sha':hashlib.sha256((source/'manifest.json').read_bytes()).hexdigest(),
             'source_version':data['version'],'requires_recreate':True,'cold_boot_mount':target,
             'background_api':1 if 'guardian_runtime.py' in data['files'] else 0}
     write(state,result);return result
@@ -82,12 +101,15 @@ def ensure(root):
     if (source/'manifest.json').is_file():
         data=verify(source);candidate=source/'core/persistent_guardian.py'
         state=Path(root)/'.update_stage/guardian/installation.json'
-        from sentinel_platform.core.update_policy import key
-        allowed=not state.exists() or key(data['version'])>=key(json.loads(state.read_text())['source_version'])
+        allowed=not state.exists() or accepts(data,installed_descriptor(state.parent,json.loads(state.read_text())))
         if allowed and candidate.is_file() and hashlib.sha256(candidate.read_bytes()).digest()!=hashlib.sha256(Path(__file__).read_bytes()).digest():
             import importlib.util
             spec=importlib.util.spec_from_file_location('watchtower_verified_guardian_installer',candidate)
-            module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module.ensure(root)
+            module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+            try:return module.ensure(root)
+            except RuntimeError as exc:
+                if type(exc).__name__=='GuardianMigrationError':raise GuardianMigrationError(str(exc)) from exc
+                raise
     import fcntl
     folder=Path(root)/'.update_stage/guardian';folder.mkdir(parents=True,exist_ok=True)
     with (folder/'.install.lock').open('a+b') as lock:
@@ -96,7 +118,19 @@ def ensure(root):
         result=install(root)
         if not result.get('installed') or not result.get('requires_recreate'):return
         if os.environ.get('SENTINEL_GUARDIAN_GENERATION')==result['generation']:
-            result['requires_recreate']=False;write(folder/'installation.json',result);return
-        from sentinel_platform.modules.about._updater import _recreate_containers
-        ok,message=_recreate_containers(str(Path(root)/'docker'))
-        if not ok:raise RuntimeError('Persistent guardian startup migration failed: '+message)
+            result.update(requires_recreate=False,last_error='',dispatch_state='ready');write(folder/'installation.json',result);return
+        if time.time()-result.get('last_dispatch_at',0)<30:
+            if result.get('last_error'):raise GuardianMigrationError(result['last_error'])
+            return
+        # The current Python interpreter may have inherited the previous pinned
+        # updater. Dispatch through the freshly verified carrier to avoid using
+        # the very old controller this migration needs to replace.
+        import importlib.util
+        os.environ.setdefault('SENTINEL_GUARDIAN_ROOT',str(Path(root).resolve()))
+        engine=folder/'generations'/result['generation']
+        spec=importlib.util.spec_from_file_location('watchtower_verified_recreate',engine/'about/_updater.py')
+        updater=importlib.util.module_from_spec(spec);spec.loader.exec_module(updater)
+        ok,message=updater._recreate_containers(str(Path(root)/'docker'),services=('web','worker','scheduler'))
+        result.update(last_dispatch_at=time.time(),dispatch_state='running' if ok else 'failed',last_error='' if ok else message)
+        write(folder/'installation.json',result)
+        if not ok:raise GuardianMigrationError('Persistent guardian startup migration failed: '+message)

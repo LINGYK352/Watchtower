@@ -70,6 +70,7 @@ def _auth_headers(key: str, current_root: str) -> dict:
     h = {"X-Client-Version": _client_version(current_root)}
     from sentinel_platform.core.update_platform import request_headers
     h.update(request_headers())
+    h['X-Update-Guardian-Revision']=os.environ.get('SENTINEL_GUARDIAN_REVISION','0')
     if key:
         h["X-Update-Key"] = key
     return h
@@ -170,8 +171,9 @@ def _safe_restart_worker():
     """重启 worker/scheduler 加载新代码。活跃 AI 会话中断，scheduler watchdog 心跳超时自动重投。
     无 docker.sock 且无 systemd（如 scheduler 兜底容器）时静默跳过（worker 重启非本级生效的必要条件）。"""
     if os.path.exists("/var/run/docker.sock"):
-        subprocess.run(["docker", "restart", "docker-worker-1", "docker-scheduler-1"],
-                       timeout=60, capture_output=True)
+        from sentinel_platform.core.docker_engine import Engine
+        engine=Engine(timeout=45)
+        for name in ('docker-worker-1','docker-scheduler-1'):engine.restart(name)
     elif _has_systemd():
         subprocess.run(["systemctl", "restart", "sentinel-worker"], timeout=30, capture_output=True)
         subprocess.run(["systemctl", "restart", "sentinel-scheduler"], timeout=30, capture_output=True)
@@ -201,7 +203,7 @@ def _restart_web():
         os.utime(entry,(stamp,stamp));return True
     return False
 
-def _recreate_containers(compose_dir: str) -> tuple:
+def _recreate_containers(compose_dir: str, services=()) -> tuple:
     """compose 变更（时区挂载/cap/端口/新服务等）后重建容器应用新配置。
     **根因（v1.21.150 事故）**：web 容器内只装了 docker CLI（docker.io），**没有 docker compose 插件**，
     故 `_updater` 直接跑 `docker compose up -d --force-recreate` 必然报 `'compose' is not a docker command`
@@ -217,58 +219,83 @@ def _recreate_containers(compose_dir: str) -> tuple:
         return False, "非 docker 部署（无 docker.sock），compose 变更请在宿主机手动 docker compose up -d --force-recreate"
     # 宿主机侧 compose 目录（容器内 /opt/sentinel/current/docker 对应宿主机 /opt/sentinel/sentinel/docker，
     # 但 nsenter 进宿主机后用宿主机真实路径；从容器读挂载源反推宿主机路径）
-    host_compose_dir = _host_compose_dir(compose_dir)
+    from sentinel_platform.core.docker_engine import Engine,EngineError
+    import shlex
+    try:engine=Engine()
+    except Exception as e:return False,'Docker Engine连接/版本协商失败: '+str(e)[:240]
+    try:host_compose_dir = _host_compose_dir(compose_dir,engine)
+    except Exception as e:return False,'无法定位宿主机部署目录: '+str(e)[:240]
+    if not all(isinstance(s,str) and re.fullmatch(r'[a-zA-Z0-9_-]+',s) for s in services):return False,'Invalid Compose service selection'
+    instance=hashlib.sha256(host_compose_dir.encode('utf-8')).hexdigest()[:12]
+    name='sentinel_recreate_'+instance
+    labels={'watchtower.role':'compose-recreate','watchtower.compose-root':host_compose_dir}
+    def existing():
+        try:return engine.inspect(name)
+        except EngineError as e:
+            if e.status==404:return None
+            raise
+    try:
+        before=existing()
+        if before:
+            if any(before.get('Config',{}).get('Labels',{}).get(k)!=v for k,v in labels.items()):return False,'重建辅助容器名称被其他进程占用'
+            if before.get('State',{}).get('Running'):return True,'宿主机重建已在运行，保留现有辅助进程'
+            engine.remove(name)
+    except Exception as e:return False,'检查重建辅助容器失败: '+str(e)[:240]
     # nsenter 进宿主机跑 compose recreate；日志写宿主机 /tmp 便于排查。末尾自删自身临时容器（--rm 与 -d
     # 偶有竞态，改容器内跑完 docker rm 自己更稳）。
-    inner = ("cd {d} && (docker compose up -d --force-recreate || docker-compose up -d --force-recreate) "
-             "> /tmp/sentinel_recreate.log 2>&1").format(d=host_compose_dir)
+    selected=' '+ ' '.join(shlex.quote(s) for s in services) if services else ''
+    options='up -d --force-recreate'+(' --no-deps' if services else '')+selected
+    log='/tmp/watchtower-recreate-'+instance+'.log'
+    inner=("cd {d} && (if docker compose version >/dev/null 2>&1; then docker compose {options}; "
+           "elif docker-compose version >/dev/null 2>&1; then docker-compose {options}; "
+           "else echo 'Host Docker Compose is unavailable'; exit 127; fi) > {log} 2>&1").format(d=shlex.quote(host_compose_dir),options=options,log=shlex.quote(log))
     # **detached(-d) 起特权容器**：由 docker daemon 托管，与发起它的 web 容器完全解耦——web 随 recreate 被
     # 重建杀掉也不影响这个容器把 recreate 跑完（关键：不能同步等，web 会先死）。跑完容器自己退出。
-    cmd = ["docker", "run", "-d", "--rm", "--privileged", "--pid=host",
-           "--name", "sentinel_recreate_helper", _self_image(),
-           "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", inner]
+    cmd = ["nsenter", "-t", "1", "-m", "-u", "-n", "-i", "sh", "-c", inner]
     try:
-        # 先清理可能残留的同名 helper（上次异常遗留），再起新的
-        subprocess.run(["docker", "rm", "-f", "sentinel_recreate_helper"], timeout=15, capture_output=True)
-        r = subprocess.run(cmd, timeout=30, capture_output=True, text=True)
-        if r.returncode == 0:
-            return True, "已派发宿主机容器重建（detached，独立于本进程完成）"
-        return False, "派发容器重建失败: {}".format((r.stderr or r.stdout or "")[-300:])
+        engine.launch(name,_self_image(engine),cmd,labels)
+        return True, "已派发宿主机容器重建；日志 "+log
+    except EngineError as e:
+        if e.status==409:
+            current=existing()
+            if current and current.get('State',{}).get('Running') and all(current.get('Config',{}).get('Labels',{}).get(k)==v for k,v in labels.items()):return True,'另一个worker已派发同实例重建'
+        return False, '派发容器重建失败: '+str(e)[:300]
     except Exception as e:
         return False, "派发容器重建异常: {}".format(e)
 
 
-def _self_image() -> str:
-    """nsenter 载体镜像：优先本机主镜像 sentinel:base（装机必有，不拉外网）。取不到则退 busybox（需联网）。"""
+def _self_image(engine=None) -> str:
+    """Reuse a local base or current image by digest; never download a helper image."""
     try:
-        r = subprocess.run(["docker", "image", "inspect", "sentinel:base"],
-                           timeout=15, capture_output=True)
-        if r.returncode == 0:
-            return "sentinel:base"
+        if engine is None:
+            from sentinel_platform.core.docker_engine import Engine
+            engine=Engine()
+        return engine.image('sentinel:base')['Id']
     except Exception:
-        pass
-    return "busybox:latest"
+        import socket
+        if engine is not None:return engine.inspect(socket.gethostname())['Image']
+        raise
 
 
-def _host_compose_dir(container_compose_dir: str) -> str:
+def _host_compose_dir(container_compose_dir: str,engine=None) -> str:
     """把容器内 compose 目录路径映射成宿主机真实路径（nsenter 进宿主机后按宿主机路径找 compose）。
     默认部署：容器 /opt/sentinel/current/docker → 宿主机 /opt/sentinel/sentinel/docker（compose 卷挂载）。
     经 docker inspect 自身容器的 Mounts 反查 /opt/sentinel/current 的宿主机 Source，最稳。取不到用默认。"""
-    default = "/opt/sentinel/sentinel/docker"
+    if not os.path.isfile('/.dockerenv'):return os.path.abspath(container_compose_dir)
     try:
-        import json as _json, socket
+        import socket
         cid = socket.gethostname()   # 容器内 hostname = 容器 ID 短码
-        r = subprocess.run(["docker", "inspect", cid], timeout=15, capture_output=True, text=True)
-        if r.returncode == 0:
-            d = _json.loads(r.stdout)[0]
-            for m in d.get("Mounts", []):
-                if m.get("Destination") == "/opt/sentinel/current":
-                    src = m.get("Source", "")
-                    if src:
-                        return src.rstrip("/") + "/docker"
-    except Exception:
-        pass
-    return default
+        if engine is None:
+            from sentinel_platform.core.docker_engine import Engine
+            engine=Engine()
+        d=engine.inspect(cid)
+        for m in d.get("Mounts", []):
+            if m.get("Destination") == "/opt/sentinel/current":
+                src = m.get("Source", "")
+                if src:return src.rstrip("/") + "/docker"
+    except Exception as exc:
+        raise RuntimeError('无法读取当前容器的源码挂载: '+str(exc)) from exc
+    raise RuntimeError('当前容器没有约定的源码挂载，拒绝猜测宿主机目录')
 
 
 def _prune_frontend_assets(current_root: str, remote_manifest: dict, backup_dir: str) -> int:
@@ -388,16 +415,17 @@ def _apply_restart(current_root: str, backend_changed: bool, compose_changed: bo
             if os.path.isfile(os.path.join(compose_dir, "docker-compose.yml")):
                 set_progress(phase, msg=_msg("，正在重建容器应用配置变更（约 10~30 秒，期间页面可能短暂断连，稍后刷新）"))
                 try:
-                    _recreate_containers(compose_dir)   # --rm 特权容器 nsenter 宿主机 compose recreate
-                except Exception:
-                    pass
+                    accepted,message=_recreate_containers(compose_dir)
+                    if not accepted:raise RuntimeError(message)
+                except Exception as exc:
+                    set_progress('error',error='重建服务失败: '+str(exc)[:450],msg='本级文件已提交，运行检查未完成，可继续更新')
                 return
         if backend_changed:
             set_progress(phase, msg=_msg("，正在重启服务应用新代码（约 5~15 秒，期间页面可能短暂断连，稍后刷新）"))
             try:
-                _restart_web()   # create_app 全量重跑（挂全部 Namespace + ensure_indexes 补播种 + 触发链式续跑钩子）
-            except Exception:
-                pass
+                if not _restart_web():raise RuntimeError('未找到可重载的Web服务')
+            except Exception as exc:
+                set_progress('error',error='重载服务失败: '+str(exc)[:450],msg='本级文件已提交，运行检查未完成，可继续更新')
             return
     else:
         if backend_changed:
@@ -846,9 +874,14 @@ if __name__ == "__main__":
     _target = sys.argv[4] if len(sys.argv) > 4 else ""
     # 哨兵：__chain__=一级一级更新入口（从当前版逐级升到最新）；__chain_step__=启动续跑派发的「下一级」；
     # 否则=单跳更新/回退（target 为空=正常更新，非空=指定版本回退/前滚）。
-    if _target == "__chain__":
-        run_chain_update(_source_url, _key, _current_root)
-    elif _target == "__chain_step__":
-        _chain_apply_next_step(_source_url, _key, _current_root)
-    else:
-        run_update(_source_url, _key, _current_root, _target, full="--full" in sys.argv[5:])
+    try:
+        if _target == "__chain__":
+            run_chain_update(_source_url, _key, _current_root)
+        elif _target == "__chain_step__":
+            _chain_apply_next_step(_source_url, _key, _current_root)
+        else:
+            run_update(_source_url, _key, _current_root, _target, full="--full" in sys.argv[5:])
+    except Exception as exc:
+        set_progress('error',error=type(exc).__name__+': '+str(exc)[:500],msg='更新启动/读取计划失败，原文件和下载缓存保留，可继续更新')
+        _log('updater failed before chain execution: '+str(exc)[:300])
+        raise

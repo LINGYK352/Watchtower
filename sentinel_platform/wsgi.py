@@ -35,8 +35,16 @@ _recover_update_before_import()
 #It survives historical business rollback; this one-time migration does not
 #rebuild the image or replace user configuration and databases.
 from pathlib import Path as _GuardianPath
-from sentinel_platform.core.persistent_guardian import ensure as _ensure_guardian
-_ensure_guardian(_GuardianPath(__file__).resolve().parents[1])
+from sentinel_platform.core.guardian_loader import ensure as _ensure_guardian
+try:
+    _ensure_guardian(_GuardianPath(__file__).resolve().parents[1])
+except RuntimeError as _migration_error:
+    # Keep login, diagnostics and resume reachable. Integrity failures continue
+    # to fail closed; only a verified controller's operational migration fails soft.
+    if type(_migration_error).__name__!='GuardianMigrationError' and not str(_migration_error).startswith('Persistent guardian startup migration failed:'):
+        raise
+    import logging as _migration_logging
+    _migration_logging.getLogger('sentinel.updater').error('更新启动迁移未完成，保留服务并等待修复：%s',_migration_error)
 
 from sentinel_platform.bootstrap import create_app
 from sentinel_platform.core import get_config, get_logger
@@ -48,6 +56,20 @@ application = create_app()
 
 # 兼容 `flask run` 等找 `app` 的场景
 app = application
+
+def _guard_current_controller_health():
+    """Older pinned routes must not acknowledge a not-yet-loaded new guardian."""
+    from flask import request,jsonify
+    if request.path!='/api/meta/health/update-ready':return None
+    import json,os
+    state=_GuardianPath(__file__).resolve().parents[1]/'.update_stage/guardian/installation.json'
+    if not state.is_file():return None
+    installed=json.loads(state.read_text())
+    if installed.get('installed') and (installed.get('requires_recreate') or os.environ.get('SENTINEL_GUARDIAN_GENERATION')!=installed.get('generation')):
+        root=state.parents[2]
+        return jsonify(code=200,message='启动迁移未完成',data={'ready':False,'version':(root/'version.txt').read_text().strip(),
+            'migration':{'required':True,'phase':installed.get('dispatch_state',''),'error':installed.get('last_error','')}})
+application.before_request_funcs.setdefault(None,[]).insert(0,_guard_current_controller_health)
 
 
 def _install_celery_delivery() -> None:

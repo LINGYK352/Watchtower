@@ -39,7 +39,7 @@ class _Version(Resource):
         uc = _svc()
         if not uc:
             return err(CODE_ERROR, "更新检测服务未就绪")
-        return ok({"version": uc.server_version()})
+        return ok({"version": uc.server_version(),"guardian_revision":int(os.environ.get('SENTINEL_GUARDIAN_REVISION','0'))})
 
 
 @ns.route("/check")
@@ -96,12 +96,18 @@ def _launch_updater(source_url: str, key: str, current_root: str, target_version
         args.append(target_version)
     if full:
         args.append("--full")
-    kwargs = {"cwd": current_root, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    kwargs = {"cwd": current_root}
     if os.name == "posix":
         kwargs["start_new_session"] = True          # setsid：脱离 worker 进程组，reload 杀不到
     else:
         kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0)
-    subprocess.Popen(args, **kwargs)
+    folder=os.path.join(current_root,'.update_stage');os.makedirs(folder,exist_ok=True)
+    try:
+        with open(os.path.join(folder,'updater-process.log'),'ab') as log:
+            subprocess.Popen(args,stdout=log,stderr=log,**kwargs)
+    except Exception as exc:
+        _set_progress('error',error='启动更新进程失败: '+str(exc)[:300],msg='原程序保留，可继续更新')
+        raise
 
 
 _DEFAULT_SOURCE = "https://watchtowers.info"
@@ -216,6 +222,12 @@ class _Rollback(Resource):
             return err(CODE_ERROR, "full 必须为布尔值")
         if not target:
             return err(CODE_ERROR, "version 必填")
+        from sentinel_platform.core import update_policy
+        try:
+            requested=update_policy.key(target)
+            actual=update_policy.key(_updater._client_version(_project_root()))
+        except ValueError:return err(CODE_ERROR,"版本号格式不正确")
+        if actual[:3]>=(1,21,175) and requested[:3]<(1,21,175):return err(CODE_ERROR,"175新基板禁止回退到低于175的版本")
         p = _get_progress()
         if p.get("phase") in ("downloading", "validating", "applying"):
             return ok({"started": False, "msg": "更新正在进行中"})

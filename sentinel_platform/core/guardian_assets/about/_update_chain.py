@@ -27,6 +27,7 @@ def fetch(updater, source, credential, root, target=''):
     if not isinstance(steps,list) or len(steps)>2048 or len(set(steps))!=len(steps):raise ValueError('Invalid update chain')
     previous=current
     rollback=data.get('direction')=='rollback'
+    if update_policy.key(current)[:3]>=(1,21,175) and update_policy.key(data['target'])[:3]<(1,21,175):raise ValueError('175新基板禁止回退到较早版本')
     for step in steps:
         update_policy.key(step)
         bootstrap=(not previous or update_policy.key(previous)<update_policy.key(guardian)) and step==guardian
@@ -71,6 +72,8 @@ def await_running(updater,root,state):
         updater.set_progress('restarting',msg=reason)
         try:
             with direct(Request(url,headers={'Cache-Control':'no-cache'}),timeout=3) as response:data=json.load(response).get('data',{})
+            if data.get('migration',{}).get('error'):
+                raise RuntimeError('当前一级已落盘，启动迁移失败：'+data['migration']['error'])
             if data.get('ready') and data.get('version')==expected and (not state.get('frontend_sha') or data.get('frontend_sha')==state['frontend_sha']):return
             background=data.get('background',{})
             reason=('后台任务正在完成当前工作并温和换版，进度已保留' if 'draining' in background.values()
@@ -164,14 +167,20 @@ def ready_status(root,boot_version):
     journal=root/'.update_stage/.commit.json'
     if journal.exists() and json.loads(journal.read_text()).get('phase')=='committing':ready=False
     guard=root/'.update_stage/guardian/installation.json'
-    if guard.exists() and json.loads(guard.read_text()).get('requires_recreate') and os.environ.get('SENTINEL_PERSISTENT_GUARDIAN')!='1':ready=False
+    if guard.exists():
+        installed=json.loads(guard.read_text())
+        if installed.get('installed') and os.environ.get('SENTINEL_GUARDIAN_GENERATION')!=installed.get('generation'):ready=False
+        if installed.get('requires_recreate'):ready=False
     from sentinel_platform.core import get_repo
     get_repo()._db().command('ping')
     index=root/'docker/frontend/index.html'
     background={}
+    migration={}
     state=root/'.update_stage/guardian/installation.json'
     if state.exists():
-        carrier=root/'.update_stage/guardian/generations'/json.loads(state.read_text())['generation']/'manifest.json'
+        installation=json.loads(state.read_text())
+        migration={'required':bool(installation.get('requires_recreate')),'phase':installation.get('dispatch_state',''), 'error':installation.get('last_error','')}
+        carrier=root/'.update_stage/guardian/generations'/installation['generation']/'manifest.json'
         required='guardian_runtime.py' in json.loads(carrier.read_text())['descriptor']['files']
         if required:
             for role in ('worker','scheduler'):
@@ -180,4 +189,4 @@ def ready_status(root,boot_version):
                     background[role]=row.get('phase','unknown')
                     if not row.get('ready') or row.get('version')!=boot_version or time.time()-row['heartbeat']>5:ready=False
                 except (OSError,ValueError,KeyError):ready=False;background[role]='not_ready'
-    return {'ready':ready and count>0,'version':boot_version,'workers':count,'background':background,'frontend_sha':sha256(index) if index.is_file() else ''}
+    return {'ready':ready and count>0,'version':boot_version,'workers':count,'background':background,'migration':migration,'guardian_revision':int(os.environ.get('SENTINEL_GUARDIAN_REVISION','0')),'frontend_sha':sha256(index) if index.is_file() else ''}

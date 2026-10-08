@@ -15,10 +15,10 @@ def valid():
         envelope=json.loads((ENGINE/'manifest.json').read_text(encoding='utf-8'));data=envelope['descriptor']
         canonical=json.dumps(data,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf-8')
         Ed25519PublicKey.from_public_bytes(base64.b64decode('REbZ+VtgBKKmbIwUb6vnIaYWOe8LecIKpUxUKV/qW00=')).verify(base64.b64decode(envelope['signature'],validate=True),canonical)
-        return all(hashlib.sha256((ENGINE/name).read_bytes()).hexdigest()==digest for name,digest in data['files'].items())
+        return data if all(hashlib.sha256((ENGINE/name).read_bytes()).hexdigest()==digest for name,digest in data['files'].items()) else False
     except Exception:return False
 
-ALIASES={'sentinel_platform.core.'+name:'core/'+name+'.py' for name in ('update_bundle','update_commit','update_platform','update_policy','persistent_guardian')}
+ALIASES={'sentinel_platform.core.'+name:'core/'+name+'.py' for name in ('update_bundle','update_commit','update_platform','update_policy','persistent_guardian','docker_engine','guardian_loader')}
 ALIASES.update({'sentinel_platform.modules.about.'+name:'about/'+name+'.py' for name in ('_updater','_update_chain')})
 
 class RouterLoader:
@@ -73,13 +73,22 @@ class BackgroundLoader:
                 # not evidence that those jobs died. Periodic lease recovery stays active.
                 module._reclaim_on_startup=lambda:None
 
-if valid():
+_verified_manifest=valid()
+if _verified_manifest:
+    ALIASES={name:path for name,path in ALIASES.items() if path in _verified_manifest['files']}
     os.environ['SENTINEL_GUARDIAN_ROOT']=str(ROOT)
     os.environ['SENTINEL_PERSISTENT_GUARDIAN']='1'
     os.environ['SENTINEL_GUARDIAN_GENERATION']=pointer
+    os.environ['SENTINEL_GUARDIAN_REVISION']=str(_verified_manifest.get('engine_revision',1))
     sys.meta_path.insert(0,Finder())
     # Recover or wait out a commit BEFORE old business modules can be imported.
     from sentinel_platform.core import update_commit
+    installed=HOME/'installation.json'
+    if installed.is_file():
+        stamp=json.loads(installed.read_text(encoding='utf-8'))
+        if stamp.get('generation')==pointer and stamp.get('requires_recreate'):
+            stamp.update(requires_recreate=False,last_error='',dispatch_state='ready')
+            update_commit.write(installed,stamp)
     from sentinel_platform.modules.about import _updater
     journal=ROOT/'.update_stage/.commit.json';deadline=time.monotonic()+180
     while journal.exists() and json.loads(journal.read_text(encoding='utf-8')).get('phase')=='committing':
