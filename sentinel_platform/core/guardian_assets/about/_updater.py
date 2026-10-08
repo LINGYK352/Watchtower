@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from urllib.request import Request, urlopen
 from urllib.parse import quote
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_ROOT = os.environ['SENTINEL_GUARDIAN_ROOT']
 PROGRESS_FILE = os.path.join(_ROOT,'.update_stage','progress.json')
 
 
@@ -70,6 +70,7 @@ def _auth_headers(key: str, current_root: str) -> dict:
     h = {"X-Client-Version": _client_version(current_root)}
     from sentinel_platform.core.update_platform import request_headers
     h.update(request_headers())
+    h['X-Update-Guardian']='persistent-v1'
     h['X-Update-Guardian-Revision']=os.environ.get('SENTINEL_GUARDIAN_REVISION','0')
     if key:
         h["X-Update-Key"] = key

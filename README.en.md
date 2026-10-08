@@ -1,19 +1,17 @@
-# Watchtower Windows ·172
+# Watchtower Windows ·175
 
-> `main` contains **v1.21.172 Web source**. [Independent Windows source](https://github.com/LINGYK352/Watchtower/tree/codex/windows) and [both downloads](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.172) share release172. Website: [watchtowers.info](https://watchtowers.info/). Development began **June 3, 2026**. Original code: **GPL-3.0-only**.
+> **v1.21.175 Web + Windows** · Development began **June 3, 2026** · Original code **GPL-3.0-only**.
 
 ## Choose your workspace
 
-| Product | Designed for | Installation and updates |
+| Product | Designed for | Installation and upgrades |
 | --- | --- | --- |
-| Web | Long tasks, stable server execution, centralized deployment and remote browser access across platforms | Linux x64 / Docker; one-command setup and sequential updates after the171 guardian |
-| Windows | Immediate local work, a native window and desktop access | One complete setup EXE with necessary components; independent local services and Windows updates |
+| Web | Long tasks, stable server operation, centralized deployment and cross-platform remote access | Linux x64 / Docker; existing deployments repair-install the175 image base while retaining data |
+| Windows | Immediate local work, a native window and desktop access | A complete setup EXE for new users; official172 installations sequentially hotupdate to175 (about82 MiB) |
 
-172 introduces offline-prepared common and platform change ZIPs, including adjacent inverse packages. Verify both before committing; preserve configuration, tasks and browser data, show durable progress and failures, and resume interrupted downloads. An independent Web guardian preserves sequential updates after historical rollback and cold recreation. Sources, builds and extension channels are independent; version numbers and registration/activation accounts are shared.
+175 fixes restart/update failures caused by incompatible Docker control code in the old image. Signed common/platform ZIPs, fixed targets, transaction recovery and actual background initialization confirm completion. Interrupted downloads, committing and process restarts resume. The Windows guardian is independent of business source and covers GUI/helper/support DLLs. Rollback below175 is disabled; subsequent updates remain adjacent chains.
 
-Windows bundles Python, MongoDB, the proxy, Chromium and persistent browser, HTTPx, Nuclei, DNSX, native TCP/HTTP/TLS identification and NPoC. No manual Python/Docker/WSL deployment. Missing WebView2 is prepared automatically from Microsoft and publisher-verified. Windows11 was tested; Windows10 was not tested on a real machine. See [platform boundaries](docs/platforms.md).172 is the first public Windows release.
+Existing Web users should finish running tasks, back up and download the official install.sh again, selecting **Repair (2)**. Preserve accounts, configuration, database volumes, tasks, evidence, browsers and extensions. Windows is not affected by this Docker fault; existing users hotupdate without a complete installer download or reinstall. Windows11 tested; Windows10 has not been physically tested. Linux-specific tool boundaries remain documented; no paid model calls were part of validation.
 
-Validation covers37 menus per product, language switching and asset actions, actual Windows updates/rollback, a six-hop Web rollback to170 and six-hop return after cold recreation, three-worker readiness, actual proxy traffic, bundled/persistent browsers, native tools, extension isolation, interrupted transfers, tamper rejection, transaction recovery and process concurrency. No paid model calls. See [delivery](docs/update-delivery.md) and [English changelog](CHANGELOG.en.md). The image base remains165 and is tracked separately.
+[Website and installation](https://watchtowers.info/) · [Release175 and downloads](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.175) · [Windows source](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.175) · [Delivery contract](docs/update-delivery.md)
 
-
-Source branch: `codex/windows`; exact source tag: `windows/v1.21.172`. Build: `windows_native/build.py`; complete installer builder: `release_tools/build_complete_setup.py`. Keep app/runtime separate from user state.

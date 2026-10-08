@@ -16,6 +16,36 @@ web 侧只用 celery app 的 `.delay()` 把任务投 broker（不消费，消费
 """
 from __future__ import annotations
 
+# A killed updater may have left source replacements unfinished. Recover BEFORE
+# importing application modules, using a stdlib-only helper and the same OS lock.
+def _recover_update_before_import():
+    from pathlib import Path
+    import json,importlib.util
+    root=Path(__file__).resolve().parents[1];journal=root/'.update_stage/.commit.json'
+    if not journal.exists() or json.loads(journal.read_text()).get('phase')!='committing':return
+    import fcntl
+    with (root/'.update_stage/.apply.lock').open('a+b') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        spec=importlib.util.spec_from_file_location('watchtower_update_recovery',root/'sentinel_platform/core/update_commit.py')
+        helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper);helper.recover(root)
+
+_recover_update_before_import()
+
+#172 installs a signed controller and a persistent read-only startup mount.
+#It survives historical business rollback; this one-time migration does not
+#rebuild the image or replace user configuration and databases.
+from pathlib import Path as _GuardianPath
+from sentinel_platform.core.guardian_loader import ensure as _ensure_guardian
+try:
+    _ensure_guardian(_GuardianPath(__file__).resolve().parents[1])
+except RuntimeError as _migration_error:
+    # Keep login, diagnostics and resume reachable. Integrity failures continue
+    # to fail closed; only a verified controller's operational migration fails soft.
+    if type(_migration_error).__name__!='GuardianMigrationError' and not str(_migration_error).startswith('Persistent guardian startup migration failed:'):
+        raise
+    import logging as _migration_logging
+    _migration_logging.getLogger('sentinel.updater').error('更新启动迁移未完成，保留服务并等待修复：%s',_migration_error)
+
 from sentinel_platform.bootstrap import create_app
 from sentinel_platform.core import get_config, get_logger
 
@@ -27,6 +57,20 @@ application = create_app()
 # 兼容 `flask run` 等找 `app` 的场景
 app = application
 
+def _guard_current_controller_health():
+    """Older pinned routes must not acknowledge a not-yet-loaded new guardian."""
+    from flask import request,jsonify
+    if request.path!='/api/meta/health/update-ready':return None
+    import json,os
+    state=_GuardianPath(__file__).resolve().parents[1]/'.update_stage/guardian/installation.json'
+    if not state.is_file():return None
+    installed=json.loads(state.read_text())
+    if installed.get('installed') and (installed.get('requires_recreate') or os.environ.get('SENTINEL_GUARDIAN_GENERATION')!=installed.get('generation')):
+        root=state.parents[2]
+        return jsonify(code=200,message='启动迁移未完成',data={'ready':False,'version':(root/'version.txt').read_text().strip(),
+            'migration':{'required':True,'phase':installed.get('dispatch_state',''),'error':installed.get('last_error','')}})
+application.before_request_funcs.setdefault(None,[]).insert(0,_guard_current_controller_health)
+
 
 def _install_celery_delivery() -> None:
     """web 侧装 celery 投递（submit_task → 投 worker）。best-effort，失败降级线程不阻断启动。"""
@@ -36,7 +80,8 @@ def _install_celery_delivery() -> None:
         from sentinel_platform.modules.kernel import _celery_adapter
         _celery_adapter.make_celery(broker)                 # 建 app + 注册 sentinel.run_task（供 .delay 投递）
         installed = _celery_adapter.install_celery_executor()
-        logger.info("wsgi celery delivery installed=%s broker=%s", installed, broker)
+        from urllib.parse import urlsplit as _broker_split
+        logger.info("wsgi celery delivery installed=%s broker_host=%s", installed, _broker_split(broker).hostname or 'local')
         # broker 降级自愈：若上次已降级（Mongo 记录 mode=thread）→ 保持线程模式，不把已知坏的 broker 又用起来。
         try:
             from sentinel_platform.modules.kernel import _broker_health

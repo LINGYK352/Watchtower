@@ -29,11 +29,11 @@ $link.Save()
 def main():
  if '--install-cli' in sys.argv:
   import argparse,json
-  parser=argparse.ArgumentParser();parser.add_argument('--install-cli',action='store_true');parser.add_argument('--source',type=Path);parser.add_argument('--root',type=Path,required=True);parser.add_argument('--account-file',type=Path,required=True);parser.add_argument('--report',type=Path,required=True);args=parser.parse_args()
+  parser=argparse.ArgumentParser();parser.add_argument('--install-cli',action='store_true');parser.add_argument('--source',type=Path);parser.add_argument('--root',type=Path,required=True);parser.add_argument('--account-file',type=Path);parser.add_argument('--report',type=Path,required=True);args=parser.parse_args()
   try:
    from windows_native.embedded_install import detect
    source=args.source or detect(sys.executable) or Path(sys.executable).parent
-   result=install(source,args.root,json.loads(args.account_file.read_text(encoding='utf-8')),progress=lambda value:None)
+   result=install(source,args.root,json.loads(args.account_file.read_text(encoding='utf-8')) if args.account_file else {},progress=lambda value:None)
    shortcut(args.root)
    result['desktop_shortcut']=True
   except Exception as exc:result={'ok':False,'error':str(exc)[:240]}
@@ -62,7 +62,8 @@ def main():
   nonlocal running
   if installed:return launch()
   if running:return
-  if not destination.get().strip() or not username.get().strip() or len(password.get())<6:
+  existing=Path(destination.get())/'state/native-release-receipt.json'
+  if not destination.get().strip() or not existing.is_file() and (not username.get().strip() or len(password.get())<6):
    messagebox.showerror(TEXT[locale.get()]['error'],TEXT[locale.get()]['confirm']);return
   running=True;button.configure(state='disabled');picker.configure(state='disabled');progress.start();status.configure(text=TEXT[locale.get()]['busy'])
   target=Path(destination.get()).resolve();account={'username':username.get().strip(),'password':password.get()}

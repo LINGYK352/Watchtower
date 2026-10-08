@@ -34,7 +34,9 @@ def main():
  bootstrap.bootstrap(with_indexes=False);tasks.set_delivery(deliver)
  from windows_native.browser_service import serve as serve_browsers,install_client
  boot_version=(root/'app/version.txt').read_text(encoding='utf-8').strip()
- if a.browser_service:serve_browsers(root);return 0
+ from windows_native.readiness import acknowledge,status as readiness_status
+ if a.browser_service:
+  serve_browsers(root,on_ready=lambda:acknowledge(root,a.boot,boot_version,'browser'));return 0
  if a.probe_core:
   from sentinel_platform.router import create_app
   app=create_app();get_repo()._db().command('ping')
@@ -44,11 +46,13 @@ def main():
   # QA handler is loaded only from this deliberately isolated test runtime.
   from windows_native.qa_fixture import register
   register(root)
+  acknowledge(root,a.boot,boot_version,'worker')
   consume(root,a.boot)
   return 0
  if a.scheduler:
   from sentinel_platform import scheduler
   interval=max(1,scheduler._tick_seconds())
+  acknowledge(root,a.boot,boot_version,'scheduler')
   while not (root/'state/shutdown').exists():
    scheduler.tick()
    for _ in range(interval*4):
@@ -67,7 +71,7 @@ def main():
  @app.route('/__native_ready')
  def ready():
   if request.headers.get('X-Native-Control')!=settings['control_token']:abort(403)
-  get_repo()._db().command('ping');return jsonify(ready=bool(children) and all(child.poll() is None for child in children),version=boot_version,route_count=len(list(app.url_map.iter_rules())))
+  get_repo()._db().command('ping');state=readiness_status(root,a.boot,boot_version,children);state['route_count']=len(list(app.url_map.iter_rules()));return jsonify(state)
  @app.route('/',defaults={'path':''})
  @app.route('/<path:path>')
  def frontend(path):

@@ -8,14 +8,15 @@ PRODUCT='watchtower-native-install'
 
 def install(source,destination,account,progress=print):
  root=Path(destination).resolve()
- if root.exists() and any(root.iterdir()):raise ValueError('Destination is not empty; use core/program update for existing users')
+ repair=root.exists() and any(root.iterdir())
+ if repair and (not (root/'app/version.txt').is_file() or not (root/'state/native-release-receipt.json').is_file()):raise ValueError('Nonempty destination is not a recognized Watchtower installation')
  from windows_native.embedded_install import Source
  embedded=isinstance(source,Source)
  manifest=source.manifest if embedded else signed_manifest(source,base64.b64decode(PUBLIC_KEY),PRODUCT)
  if manifest.get('runtime_abi')!='windows-amd64-py311-v1':raise ValueError('Native runtime ABI mismatch')
  if os.name!='nt' or __import__('platform').machine().lower() not in ('amd64','x86_64'):raise ValueError('This native package requires 64-bit Windows on x64')
  if len(str(root/'state/browser-profiles'/('0'*24)).encode('utf-16-le'))//2>180:raise ValueError('Installation folder is too long for reliable browser profiles; choose a shorter folder')
- if len(account.get('password',''))<6 or not account.get('username'):raise ValueError('Missing account information')
+ if not repair and (len(account.get('password',''))<6 or not account.get('username')):raise ValueError('Missing account information')
  root.parent.mkdir(parents=True,exist_ok=True)
  if shutil.disk_usage(root.parent).free<2*1024**3:raise ValueError('Native installation needs2GiB free for staging/data headroom')
  if embedded:source.verify_payload();asset=source.payload()
@@ -46,7 +47,8 @@ def install(source,destination,account,progress=print):
     with z.open(info) as f,dest.open('wb') as out:shutil.copyfileobj(f,out)
   for n,h in manifest['files'].items():
    if sha256(stage/n)!=h:raise ValueError('Native installed member mismatch')
-  private(stage/'state');(stage/'state/install-account.json').write_text(json.dumps(account),encoding='utf-8')
+  private(stage/'state')
+  if not repair:(stage/'state/install-account.json').write_text(json.dumps(account),encoding='utf-8')
   (stage/'state/native-release-receipt.json').write_text(json.dumps({'version':manifest['version'],'files':manifest['files']}),encoding='utf-8')
   report=stage/'state/setup-health.json'
   # The WebView health process has browser children. Own the whole tree so its
@@ -56,6 +58,9 @@ def install(source,destination,account,progress=print):
   owned=importlib.util.module_from_spec(spec);spec.loader.exec_module(owned)
   completed=owned.run([str(stage/'WatchtowerNative.exe'),'--health-check','--report',str(report)],timeout=35,capture_output=True)
   if completed.returncode or not json.loads(report.read_text(encoding='utf-8')).get('ok'):raise ValueError('Native installation health failed')
+  if repair:
+   from windows_native.repair_install import commit
+   result=commit(root,stage,manifest,progress);stage.resolve().relative_to(root.parent);shutil.rmtree(stage);return result
   if root.exists():root.rmdir()
   os.replace(stage,root);progress('Native installation completed');return {'ok':True,'version':manifest['version'],'root':str(root)}
  except Exception:

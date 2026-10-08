@@ -19,7 +19,7 @@ def install_client(root):
     from sentinel_platform.modules.ai_pentest import _browser_session
     _browser_session.install_transport(client(root))
 
-def serve(root):
+def serve(root,on_ready=None):
     root=Path(root);settings=json.loads((root/'state/runtime.json').read_text(encoding='utf-8'))
     from sentinel_platform.modules.ai_pentest import _browser_session as browser
     class Handler(BaseHTTPRequestHandler):
@@ -45,6 +45,7 @@ def serve(root):
     server=ThreadingHTTPServer(('127.0.0.1',settings['browser_port']),Handler)
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
+        if on_ready:on_ready()
         while not (root/'state/shutdown').exists():time.sleep(.2)
     finally:
         browser.close_all();server.shutdown();server.server_close()

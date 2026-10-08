@@ -29,14 +29,12 @@ def main():
  install_guardian(root)
  from windows_native.runtime import Runtime
  import webview
- from webview.menu import Menu,MenuAction
  rt=Runtime(root,backend=root/'runtime/service/NativeService.exe' if getattr(sys,'frozen',False) else None);closed=threading.Event();ready=False
  if a.diagnostic_port:webview.settings['REMOTE_DEBUGGING_PORT']=a.diagnostic_port
  from windows_native import splash
  text=splash.messages(root)
  window=webview.create_window(text.get('windowTitle','瞭望塔 Watchtower · Windows 原生版')+' '+(root/'app/version.txt').read_text(encoding='utf-8').strip(),html=splash.render(root),maximized=True,min_size=(1100,760),background_color='#0c1422',js_api=splash.Api(root))
  window.events.closed+=closed.set
- def quit():window.destroy()
  def start():
   try:
    def progress(stage,percent):
@@ -78,7 +76,7 @@ def main():
     update_state.write(root/'state/native-window.json',{'pid':os.getpid(),'version':(root/'app/version.txt').read_text().strip(),'mounted':True,'url':window.get_current_url()});return
    closed.wait(.25)
  window.events.loaded+=mounted
- try:webview.start(start,gui='edgechromium',storage_path=str(root/'state/webview'),private_mode=False,menu=[Menu(text['menu']['application'],[MenuAction(text['menu']['update'],lambda:window.load_url(rt.url+'/about/update')),MenuAction(text['menu']['exit'],quit)])])
+ try:webview.start(start,gui='edgechromium',storage_path=str(root/'state/webview'),private_mode=False)
  finally:
   if a.connect_existing:(root/'state/host-stop').touch()
   else:rt.stop()

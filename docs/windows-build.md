@@ -12,3 +12,4 @@ Use Windows x64, Python3.11 and Node.js. Original code is GPL-3.0-only; preserve
 The installer embeds an Ed25519 signed inventory and compressed payload. It prepares Microsoft WebView2 if missing, verifies Microsoft publisher signatures and creates a desktop shortcut. User data stays in the installation's `state` directory, separate from update ownership.
 
 Bundled component versions, source locations and notices accompany the program in `runtime/licenses`. Unmodified external programs retain their own licenses; modified NPoC source is provided here. Windows10 compatibility has not been verified on a physical Windows10 machine. Linux-specific driver, raw-packet, NSE and shell tools require appropriate external platform support; do not label them as tested native equivalents.
+

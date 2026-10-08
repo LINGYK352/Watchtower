@@ -10,6 +10,9 @@ def state(root):
 def save(root,data):update_state.write(Path(root)/'state/native-update-chain.json',data)
 
 def begin(root,target='',full=False):
+    if target:
+        from sentinel_platform.core.update_policy import key
+        if key(channel.headers(root)['X-Client-Version'])[:3]>=(1,21,175) and key(target)[:3]<(1,21,175):raise ValueError('Windows175禁止回退到较早版本')
     with update_state.lock(root):
         progress=update_state.get_progress(root);command=Path(root)/'state/native-update-command.json'
         if progress.get('phase') in update_state.ACTIVE or command.exists():return {'started':False,'msg':'更新正在进行中'}
@@ -19,6 +22,8 @@ def begin(root,target='',full=False):
             if current==old['steps'][old['cursor']]:
                 # Committed code was started, but the former helper died before
                 # advancing its chain cursor. The running GUI validates this hop.
+                from windows_native.readiness import running_version
+                if not running_version(root,current):raise ValueError('本级文件已落盘，但Windows服务和后台进程尚未就绪；保留本级进度，恢复启动后继续')
                 old['completed'].append(current);old['cursor']+=1
             if old['cursor']<len(old['steps']) and (not plan['steps'] or plan['steps'][0]!=old['steps'][old['cursor']]):raise ValueError('保存的Windows更新链与当前版本不一致')
             data=old;data.update(active=True,phase='pending',error='')
