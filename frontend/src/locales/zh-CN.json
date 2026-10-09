@@ -2870,26 +2870,28 @@
     "update_phase_done": "更新完成，目标版本已运行",
     "update_phase_error": "更新暂停，可继续"
   },
-  "native": {
-    "startup": {
-      "caption": "瞭望塔 · WINDOWS",
-      "progress": "启动进度",
-      "checking": "正在检查运行组件",
-      "database": "正在启动本地数据库",
-      "service": "正在启动平台服务",
-      "workspace": "正在加载工作台",
-      "failed": "启动未完成",
-      "firstRunHint": "首次准备可能需要数分钟，后台会继续完成初始化。",
-      "readyHint": "本地服务正在启动，请稍候。",
-      "failureHint": "请查看本机 state/service.log 后重试，已有数据会保留。",
-      "version": "{version} · 本机测试版",
-      "stableVersion": "{version} · Windows原生版"
-    },
-    "menu": {
-      "application": "应用",
-      "update": "检查更新",
-      "exit": "停止并退出"
-    },
-    "windowTitle": "瞭望塔 Watchtower · Windows 原生版"
+  "consoleFiles": {
+    "upload": "上传文件",
+    "title": "文件上传进度",
+    "waiting": "等待上传",
+    "uploading": "正在上传",
+    "saving": "已上传，正在校验保存",
+    "done": "上传完成",
+    "error": "上传失败",
+    "cancel": "取消上传",
+    "retry": "重试未完成项",
+    "close": "关闭",
+    "cancelled": "上传已取消",
+    "reference": "附件：{name}\n会话可读取路径：{path}",
+    "limit": "单个文件最大 {size} MiB。上传完成后再发送指令。",
+    "tooLarge": "文件超过 {size} MiB，未上传",
+    "networkError": "上传连接失败，请重试"
+  },
+  "ann": {
+    "system": "系统通告",
+    "version": "版本通告"
+  },
+  "resource": {
+    "diskRemaining": "数据盘剩余"
   }
 }

@@ -4,8 +4,8 @@ import os,sys,threading,queue,subprocess,json,tempfile
 from windows_native.setup import install
 
 TEXT={
- 'zh-CN':{'title':'Watchtower 安装','folder':'安装目录','user':'管理员账号','password':'管理员密码（至少6位）','start':'开始安装','launch':'打开 Watchtower','done':'安装完成。打开后可注册并激活。','error':'安装失败','confirm':'请填写目录、账号和至少6位密码。','busy':'正在验证并安装…'},
- 'en-US':{'title':'Install Watchtower','folder':'Installation folder','user':'Administrator account','password':'Administrator password (at least 6 characters)','start':'Install','launch':'Open Watchtower','done':'Installed. Open Watchtower to register and activate.','error':'Installation failed','confirm':'Enter a folder, account, and password of at least 6 characters.','busy':'Verifying and installing…'}
+ 'zh-CN':{'title':'Watchtower 安装','folder':'安装目录','browse':'浏览…','choose':'选择安装目录','user':'管理员账号','password':'管理员密码（至少6位）','start':'开始安装','launch':'打开 Watchtower','done':'安装完成。打开后可注册并激活。','error':'安装失败','confirm':'请填写目录、账号和至少6位密码。','busy':'正在验证并安装…'},
+ 'en-US':{'title':'Install Watchtower','folder':'Installation folder','browse':'Browse…','choose':'Choose installation folder','user':'Administrator account','password':'Administrator password (at least 6 characters)','start':'Install','launch':'Open Watchtower','done':'Installed. Open Watchtower to register and activate.','error':'Installation failed','confirm':'Enter a folder, account, and password of at least 6 characters.','busy':'Verifying and installing…'}
 }
 
 def shortcut(destination):
@@ -39,7 +39,7 @@ def main():
   except Exception as exc:result={'ok':False,'error':str(exc)[:240]}
   args.report.write_text(json.dumps(result),encoding='utf-8');return 0 if result['ok'] else 1
  import tkinter as tk
- from tkinter import ttk,messagebox
+ from tkinter import ttk,messagebox,filedialog
  source=Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parent
  if getattr(sys,'frozen',False):
   from windows_native.embedded_install import detect
@@ -49,10 +49,21 @@ def main():
  locale=tk.StringVar(value='zh-CN');destination=tk.StringVar(value=str(Path(os.environ['LOCALAPPDATA'])/'Watchtower'));username=tk.StringVar();password=tk.StringVar();events=queue.Queue();installed=None;running=False
  frame=ttk.Frame(window,padding=24);frame.pack(fill='both',expand=True)
  picker=ttk.Combobox(frame,textvariable=locale,values=['zh-CN','en-US'],state='readonly',width=12);picker.pack(anchor='e')
- labels=[]
+ labels=[];entries=[];browse_button=None
+ def browse():
+  if running or installed:return
+  initial=Path(destination.get()).expanduser()
+  while not initial.is_dir() and initial!=initial.parent:initial=initial.parent
+  chosen=filedialog.askdirectory(parent=window,title=TEXT[locale.get()]['choose'],initialdir=str(initial),mustexist=True)
+  if chosen:destination.set(str(Path(chosen)))
  for field,var,hidden in [('folder',destination,False),('user',username,False),('password',password,True)]:
   label=ttk.Label(frame);label.pack(anchor='w',pady=(12,4));labels.append((field,label))
-  entry=ttk.Entry(frame,textvariable=var,show='*' if hidden else '');entry.pack(fill='x')
+  container=ttk.Frame(frame) if field=='folder' else frame
+  if field=='folder':container.pack(fill='x')
+  entry=ttk.Entry(container,textvariable=var,show='*' if hidden else '');entries.append(entry)
+  if field=='folder':
+   entry.pack(side='left',fill='x',expand=True);browse_button=ttk.Button(container,command=browse);browse_button.pack(side='right',padx=(8,0))
+  else:entry.pack(fill='x')
  status=ttk.Label(frame,wraplength=590);status.pack(anchor='w',pady=14)
  progress=ttk.Progressbar(frame,mode='indeterminate');progress.pack(fill='x')
  def launch():
@@ -66,6 +77,8 @@ def main():
   if not destination.get().strip() or not existing.is_file() and (not username.get().strip() or len(password.get())<6):
    messagebox.showerror(TEXT[locale.get()]['error'],TEXT[locale.get()]['confirm']);return
   running=True;button.configure(state='disabled');picker.configure(state='disabled');progress.start();status.configure(text=TEXT[locale.get()]['busy'])
+  for entry in entries:entry.configure(state='disabled')
+  browse_button.configure(state='disabled')
   target=Path(destination.get()).resolve();account={'username':username.get().strip(),'password':password.get()}
   def work():
    try:
@@ -80,6 +93,7 @@ def main():
  def language(*args):
   text=TEXT[locale.get()];window.title(text['title'])
   for name,label in labels:label.configure(text=text[name])
+  browse_button.configure(text=text['browse'])
   button.configure(text=text['launch' if installed else 'start'])
  locale.trace_add('write',language);language()
  def poll():
@@ -91,6 +105,8 @@ def main():
     installed,warning=value;running=False;password.set('');progress.stop();button.configure(state='normal');status.configure(text=TEXT[locale.get()]['done']+warning);language()
    else:
     running=False;progress.stop();button.configure(state='normal');picker.configure(state='readonly');status.configure(text=value);messagebox.showerror(TEXT[locale.get()]['error'],value)
+    for entry in entries:entry.configure(state='normal')
+    browse_button.configure(state='normal')
   window.after(100,poll)
  window.protocol('WM_DELETE_WINDOW',lambda:None if running else window.destroy())
  poll();window.mainloop()

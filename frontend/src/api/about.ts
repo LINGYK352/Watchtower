@@ -119,6 +119,9 @@ export interface Announcement {
   enabled?: boolean
   starts_at?: string
   ends_at?: string
+  scope?: 'system' | 'version'
+  target_versions?: string[]
+  products?: string[]
 }
 
 /** 生效中的通告（转发分发系统，失败降级空列表）。供通告栏 / 弹窗消费。 */

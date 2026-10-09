@@ -29,6 +29,8 @@ export interface ResourceAlertDim {
   label: string    // 内存 | CPU | 磁盘
   value: number    // 当前使用率 %
   level: string    // tight | critical
+  unit?: '%' | 'GiB'
+  path?: string
 }
 
 export interface ResourceAlertResult {

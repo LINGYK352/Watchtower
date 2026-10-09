@@ -1,22 +1,27 @@
-# 更新日志 / Changelog
+# Changelog
 
-## v1.21.175 · 2026-10-08
+## v1.21.176 · 2026-10-09
 
-> **v1.21.175 Web + Windows 正式版** · 开发始于 **2026年6月3日** · 原创代码 **GPL-3.0-only**。
+# 瞭望塔 Watchtower
 
-## 选择你的工作方式
+> **v1.21.176 · Web + Windows** · 开发始于 **2026年6月3日** · 原创代码 **GPL-3.0-only**。
 
-| 产品 | 适合的工作 | 安装与升级 |
+[English](README.en.md) · [官网与安装](https://watchtowers.info/) · [176下载与日志](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.176)
+
+| 产品 | 适合的工作 | 安装与更新 |
 | --- | --- | --- |
-| Web | 长任务、稳定服务器运行、集中部署和跨平台远程访问 | Linux x64 / Docker；旧部署使用175新基板保数据修复安装 |
-| Windows | 及时开始、本机工作、原生窗口和桌面入口 | 完整安装EXE供新用户；存量172约82 MiB逐级热更新175 |
+| Web | 长任务、稳定服务器运行、集中部署和跨平台远程访问 | Linux x64 / Docker；175镜像基板安装，激活后逐级热更新176 |
+| Windows | 及时开始、本机工作、原生窗口和桌面入口 | 新用户使用176完整EXE，可浏览选择安装目录；存量175用户热更新176，无需重装 |
 
-175修复旧镜像控制代码与新Docker宿主不兼容引发的启动/更新故障。更新采用签名公共＋平台ZIP、固定目标、事务恢复和真实后台就绪确认；断流、提交中断和重启后可继续。Windows守护独立于业务源码，覆盖完整GUI/helper/DLL。双端175以下禁止回退，后续继续逐级更新。
+176修复Windows页面文字选择、Ctrl+C、右键复制与缩放，增加安装器目录浏览；AI控制台支持文件上传、真实进度、取消和失败重试；通告区分系统/安装版本/平台，并按优先级依次弹窗；资源按实际数据盘余量与内存预算计算并发；改善不同DPI和窗口宽度下的界面比例。
 
-Web旧用户结束运行任务并备份后，重新获取官网install.sh，选择**修复安装（2）**；保留账号、配置、数据库、任务、证据、浏览器和扩展数据。Windows不受此次Docker故障影响，存量用户使用热更新，无需下载完整EXE或重装。Win11已实测；Win10尚未实机验证，Linux专属工具边界保留，未消耗模型API。
+控制台单文件最大16MiB，上传完成后发送指令；上传文件不会自行执行或调用模型。Windows已在本机Win11验证，Win10尚缺实机验收。Linux专属工具有平台边界，不能宣称全部原生等价；未验收Android原型不在此版。
 
-[官网与安装](https://watchtowers.info/) · [175下载与日志](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.175) · [Windows源码](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.175) · [双端升级契约](docs/update-delivery.md)
+更新使用构建端预制的签名公共/平台ZIP，升级与回退都逐级；配置、账号、任务、证据、浏览器资料和扩展属于用户数据。双端回退下限175，Web175基板不因普通代码更新而重复重建。
 
+[Windows源码](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [交付契约](docs/update-delivery.md) · [许可](LICENSE) · [安全说明](SECURITY.md)
+
+# 更新日志 / Changelog
 
 正式 Web 版本记录；[English](CHANGELOG.en.md)。安装包基板与源码版本分别维护。
 

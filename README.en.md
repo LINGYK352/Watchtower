@@ -1,17 +1,18 @@
-# Watchtower Windows ·175
+# Watchtower
 
-> **v1.21.175 Web + Windows** · Development began **June 3, 2026** · Original code **GPL-3.0-only**.
+> **v1.21.176 · Web + Windows** · Development began **June 3, 2026** · Original code **GPL-3.0-only**.
 
-## Choose your workspace
+[中文](README.md) · [Website and installation](https://watchtowers.info/) · [Release176](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.176)
 
-| Product | Designed for | Installation and upgrades |
+| Product | Designed for | Installation and updates |
 | --- | --- | --- |
-| Web | Long tasks, stable server operation, centralized deployment and cross-platform remote access | Linux x64 / Docker; existing deployments repair-install the175 image base while retaining data |
-| Windows | Immediate local work, a native window and desktop access | A complete setup EXE for new users; official172 installations sequentially hotupdate to175 (about82 MiB) |
+| Web | Long tasks, stable servers, centralized deployment and cross-platform remote access | Linux x64 / Docker; install the175 image base, activate and sequentially update to176 |
+| Windows | Immediate local work, a native window and desktop access | New users use the complete176 EXE with folder browsing; existing175 installations hotupdate without reinstalling |
 
-175 fixes restart/update failures caused by incompatible Docker control code in the old image. Signed common/platform ZIPs, fixed targets, transaction recovery and actual background initialization confirm completion. Interrupted downloads, committing and process restarts resume. The Windows guardian is independent of business source and covers GUI/helper/support DLLs. Rollback below175 is disabled; subsequent updates remain adjacent chains.
+176 restores native text selection, Ctrl+C, context-menu Copy and zoom, adds installer folder browsing, and adds console uploads with real progress, cancellation and retry. System/installed-version/product notices are clearly scoped and queued. Disk headroom and memory budgets determine capacity, with improved layouts across window sizes and display scales.
 
-Existing Web users should finish running tasks, back up and download the official install.sh again, selecting **Repair (2)**. Preserve accounts, configuration, database volumes, tasks, evidence, browsers and extensions. Windows is not affected by this Docker fault; existing users hotupdate without a complete installer download or reinstall. Windows11 tested; Windows10 has not been physically tested. Linux-specific tool boundaries remain documented; no paid model calls were part of validation.
+Console uploads are limited to16MiB per file; send instructions after saving. Uploading does not execute files or call a model. Native Windows11 was tested; Windows10 still needs physical testing. Linux-specific tools retain platform limits. No unverified Android prototype is included.
 
-[Website and installation](https://watchtowers.info/) · [Release175 and downloads](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.175) · [Windows source](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.175) · [Delivery contract](docs/update-delivery.md)
+Signed common/platform ZIPs and inverse plans are prepared offline. Upgrades and rollback are adjacent; user settings, accounts, tasks, evidence, browser profiles and extensions are retained. Rollback below175 is disabled. Ordinary code updates keep the175 Web image base.
 
+[Windows source](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [Delivery contract](docs/update-delivery.md) · [License](LICENSE) · [Security](SECURITY.md)

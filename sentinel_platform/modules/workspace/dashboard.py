@@ -112,10 +112,9 @@ class DashboardServiceImpl:
         except Exception as exc:
             logger.debug("dashboard: mem read failed: %s", exc)
         try:
-            disk = ps.disk_usage("/")
-            info["disk_percent"] = disk.percent
-            info["disk_usage"] = {"total": disk.total, "used": disk.used,
-                                  "free": disk.free, "percent": disk.percent}
+            from sentinel_platform.core.resource_disk import snapshot
+            info['disk_usage']=snapshot()
+            info['disk_percent']=info['disk_usage']['percent']
         except Exception as exc:
             logger.debug("dashboard: disk read failed: %s", exc)
         # 瞭望塔进程运行时间已在 info 初始化时算好（_PROC_START）；OS uptime 单列 os_uptime_seconds 供参考
@@ -137,7 +136,7 @@ class DashboardServiceImpl:
           新任务=告急，这才是"收缩并发保命"该出现的地方。
         - **CPU**（吞吐非硬闸，I/O 密集平台 CPU 少是瓶颈）：看 **loadavg1/核数**（真实排队压力），
           不看瞬时 cpu%（抖动且不代表能否接活）。缺 loadavg（非 Linux）回退瞬时 cpu%。
-        - **磁盘**（产出写入底线）：以**绝对剩余 GB 为主**、用量% 为辅，取更差者。平台一直写扫描结果/
+        - **磁盘**（产出写入底线）：按实际数据盘的**绝对剩余 GB**判定，用量%仅展示。平台一直写扫描结果/
           截图/报告/mongo/镜像/日志，一次大扫描产出可达 1~2GB——"剩 5.9GB"是真风险，同样 77% 在 500GB
           盘上却没事，故绝对余量比百分比更务实（阈值可配 DISK_FREE_*_GB）。
         headline 取三维**短板**（木桶效应，弱项决定可靠性）；verdict 按短板是谁+性质给可操作建议。
@@ -220,14 +219,12 @@ class DashboardServiceImpl:
         else:
             cpu_s = _grade(cpu_pct, 60, 85, 90, 95, higher_is_better=False)
 
-        # —— 磁盘维：绝对剩余 GB 为主 + 用量% 为辅，取更差 ——
-        free_excellent = _cfg_num("DISK_FREE_EXCELLENT_GB", 20.0)
-        free_good = _cfg_num("DISK_FREE_GOOD_GB", 8.0)
-        free_tight = _cfg_num("DISK_FREE_TIGHT_GB", 3.0)
-        free_crit = _cfg_num("DISK_FREE_CRIT_GB", 1.5)
+        # 数据盘余量与日志监控/调度准入共用阈值，异常旧配置回退默认值。
+        from sentinel_platform.core.resource_disk import thresholds
+        free_crit, free_tight, free_good, free_excellent = thresholds()
         disk_gb_s = _grade(disk_free_gb, free_excellent, free_good, free_tight, free_crit, higher_is_better=True)
-        disk_pct_s = _grade(disk_pct, 60, 85, 90, 95, higher_is_better=False)
-        disk_s = min(disk_gb_s, disk_pct_s)   # 取更差：绝对空间和百分比谁更告急听谁的
+        # 91% of a large drive can still leave49.5GB; utilization is display-only.
+        disk_s = disk_gb_s if info.get('disk_usage') else 70
 
         dims = {"cpu": cpu_s, "memory": mem_s, "disk": disk_s}
 
@@ -256,9 +253,9 @@ class DashboardServiceImpl:
 
         # 物理见底硬闸（只封顶不抬升；用绝对量而非维分，与回归 GB 阈值对齐）：
         cap = 100
-        if disk_free_gb < free_crit or disk_pct >= 95:        # 磁盘绝对见底 → 告急封顶
+        if info.get('disk_usage') and disk_free_gb <= free_crit:
             cap = 39
-        elif disk_free_gb < free_tight or disk_pct >= 90:     # 磁盘偏紧 → 偏紧封顶
+        elif info.get('disk_usage') and disk_free_gb <= free_tight:
             cap = 64
         if task_slots == 0 or wl == "critical":               # 内存 0 slots 停投 / 综合 critical → 告急
             cap = min(cap, 39)
@@ -278,7 +275,7 @@ class DashboardServiceImpl:
         weakest = "cpu" if (cpu_s <= mem_s and cpu_s <= disk_s) else ("memory" if mem_s <= disk_s else "disk")
         # critical 成因优先判"停投/写失败"物理红线（回归：wl critical/0 slots 必含"收缩并发保命"）
         mem_stall = (task_slots == 0 or wl == "critical")
-        disk_bottom = (disk_free_gb < free_crit or disk_pct >= 95)
+        disk_bottom = bool(info.get('disk_usage')) and disk_free_gb <= free_crit
 
         # verdict：物理红线（停投/写失败）优先表达，其次按短板给可操作建议。
         # "收缩并发保命" 严格绑 mem_stall（0 slots / 综合 critical=真停投），不滥用。
@@ -293,7 +290,7 @@ class DashboardServiceImpl:
         elif rel_level == "good":
             verdict = "资源良好，适合系统正常运行" + _slot_txt
         elif weakest == "disk":
-            verdict = "磁盘剩余 {:.1f}GB（{:.0f}%）偏紧，建议清理旧镜像/日志/扫描产物".format(disk_free_gb, disk_pct)
+            verdict = "数据盘剩余 {:.1f}GB（已用{:.0f}%），可写余量偏紧，建议清理日志和临时产物".format(disk_free_gb, disk_pct)
         elif weakest == "memory":
             verdict = "可用内存偏紧，当前仅够起 {} 个并发任务，系统已降低并发保稳定".format(
                 task_slots if task_slots is not None else "少量")
@@ -302,10 +299,10 @@ class DashboardServiceImpl:
             verdict = "CPU 负载偏高{}，任务响应可能变慢".format(_lr)
 
         # 磁盘单列提示（无论是否短板，偏紧都提醒，便于运维）——按绝对余量
-        if disk_free_gb < free_tight or disk_pct >= 95:
+        if info.get('disk_usage') and disk_free_gb <= free_tight:
             disk_note = "磁盘仅剩 {:.1f}GB（{:.0f}%），请尽快清理释放空间".format(disk_free_gb, disk_pct)
-        elif disk_free_gb < free_good or disk_pct >= 85:
-            disk_note = "磁盘剩余 {:.1f}GB（{:.0f}%）偏紧，建议清理旧镜像/日志/临时产物".format(disk_free_gb, disk_pct)
+        elif info.get('disk_usage') and disk_free_gb <= free_good:
+            disk_note = "数据盘剩余 {:.1f}GB（已用{:.0f}%），建议清理日志和临时产物".format(disk_free_gb, disk_pct)
         else:
             disk_note = ""
 

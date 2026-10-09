@@ -33,7 +33,7 @@ def main():
  if a.diagnostic_port:webview.settings['REMOTE_DEBUGGING_PORT']=a.diagnostic_port
  from windows_native import splash
  text=splash.messages(root)
- window=webview.create_window(text.get('windowTitle','瞭望塔 Watchtower · Windows 原生版')+' '+(root/'app/version.txt').read_text(encoding='utf-8').strip(),html=splash.render(root),maximized=True,min_size=(1100,760),background_color='#0c1422',js_api=splash.Api(root))
+ window=webview.create_window(text.get('windowTitle','瞭望塔 Watchtower · Windows 原生版')+' '+(root/'app/version.txt').read_text(encoding='utf-8').strip(),html=splash.render(root),maximized=True,min_size=(1100,760),background_color='#0c1422',js_api=splash.Api(root),text_select=True)
  window.events.closed+=closed.set
  def start():
   try:
@@ -70,6 +70,11 @@ def main():
    if not closed.is_set():window.load_html(splash.render(root,failed=True))
  def mounted():
   if not (window.get_current_url() or '').startswith(rt.url+'/'):return
+  try:
+   from windows_native.browser_preferences import apply
+   apply(window,root)
+  except Exception as exc:
+   update_state.write(root/'state/browser-preferences-error.json',{'error':type(exc).__name__,'details':str(exc)[:200]})
   for _ in range(80):
    if closed.is_set():return
    if window.evaluate_js('Boolean(document.querySelector(".ant-layout-sider") || document.querySelector("form input[type=password]"))'):

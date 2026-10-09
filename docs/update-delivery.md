@@ -1,7 +1,11 @@
-#175 delivery /175升级与安装
+#176 delivery /176升级与安装
 
-Web175 is a new verified image base. Old Web deployments must use the official installer in repair mode (2) while retaining data. Windows172 uses the actual173/174 compatibility hops to175 (about82 MiB); a full installer download is not required. Both rollback floors are175.
+176 follows the175 installation boundary. Both products use a175↔176 adjacent pair of prebuilt common/platform ZIPs, signed inventories and ownership-aware removal; users do not download a full system for ordinary updates. The175 Web image remains the installation base. Windows new installations use the176 complete setup EXE with folder browsing; existing175 users hotupdate without reinstalling.
 
-Normal later updates are adjacent signed common/platform ZIP pairs and prepared inverse plans, built offline. The distribution service never computes user diffs or builds packages on demand. Preserve base_install175 in subsequent signed indexes; do not reopen old Web paths. Persistent targets, download caches, transaction journals and actual startup acknowledgments survive process restarts. Configuration, accounts, tasks, evidence, browser profiles and extensions remain user state.
+Copy/zoom settings reside in the Windows GUI executable. The hot update includes that rebuilt executable and uses the persistent native guardian to replace it after closing the owned process tree. Backend/frontend fixes are delivered in the same pair; the two products share compatible common members, not Linux tool binaries.
 
-The host repair installer verifies image and deployment SHA before switching, keeps database volumes, records every retained-data move durably and restores the original program after interruption. Windows frozen installers and guardians do not import potentially missing business modules. The tested native platform is Windows11; Windows10 was not physically tested.
+Console files are owner-authorized and saved into the existing session workspace. Progress remains below100 until the backend confirms persistence. Uploading never executes or calls the model. Single-file limit16MiB accommodates the deployed Web proxy20MiB request ceiling. Cancellation stops unfinished transport; already saved files reappear in the file list.
+
+System notices and installed-version notices are different from changelog upgrade instructions. The server filters installed version and OS/product metadata; the frontend presents one popup at a time. Disk usage percentage is display-only: absolute writable headroom and memory budgets govern resource capacity.
+
+Rollback175 remains the floor, and subsequent upgrades and rollbacks must stay adjacent. User data and credentials are never release members. Windows11 is the physically tested platform; Windows10 needs a separate machine. No model API calls or unverified Android prototype are part of this validation.

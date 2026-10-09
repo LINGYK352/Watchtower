@@ -325,7 +325,8 @@ def get_disk_percent() -> Optional[float]:
     """当前根分区磁盘使用率。实时读失败回退最近采样；仍不可用返回 None（不参与分级）。"""
     try:
         import psutil
-        return float(psutil.disk_usage("/").percent)
+        from sentinel_platform.core.resource_disk import snapshot
+        return float(snapshot()['percent'])
     except Exception:
         try:
             row = get_repo().collection(RESOURCE_HISTORY).find_one({}, sort=[("ts", -1)])
@@ -391,6 +392,11 @@ def _worst_level(*levels: str) -> str:
             worst = lv
     return worst
 
+def _disk_level():
+    from sentinel_platform.core.resource_disk import snapshot,level
+    try:return level(snapshot())
+    except (OSError,ValueError):return 'relaxed'
+
 
 def get_resource_level() -> str:
     """综合资源水位 relaxed/normal/tight/critical —— 取内存/CPU/磁盘三维中最严重的一档。
@@ -400,7 +406,7 @@ def get_resource_level() -> str:
     """
     mem_lv = _mem_level(get_memory_percent())
     cpu_lv = _cpu_disk_level(get_cpu_percent(), "CPU_HIGH", _TH_CPU_HIGH, "CPU_CRITICAL", _TH_CPU_CRIT)
-    disk_lv = _cpu_disk_level(get_disk_percent(), "DISK_HIGH", _TH_DISK_HIGH, "DISK_CRITICAL", _TH_DISK_CRIT)
+    disk_lv = _disk_level()
     return _worst_level(mem_lv, cpu_lv, disk_lv)
 
 
@@ -446,8 +452,10 @@ def sample_resource() -> Dict[str, Any]:
     try:
         import psutil
         import time
+        from sentinel_platform.core.resource_disk import snapshot
+        disk=snapshot()
         sample = {"ts": int(time.time()), "cpu": psutil.cpu_percent(interval=0),
-                  "memory": psutil.virtual_memory().percent, "disk": psutil.disk_usage("/").percent}
+                  "memory": psutil.virtual_memory().percent, "disk":disk['percent'], 'disk_free':disk['free'],'disk_path':disk['path']}
         get_repo().collection(RESOURCE_HISTORY).insert_one(dict(sample))
         return sample
     except Exception as exc:
@@ -475,12 +483,15 @@ def get_resource_alert() -> Dict[str, Any]:
     disk = get_disk_percent()
     mem_lv = _mem_level(mem)
     cpu_lv = _cpu_disk_level(cpu, "CPU_HIGH", _TH_CPU_HIGH, "CPU_CRITICAL", _TH_CPU_CRIT)
-    disk_lv = _cpu_disk_level(disk, "DISK_HIGH", _TH_DISK_HIGH, "DISK_CRITICAL", _TH_DISK_CRIT)
+    disk_lv = _disk_level()
     level = _worst_level(mem_lv, cpu_lv, disk_lv)
     dims = []
     for key, val, lv in (("memory", mem, mem_lv), ("cpu", cpu, cpu_lv), ("disk", disk, disk_lv)):
         if lv in ("tight", "critical") and val is not None:
-            dims.append({"key": key, "label": _DIM_LABEL[key], "value": round(float(val), 1), "level": lv})
+            if key=='disk':
+                from sentinel_platform.core.resource_disk import snapshot
+                info=snapshot();dims.append({'key':key,'label':'数据盘剩余','value':round(info['free']/1024**3,1),'unit':'GiB','path':info['path'],'level':lv})
+            else:dims.append({"key": key, "label": _DIM_LABEL[key], "value": round(float(val), 1), "level": lv,'unit':'%'})
     return {
         "level": level,
         "mem": round(float(mem), 1) if mem is not None else None,
@@ -622,5 +633,3 @@ _service = LogServiceImpl()
 
 def get_service() -> LogServiceImpl:
     return _service
-
-
