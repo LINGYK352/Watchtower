@@ -2869,5 +2869,29 @@
     "update_phase_restarting": "等待本级程序运行检查",
     "update_phase_done": "更新完成，目标版本已运行",
     "update_phase_error": "更新暂停，可继续"
+  },
+  "consoleFiles": {
+    "upload": "上传文件",
+    "title": "文件上传进度",
+    "waiting": "等待上传",
+    "uploading": "正在上传",
+    "saving": "已上传，正在校验保存",
+    "done": "上传完成",
+    "error": "上传失败",
+    "cancel": "取消上传",
+    "retry": "重试未完成项",
+    "close": "关闭",
+    "cancelled": "上传已取消",
+    "reference": "附件：{name}\n会话可读取路径：{path}",
+    "limit": "单个文件最大 {size} MiB。上传完成后再发送指令。",
+    "tooLarge": "文件超过 {size} MiB，未上传",
+    "networkError": "上传连接失败，请重试"
+  },
+  "ann": {
+    "system": "系统通告",
+    "version": "版本通告"
+  },
+  "resource": {
+    "diskRemaining": "数据盘剩余"
   }
 }

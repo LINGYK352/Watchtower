@@ -2869,5 +2869,29 @@
     "update_phase_restarting": "Waiting for this step to pass runtime checks",
     "update_phase_done": "Update complete; the target version is running",
     "update_phase_error": "Update paused; you can resume"
+  },
+  "consoleFiles": {
+    "upload": "Upload files",
+    "title": "File upload progress",
+    "waiting": "Waiting",
+    "uploading": "Uploading",
+    "saving": "Uploaded; verifying and saving",
+    "done": "Uploaded",
+    "error": "Upload failed",
+    "cancel": "Cancel upload",
+    "retry": "Retry unfinished files",
+    "close": "Close",
+    "cancelled": "Upload cancelled",
+    "reference": "Attachment: {name}\nSession-readable path: {path}",
+    "limit": "Maximum {size} MiB per file. Send instructions after the upload completes.",
+    "tooLarge": "File exceeds {size} MiB; not uploaded",
+    "networkError": "Upload connection failed. Please retry."
+  },
+  "ann": {
+    "system": "System announcement",
+    "version": "Version announcement"
+  },
+  "resource": {
+    "diskRemaining": "Data disk free"
   }
 }

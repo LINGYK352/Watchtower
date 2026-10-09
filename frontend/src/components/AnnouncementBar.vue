@@ -2,13 +2,13 @@
   <!-- 顶部通告条：默认展示，不弹出；多条时轮流/堆叠展示当前未关闭的最高优先级一条 -->
   <div v-if="barItem" class="ann-bar" :class="'ann-' + barItem.level">
     <component :is="levelIcon(barItem.level)" class="ann-bar-ico" />
-    <span class="ann-bar-title">{{ barItem.title }}</span>
+    <span class="ann-bar-title">{{ translate(barItem.scope==='version' ? 'ann.version' : 'ann.system') }} · {{ barItem.title }}</span>
     <span class="ann-bar-content">{{ barItem.content }}</span>
     <a class="ann-bar-close" @click="closeBar(barItem.id)" :title="translate('ui.m_530475d69caa')">✕</a>
   </div>
 
   <!-- 强制弹窗：popup=true 的通告，每条按 id 记已读，不重复弹 -->
-  <a-modal :open="popupOpen" :title="popupItem?.title || translate('ui.m_cc1e57efaf6d')" :footer="null"
+  <a-modal :open="popupOpen" :title="translate(popupItem?.scope==='version' ? 'ann.version' : 'ann.system') + ' · ' + (popupItem?.title || '')" :footer="null"
     :maskClosable="false" centered width="520px" @cancel="dismissPopup" wrap-class-name="ann-modal">
     <div v-if="popupItem" class="ann-pop">
       <a-alert :type="alertType(popupItem.level)" show-icon banner style="margin-bottom:14px"
@@ -30,6 +30,7 @@ import {
   InfoCircleOutlined, WarningOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons-vue'
 import { getAnnouncements, type Announcement } from '../api/about'
+import { requestNotice, releaseNotice } from '../composables/noticeQueue'
 
 const POLL_INTERVAL = 3600 * 1000   // 每 1 小时主动拉一次通告；内网断网时静默失败不报错
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -51,7 +52,7 @@ function saveIds(key: string, ids: number[]) {
 }
 
 // 级别权重：danger > warning > info，通告条展示未关闭里最高优先级的一条。
-const _weight: Record<string, number> = { danger: 3, warning: 2, info: 1 }
+const _weight: Record<string, number> = { critical: 4, danger: 4, warning: 2, info: 1 }
 
 const barItem = computed<Announcement | null>(() => {
   const open = items.value.filter(a => !closedBarIds.value.includes(a.id))
@@ -60,16 +61,16 @@ const barItem = computed<Announcement | null>(() => {
 })
 
 // 待弹窗队列：popup=true 且未读的，逐个弹（当前弹第一个）。
-const pendingPopups = computed(() => items.value.filter(a => a.popup && !readPopupIds.value.includes(a.id)))
+const pendingPopups = computed(() => items.value.filter(a => a.popup && !readPopupIds.value.includes(a.id)).sort((a,b)=>(_weight[b.level]||0)-(_weight[a.level]||0)||b.id-a.id))
 const popupItem = ref<Announcement | null>(null)
 
 function levelIcon(level: string) {
-  if (level === 'danger') return ExclamationCircleOutlined
+  if (level === 'danger' || level === 'critical') return ExclamationCircleOutlined
   if (level === 'warning') return WarningOutlined
   return InfoCircleOutlined
 }
 function alertType(level: string): 'info' | 'warning' | 'error' {
-  if (level === 'danger') return 'error'
+  if (level === 'danger' || level === 'critical') return 'error'
   if (level === 'warning') return 'warning'
   return 'info'
 }
@@ -88,13 +89,14 @@ function dismissPopup() {
     saveIds(READ_POPUP_KEY, readPopupIds.value)
   }
   popupOpen.value = false
+  releaseNotice('announcement')
   // 还有下一条待弹的，继续弹
   setTimeout(showNextPopup, 300)
 }
 
 function showNextPopup() {
   const next = pendingPopups.value[0]
-  if (next) { popupItem.value = next; popupOpen.value = true }
+  if (next) requestNotice('announcement',(_weight[next.level]||1)*10,()=>{popupItem.value=next;popupOpen.value=true})
 }
 
 async function load() {
@@ -109,7 +111,7 @@ onMounted(() => {
   load()                                       // 登录进入即拉一次
   pollTimer = setInterval(load, POLL_INTERVAL) // 之后每 1 小时主动拉一次
 })
-onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
+onUnmounted(() => { if (pollTimer) clearInterval(pollTimer);releaseNotice('announcement') })
 </script>
 
 <style scoped>

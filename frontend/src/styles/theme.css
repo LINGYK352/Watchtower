@@ -38,3 +38,5 @@
   --dt-shadow-hover: 0 8px 24px rgba(15,23,42,.1), 0 2px 8px rgba(15,23,42,.06);
   --dt-shadow-primary: 0 2px 6px rgba(15,23,42,.12);
 }
+
+.comp-files{display:flex;flex-wrap:wrap;gap:4px;padding:6px 10px}.comp-upload{background:transparent;border:1px solid var(--dt-border);color:var(--dt-text);padding:4px 10px;border-radius:6px;cursor:pointer}.comp-upload:disabled{opacity:.45;cursor:default}.upload-file-progress{padding:10px 0;border-bottom:1px solid var(--dt-border);overflow-wrap:anywhere}.ann-critical{background:var(--dt-danger-bg,#3b2027);color:var(--dt-danger,#ff7875)}

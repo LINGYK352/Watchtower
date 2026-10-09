@@ -14,7 +14,7 @@
     <div class="res-dims" v-if="dims.length">
       <div class="res-sub">{{ translate('ui.m_8bfdf37f6584') }}</div>
       <a-tag v-for="d in dims" :key="d.key" :color="d.level==='critical' ? 'red' : 'orange'">
-        {{ d.label }}：{{ d.value }}%（{{ d.level==='critical' ? translate('ui.m_73eb0e14e307') : translate('ui.m_cde6311d914f') }}）
+        {{ d.unit==='GiB' ? translate('resource.diskRemaining') : d.label }}：{{ d.value }}{{ d.unit || '%' }}（{{ d.level==='critical' ? translate('ui.m_73eb0e14e307') : translate('ui.m_cde6311d914f') }}）
       </a-tag>
     </div>
     <div class="res-snapshot">
@@ -68,7 +68,7 @@ const alertTime = computed(() => {
 })
 
 const summary = computed(() => {
-  const parts = dims.value.map(d => `${d.label} ${d.value}%`)
+  const parts = dims.value.map(d => `${d.unit==='GiB' ? translate('resource.diskRemaining') : d.label} ${d.value}${d.unit||'%'}`)
   return parts.length ? translate('ui.m_18fb9c27da34', { p0: (parts.join('、')) }) : translate('ui.m_75a68fff0afc')
 })
 

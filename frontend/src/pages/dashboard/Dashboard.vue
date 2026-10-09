@@ -8,8 +8,8 @@
       </a-space>
     </template>
 
-    <a-row :gutter="16">
-      <a-col v-for="item in metrics" :key="item.key" :xs="12" :sm="8" :lg="4">
+    <div class="metric-grid">
+      <div v-for="item in metrics" :key="item.key">
         <a-card :bordered="false" class="metric-card" hoverable @click="item.to && router.push(item.to)">
           <div class="metric-body">
             <div class="metric-icon" :style="{ background: item.bg, color: item.color }">
@@ -22,8 +22,8 @@
             </div>
           </div>
         </a-card>
-      </a-col>
-    </a-row>
+      </div>
+    </div>
 
     <a-row :gutter="16" class="section-row">
       <a-col :xs="24" :lg="8">
@@ -520,6 +520,8 @@ function drawChart() {
 
 <style scoped>
 .metric-card { cursor: pointer; transition: transform .15s ease; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(190px,100%),1fr)); gap: 16px; }
+.metric-grid .metric-card { height: 100%; margin-bottom: 0; }
 .metric-card:hover { transform: translateY(-2px); }
 .metric-body { display: flex; align-items: center; gap: 14px; }
 .metric-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
@@ -606,6 +608,5 @@ function drawChart() {
 .disk-dot { background: #fa8c16; }
 .thresh-line { }
 </style>
-
 
 

@@ -14,8 +14,6 @@
     </div>
     <div style="text-align:right;margin-top:16px">
       <a-space>
-        <a-button @click="goProxy">{{ translate('ui.m_f0be8afa2783') }}</a-button>
-        <a-button @click="goPolicy">{{ translate('ui.m_4716cca157c4') }}</a-button>
         <a-button type="primary" @click="confirm">{{ translate('ui.m_348f1cf1243e') }}</a-button>
       </a-space>
     </div>
@@ -25,7 +23,8 @@
 <script setup lang="ts">
 import { t as translate } from '../i18n'
 
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { requestNotice,releaseNotice } from '../composables/noticeQueue'
 import { useRouter } from 'vue-router'
 import { getChangelog } from '../api/about'
 import { fetchServerVersion } from '../composables/useServerVersion'
@@ -40,7 +39,8 @@ const notices = ref<Array<{ ver: string; notice: string }>>([])
 
 // 版本号数值比较（复用 UpdateNotice 同款逻辑）：v1.21.149-1 → [1,21,149,1]
 function parseVer(v: string): number[] {
-  return String(v || '').replace(/^v/i, '').split(/[.\-]/).map(x => parseInt(x, 10) || 0)
+  const match=String(v||'').match(/^v?(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$/i)
+  return match ? [Number(match[1]),Number(match[2]),Number(match[3]),match[4] ? 0 : 1,Number(match[4]||0)] : [0,0,0,0,0]
 }
 function cmpVer(a: string, b: string): number {
   const ta = parseVer(a), tb = parseVer(b)
@@ -57,6 +57,7 @@ function goPolicy() { confirm(); router.push('/policy') }
 function confirm() {
   try { localStorage.setItem(SEEN_KEY, curVer.value) } catch { /* ignore */ }
   open.value = false
+  releaseNotice('upgrade')
 }
 
 onMounted(async () => {
@@ -75,13 +76,14 @@ onMounted(async () => {
       .map((l: any) => ({ ver: String(l.ver), notice: String(l.upgrade_notice) }))
     if (items.length) {
       notices.value = items
-      open.value = true
+      requestNotice('upgrade',1,()=>{open.value=true})
     } else {
       // 区间内无提示：静默推进 seen,不弹
       try { localStorage.setItem(SEEN_KEY, curVer.value) } catch { /* ignore */ }
     }
   } catch { /* 拉取失败不打扰,下次再试(不推进 seen) */ }
 })
+onUnmounted(()=>releaseNotice('upgrade'))
 </script>
 
 <style scoped>

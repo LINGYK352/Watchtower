@@ -584,6 +584,26 @@ class ConsoleTopology(Resource):
             return err(CODE_FORBIDDEN, r["error"]) if r.get("forbidden") else err(CODE_NOT_FOUND, r["error"])
         return ok(r)
 
+@ns.route('/session/console/<string:resume_key>/files')
+class ConsoleFiles(Resource):
+    @ns.doc(security='token',description='需权限pentest:read，按会话归属列出附件')
+    def get(self,resume_key):
+        svc=_svc()
+        if not svc or not hasattr(svc,'console_files'):return err(CODE_ERROR,'会话服务未就绪')
+        data=svc.console_files(resume_key,caller=_current_username(),can_view_all=_can_view_all())
+        if data.get('error'):return err(CODE_FORBIDDEN if data.get('forbidden') else CODE_BAD_REQUEST,data['error'])
+        return ok(data)
+
+    @ns.doc(security='token',description='需权限pentest:write，会话附件上传，不自动执行')
+    def post(self,resume_key):
+        svc=_svc()
+        if not svc or not hasattr(svc,'console_upload'):return err(CODE_ERROR,'会话服务未就绪')
+        file=request.files.get('file')
+        if file is None:return err(CODE_BAD_REQUEST,'未收到上传文件')
+        data=svc.console_upload(resume_key,file,caller=_current_username(),can_view_all=_can_view_all())
+        if data.get('error'):return err(CODE_FORBIDDEN if data.get('forbidden') else CODE_BAD_REQUEST,data['error'])
+        return ok(data)
+
 
 @ns.route("/session/console/<string:resume_key>/chat")
 class ConsoleChat(Resource):

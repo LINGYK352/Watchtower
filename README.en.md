@@ -1,148 +1,18 @@
-<div align="center">
-
-<img src="frontend/public/logo.png" width="112" height="112" alt="Watchtower logo" />
-
 # Watchtower
 
-**From attack surface to evidence.**
+> **v1.21.176 · Web + Windows** · Development began **June 3, 2026** · Original code **GPL-3.0-only**.
 
-A self-hosted platform for AI penetration testing and asset intelligence in authorized security assessments.
+[中文](README.md) · [Website and installation](https://watchtowers.info/) · [Release176](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.176)
 
-**Development started: June 3, 2026.**
-
-**[中文](README.md) · [English](README.en.md)**
-
-[![License: GPL v3](https://img.shields.io/badge/License-GPL_v3-19b6cf.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.8%20runtime-3776AB?logo=python&logoColor=white)](requirements.txt)
-[![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)](frontend/package.json)
-[![Deployment](https://img.shields.io/badge/Deploy-Linux%20x86__64-101622?logo=docker&logoColor=white)](docs/installation.md)
-
-[Website](https://watchtowers.info/) · [Installation (Chinese)](docs/installation.md) · [Development (Chinese)](docs/development.md) · [Architecture (Chinese)](docs/architecture.md) · [Releases](https://github.com/LINGYK352/Watchtower/releases) · [Issues](https://github.com/LINGYK352/Watchtower/issues)
-
-</div>
-
-![Watchtower assessment workflow](docs/assets/workflow.svg)
-
-## Overview
-
-Watchtower connects asset reconnaissance, AI tool use, human intervention, and evidence organization in one workspace. Create tasks from target assets, follow session execution, manage vulnerability leads and verification records, and prepare reports.
-
-The project is maintained by an individual developer and is available free of charge under **GPL-3.0-only**. You can deploy it yourself; model calls and external data sources may require your own accounts or incur separate costs.
-
-> **v1.21.175 Web + Windows** · Development began **June 3, 2026** · Original code **GPL-3.0-only**.
-
-## Choose your workspace
-
-| Product | Designed for | Installation and upgrades |
+| Product | Designed for | Installation and updates |
 | --- | --- | --- |
-| Web | Long tasks, stable server operation, centralized deployment and cross-platform remote access | Linux x64 / Docker; existing deployments repair-install the175 image base while retaining data |
-| Windows | Immediate local work, a native window and desktop access | A complete setup EXE for new users; official172 installations sequentially hotupdate to175 (about82 MiB) |
+| Web | Long tasks, stable servers, centralized deployment and cross-platform remote access | Linux x64 / Docker; install the175 image base, activate and sequentially update to176 |
+| Windows | Immediate local work, a native window and desktop access | New users use the complete176 EXE with folder browsing; existing175 installations hotupdate without reinstalling |
 
-175 fixes restart/update failures caused by incompatible Docker control code in the old image. Signed common/platform ZIPs, fixed targets, transaction recovery and actual background initialization confirm completion. Interrupted downloads, committing and process restarts resume. The Windows guardian is independent of business source and covers GUI/helper/support DLLs. Rollback below175 is disabled; subsequent updates remain adjacent chains.
+176 restores native text selection, Ctrl+C, context-menu Copy and zoom, adds installer folder browsing, and adds console uploads with real progress, cancellation and retry. System/installed-version/product notices are clearly scoped and queued. Disk headroom and memory budgets determine capacity, with improved layouts across window sizes and display scales.
 
-Existing Web users should finish running tasks, back up and download the official install.sh again, selecting **Repair (2)**. Preserve accounts, configuration, database volumes, tasks, evidence, browsers and extensions. Windows is not affected by this Docker fault; existing users hotupdate without a complete installer download or reinstall. Windows11 tested; Windows10 has not been physically tested. Linux-specific tool boundaries remain documented; no paid model calls were part of validation.
+Console uploads are limited to16MiB per file; send instructions after saving. Uploading does not execute files or call a model. Native Windows11 was tested; Windows10 still needs physical testing. Linux-specific tools retain platform limits. No unverified Android prototype is included.
 
-[Website and installation](https://watchtowers.info/) · [Release175 and downloads](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.175) · [Windows source](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.175) · [Delivery contract](docs/update-delivery.md)
+Signed common/platform ZIPs and inverse plans are prepared offline. Upgrades and rollback are adjacent; user settings, accounts, tasks, evidence, browser profiles and extensions are retained. Rollback below175 is disabled. Ordinary code updates keep the175 Web image base.
 
-## Capabilities
-
-| Area | What you can do |
-| --- | --- |
-| **Assets and attack surface** | Manage domains, IP addresses, websites, services, and fingerprints; organize reconnaissance results by task or asset group |
-| **AI penetration testing sessions** | Configure model providers, invoke tools using asset context, and inspect execution traces and session states |
-| **Human collaboration** | Intervene, take over, and continue sessions through the AI console while retaining associated records |
-| **Findings and reports** | Distinguish unverified leads from results with associated verification evidence; organize reproduction details and reports |
-| **Connected intelligence** | Query component vulnerabilities, methodologies, and historical clues; connect assets, systems, and attack-chain information |
-| **Tools and extensions** | Manage tool settings and extension packages; integrate independent tools and platform capabilities through adapters |
-| **Operations** | Configure proxy egress, scheduled tasks, and resource concurrency; review access, execution, and system logs |
-
-Web and API assessments are the primary use cases. App, mini-app, and probe modules require their respective environments, external components, and explicit authorization. Available capabilities depend on the deployed version and configuration.
-
-## Quick deployment
-
-Prebuilt installation packages target **Linux x86_64** and run the platform and supporting services with Docker Compose.
-
-```bash
-# Download the official installer and review its contents before running it.
-curl -fL https://watchtowers.info/dist/install.sh -o install.sh
-sudo bash install.sh
-```
-
-Choose the installation mode from the interactive menu. Back up your configuration and database before working on an existing deployment. **Fresh installation and uninstall modes delete existing data; do not use them as routine updates.**
-
-Follow the terminal output to access the platform, typically at `http://<server-address>:5555`. Change the default credentials after your first login, then configure model providers and required data sources. Confirm target authorization, network egress, and data-handling boundaries before conducting assessments.
-
-**[Full deployment guide — Chinese →](docs/installation.md)**
-
-## Assessment workflow
-
-1. **Define the target:** establish the assets, accounts, time window, and permitted operations.
-2. **Build context:** create a reconnaissance task or enter assets, then associate website, service, and component information.
-3. **Start a session:** select the model and task settings, observe AI tool use, and intervene when needed.
-4. **Review evidence:** inspect actual requests, responses, and reproduction conditions; distinguish leads, verification status, and severity.
-5. **Organize results:** consolidate findings, handling status, and reports to support remediation and retesting.
-
-The illustration above is a conceptual workflow. It contains no real customer data and does not represent performance measurements. AI output and automated classifications still require review against actual evidence.
-
-## Architecture and stack
-
-| Layer | Technologies and responsibilities |
-| --- | --- |
-| Frontend | Vue 3, TypeScript, Vite, Ant Design Vue |
-| API | Python, Flask, Flask-RESTX, Gunicorn |
-| Task execution | Celery, RabbitMQ, a separate scheduler |
-| Data | MongoDB and instance persistence directories |
-| Deployment | Docker Compose, Nginx, the Mihomo proxy service |
-| Tool integration | Independent-process adapters, browser tools, and an extension runtime |
-
-```text
-Watchtower/
-├── sentinel_platform/    Backend, APIs, business modules, and tests
-│   ├── core/             Configuration, data access, and shared foundations
-│   ├── contracts/        Service contracts, registry, and collection definitions
-│   ├── router/           HTTP APIs, authentication, and response envelopes
-│   └── modules/          Assets, tasks, AI sessions, intelligence, and system management
-├── frontend/             Frontend source and public brand assets
-├── docker/               Installer, image build, and deployment configuration
-├── config/               Configuration samples without operational credentials
-├── dicts/                Runtime dictionaries and templates
-├── docs/                 Public project documentation
-└── .github/              Issue and pull request templates
-```
-
-The repository excludes developer runtime secrets, real configuration files, databases, session data, internal operations material, and complete external binary and offline dependency packages. **Cloning the source does not provide a complete distribution that can immediately be built offline.** See the [development guide (Chinese)](docs/development.md).
-
-## Documentation
-
-The guides linked below are currently written in Chinese. This page provides the English project overview.
-
-| Goal | Start here |
-| --- | --- |
-| Install and use the platform | [Deployment and updates](docs/installation.md) |
-| Download versioned source and read release notes | [Releases](https://github.com/LINGYK352/Watchtower/releases) |
-| Understand modules and call paths | [Architecture](docs/architecture.md) |
-| Develop locally and validate changes | [Development guide](docs/development.md) |
-| Contribute code or propose a feature | [Contributing](CONTRIBUTING.md) |
-| Report a platform security issue | [Security policy](SECURITY.md) |
-| Understand licensing and external-component boundaries | [GPL-3.0](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md) |
-| Review previous changes | [Changelog](CHANGELOG.md) |
-
-## Contributions and feedback
-
-Use [Issues](https://github.com/LINGYK352/Watchtower/issues) for reproducible bugs and feature suggestions, and pull requests to contribute improvements. Read the [contribution guide (Chinese)](CONTRIBUTING.md) before submitting.
-
-For platform vulnerabilities, credential exposure, or issues involving real target data, use the private reporting channel in [SECURITY.md (Chinese)](SECURITY.md). Do not post sensitive details in a public issue.
-
-## License and use boundaries
-
-Original project code is provided under the [GNU General Public License v3.0 only](LICENSE), identified as `GPL-3.0-only`. Third-party code, tools, data, and assets retain their own notices and licenses; the project license does not relicense them. The software is provided under the applicable license terms, subject to liabilities that cannot be excluded by law.
-
-Conduct assessments only where you have the legal right to do so or have valid authorization. Downloading, registering, activating, or selecting a runtime mode does not grant permission to test third-party systems. Models and external services may receive data sent to them; review their terms, confidentiality requirements, and data-processing arrangements.
-
----
-
-<div align="center">
-
-Maintained by **LINGYK** · [watchtowers.info](https://watchtowers.info/) · [Contact the developer](mailto:lingyangkang352@163.com)
-
-</div>
+[Windows source](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [Delivery contract](docs/update-delivery.md) · [License](LICENSE) · [Security](SECURITY.md)

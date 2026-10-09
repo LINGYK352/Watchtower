@@ -1,5 +1,12 @@
 [
   {
+    "ver": "v1.21.176",
+    "date": "2026-10-09",
+    "summary": "双端可用性修复：Windows页面文字选择、Ctrl+C、右键复制与缩放，安装器目录浏览；AI控制台文件上传、真实进度、取消/失败重试；系统/版本/平台通告过滤及弹窗顺序；实际数据盘剩余空间与并发预算；中等DPI视口的三栏布局及输入区可见性。",
+    "summary_en": "Usability fixes for Web and Windows: native text selection, copy and zoom, installer folder browsing, console file uploads with real progress and retry, scoped notices, disk headroom and task capacity, and responsive console layout.",
+    "upgrade_notice": "Web与Windows均可从175逐级热更新176，保留用户数据。Windows自动重开后获得复制/缩放修复，无需重新安装。控制台单文件上限16MiB，上传完成后再发送指令；Web继续沿用175安装基板。Windows10尚未完成实机验收。"
+  },
+  {
     "ver": "v1.21.175",
     "date": "2026-10-08",
     "summary": "修复更新机制兼容性缺陷：本地Docker Engine版本协商、独立签名守护修订、后台实际就绪与中断恢复。Web新175镜像基板，旧用户通过保留数据修复安装升级；Windows存量通过差异热更新进入175，无需重新安装。175以下回退禁止，之后继续相邻压缩包链式更新。",
