@@ -16,3 +16,21 @@
 更新使用构建端预制的签名公共/平台ZIP，升级与回退都逐级；配置、账号、任务、证据、浏览器资料和扩展属于用户数据。双端回退下限175，Web175基板不因普通代码更新而重复重建。
 
 [Windows源码](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [交付契约](docs/update-delivery.md) · [许可](LICENSE) · [安全说明](SECURITY.md)
+<!-- watchtower-ui-gallery:start -->
+## 功能界面预览
+
+使用纯样本数据截图，展示177-42研发界面。当前正式版仍为v1.21.176；预览功能以未来获批正式版本为准，图片不包含客户任务、凭据或真实评估证据。
+
+![Watchtower 夜间AI控制台：证据、会话与工具结果。](assets/screenshots/preview42/console-night.png)
+
+夜间AI控制台：证据、会话与工具结果。
+
+![Watchtower 日间工作台：资产、任务、资源趋势。](assets/screenshots/preview42/dashboard-day.png)
+
+日间工作台：资产、任务、资源趋势。
+
+![Watchtower 漏洞中心：验证状态、线索与来源。](assets/screenshots/preview42/findings-day.png)
+
+漏洞中心：验证状态、线索与来源。
+<!-- watchtower-ui-gallery:end -->
+

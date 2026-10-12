@@ -16,3 +16,21 @@ Console uploads are limited to16MiB per file; send instructions after saving. Up
 Signed common/platform ZIPs and inverse plans are prepared offline. Upgrades and rollback are adjacent; user settings, accounts, tasks, evidence, browser profiles and extensions are retained. Rollback below175 is disabled. Ordinary code updates keep the175 Web image base.
 
 [Windows source](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [Delivery contract](docs/update-delivery.md) · [License](LICENSE) · [Security](SECURITY.md)
+<!-- watchtower-ui-gallery:start -->
+## Interface previews
+
+Synthetic demonstration data, captured from the development interface (177-42). These previews do not change the current official release, v1.21.176; availability follows an approved future release.
+
+![Watchtower Night console: evidence, session and tool results.](assets/screenshots/preview42/console-night.png)
+
+Night console: evidence, session and tool results.
+
+![Watchtower Daylight dashboard: assets, tasks and resource trends.](assets/screenshots/preview42/dashboard-day.png)
+
+Daylight dashboard: assets, tasks and resource trends.
+
+![Watchtower Finding center: validation, leads and provenance.](assets/screenshots/preview42/findings-day.png)
+
+Finding center: validation, leads and provenance.
+<!-- watchtower-ui-gallery:end -->
+
