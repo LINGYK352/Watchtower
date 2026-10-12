@@ -17,20 +17,25 @@
 
 [Windows源码](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [交付契约](docs/update-delivery.md) · [许可](LICENSE) · [安全说明](SECURITY.md)
 <!-- watchtower-ui-gallery:start -->
-## 功能界面预览
+## 夜间界面预览
 
-使用纯样本数据截图，展示177-42研发界面。当前正式版仍为v1.21.176；预览功能以未来获批正式版本为准，图片不包含客户任务、凭据或真实评估证据。
+使用样本数据展示177-44研发界面。当前正式版仍为 **v1.21.176**，界面预览不代表新版本已发布。
 
-![Watchtower 夜间AI控制台：证据、会话与工具结果。](assets/screenshots/preview42/console-night.png)
+![Watchtower AI 控制台：会话上下文、工具结果与验证证据。](assets/screenshots/preview44/console-night.png)
 
-夜间AI控制台：证据、会话与工具结果。
+AI 控制台：会话上下文、工具结果与验证证据。
 
-![Watchtower 日间工作台：资产、任务、资源趋势。](assets/screenshots/preview42/dashboard-day.png)
+<details>
+<summary>查看工作台与漏洞中心</summary>
 
-日间工作台：资产、任务、资源趋势。
+![Watchtower 工作台：资产、任务、网络体检与资源趋势。](assets/screenshots/preview44/dashboard-night.png)
 
-![Watchtower 漏洞中心：验证状态、线索与来源。](assets/screenshots/preview42/findings-day.png)
+工作台：资产、任务、网络体检与资源趋势。
 
-漏洞中心：验证状态、线索与来源。
+![Watchtower 漏洞中心：确认结果、待验证线索与处理状态。](assets/screenshots/preview44/findings-night.png)
+
+漏洞中心：确认结果、待验证线索与处理状态。
+
+</details>
 <!-- watchtower-ui-gallery:end -->
 
