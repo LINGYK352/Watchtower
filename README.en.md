@@ -17,20 +17,25 @@ Signed common/platform ZIPs and inverse plans are prepared offline. Upgrades and
 
 [Windows source](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [Delivery contract](docs/update-delivery.md) · [License](LICENSE) · [Security](SECURITY.md)
 <!-- watchtower-ui-gallery:start -->
-## Interface previews
+## Night interface previews
 
-Synthetic demonstration data, captured from the development interface (177-42). These previews do not change the current official release, v1.21.176; availability follows an approved future release.
+Synthetic sample data from the development UI (177-44). The official release remains **v1.21.176**; these previews do not publish a new product version.
 
-![Watchtower Night console: evidence, session and tool results.](assets/screenshots/preview42/console-night.png)
+![Watchtower AI console: session context, tool results and verification evidence.](assets/screenshots/preview44/console-night.png)
 
-Night console: evidence, session and tool results.
+AI console: session context, tool results and verification evidence.
 
-![Watchtower Daylight dashboard: assets, tasks and resource trends.](assets/screenshots/preview42/dashboard-day.png)
+<details>
+<summary>Dashboard and findings</summary>
 
-Daylight dashboard: assets, tasks and resource trends.
+![Watchtower Dashboard: assets, tasks, network checks and resource trends.](assets/screenshots/preview44/dashboard-night.png)
 
-![Watchtower Finding center: validation, leads and provenance.](assets/screenshots/preview42/findings-day.png)
+Dashboard: assets, tasks, network checks and resource trends.
 
-Finding center: validation, leads and provenance.
+![Watchtower Findings: verified results, leads and their status.](assets/screenshots/preview44/findings-night.png)
+
+Findings: verified results, leads and their status.
+
+</details>
 <!-- watchtower-ui-gallery:end -->
 
