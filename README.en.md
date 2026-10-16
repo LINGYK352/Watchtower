@@ -15,3 +15,70 @@ This release includes isolated collaborative workspaces, member/cohost identitie
 Feature and patch releases are separate. Subsequent changes from this batch are grouped into177B-1, whose serial stays hidden in the main version label. Early local Windows startup diagnostics are included; unfinished items such as optional startup-log uploads are not claimed as delivered. Windows10, phone hardware and every real model/target combination have not been physically verified.
 
 Use the website and in-product manual for installation and operation. Third-party components retain their own licenses. Operational registries, real credentials/configuration and user data are excluded.
+
+<!-- watchtower-ui-gallery:start -->
+## Product interface · sample data
+
+Actual177 interface rendered with isolated, synthetic samples. These images do not represent real customers, live device connections or completed assessments. All installation and patch packages are available from the [distribution website](https://watchtowers.info/).
+
+### 01 · Cross-platform collaboration
+
+Hand off sessions, evidence and files between Linux and Windows in an isolated workspace.
+
+![Watchtower Cross-platform collaboration · sample data](assets/screenshots/177/collaboration.png)
+
+### 02 · Findings center
+
+Review AI, scanner and workspace findings with verification status and evidence.
+
+![Watchtower Findings center · sample data](assets/screenshots/177/findings.png)
+
+### 03 · Public intelligence
+
+Explore sources, severity, affected components and synchronization status.
+
+![Watchtower Public intelligence · sample data](assets/screenshots/177/public-intelligence.png)
+
+### 04 · APP assessment
+
+Manage wired and wireless devices and connect mobile assessment to platform sessions.
+
+![Watchtower APP assessment · sample data](assets/screenshots/177/app-pentest.png)
+
+### 05 · APP traffic
+
+Inspect HTTPS, WebSocket and TCP/TLS traffic with request and response details.
+
+![Watchtower APP traffic · sample data](assets/screenshots/177/app-traffic.png)
+
+### 06 · Report editing
+
+Edit reports with a live preview, evidence, risk descriptions and remediation advice.
+
+![Watchtower Report editing · sample data](assets/screenshots/177/report-editor.png)
+
+### 07 · Report generation
+
+Select a task, session or individual finding and generate a report using a Word template.
+
+![Watchtower Report generation · sample data](assets/screenshots/177/report-generation.png)
+
+### 08 · AI session console
+
+Follow context, tool calls, linked findings and collaborative handoffs in one session.
+
+![Watchtower AI session console · sample data](assets/screenshots/177/ai-console.png)
+
+### 09 · Burps history
+
+Inspect HTTP/HTTPS history, HaE tags and raw packets inside the AI console.
+
+![Watchtower Burps history · sample data](assets/screenshots/177/burps-history.png)
+
+### 10 · Burps Repeater
+
+Send a captured request to Repeater and compare its request and response side by side.
+
+![Watchtower Burps Repeater · sample data](assets/screenshots/177/burps-repeater.png)
+
+<!-- watchtower-ui-gallery:end -->
