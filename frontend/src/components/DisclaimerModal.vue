@@ -68,7 +68,7 @@ async function checkStatus() {
   try {
     const status = await getDisclaimerStatus(controller.signal)
     if (disposed || current !== generation) return
-    if (status.status === 'unavailable' || status.persisted === false) throw new Error('Assent storage unavailable')
+    if (status.status === 'unavailable' || (status.accepted && status.persisted === false)) throw new Error('Assent storage unavailable')
     if (status.accepted && status.accepted_version === DISCLAIMER_VERSION) {
       visible.value = false
       return

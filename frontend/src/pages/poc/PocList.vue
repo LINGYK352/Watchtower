@@ -43,6 +43,7 @@
 </template>
 
 <script setup lang="ts">
+import { downloadApiFile } from '../../api/fileDownload'
 import { t as translate } from '../../i18n'
 
 import { onMounted, reactive, ref } from 'vue'
@@ -129,7 +130,7 @@ function beforeBatch(file: File) {
     .finally(() => { batching.value = false })
   return false
 }
-function downloadTemplate() { window.open(pocApi.templateUrl(), '_blank') }
+async function downloadTemplate() { try{await downloadApiFile(pocApi.templateUrl(),'poc_template.py')}catch(error){message.error(error instanceof Error?error.message:String(error))} }
 async function removeSelected() {
   try { const r = await pocApi.remove(selectedRowKeys.value); message.success(translate('ui.m_61053369b9c0', { p0: (r.deleted) })); selectedRowKeys.value = []; load() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }

@@ -1,5 +1,11 @@
 [
   {
+    "ver": "v1.21.177-1000001",
+    "date": "2026-10-16",
+    "summary": "177B-1补丁：Windows全部下载统一另存为；修复Linux节点、报告/附件/证书与资产/PoC导出，等待保存期间保留Blob并在完成/取消后释放；已有签署后台核验，首次未签署正常显示条款。 发现补丁与更新检测显示完整补丁编号，保留补丁至177基板的回退入口。",
+    "summary_en": "177B-1: all Windows downloads use Save As. Fix Linux node, report/attachment/certificate and asset/PoC exports; keep blob URLs until completion/cancellation. Existing assent is checked silently; genuinely unsigned installs show the terms."
+  },
+  {
     "ver": "v1.21.177",
     "date": "2026-10-16",
     "summary": "177双端新基板：独立协同工作区、成员/副主持、通用转发与密文缓存、迁移与附件；名称及环节匹配的专有SKILL、首选/备用模型与两步任务；原Word报告模板标注与报告来源选择；会话与分支攻击链、HTTP(S)/WebSocket工作流；日夜与窄窗界面、叶子手册、本地系统/补丁日志、更新与启动诊断修复。",

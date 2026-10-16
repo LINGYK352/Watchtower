@@ -43,6 +43,7 @@
 </template>
 
 <script setup lang="ts">
+import { downloadApiFile } from '../../api/fileDownload'
 import { t as translate } from '../../i18n'
 
 import { computed, onMounted, reactive, ref } from 'vue'
@@ -125,7 +126,7 @@ async function removeSelected() {
   try { await apiMap[tab.value].delete(selectedRowKeys.value); message.success(translate('ui.m_077a6d37719a')); load() }
   catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
 }
-function exportCurrent() { window.open(apiMap[tab.value].exportUrl(buildQuery()), '_blank') }
+async function exportCurrent() { try{await downloadApiFile(apiMap[tab.value].exportUrl(buildQuery()),'assets.csv')}catch(error){message.error(error instanceof Error?error.message:String(error))} }
 
 /* 添加域名 / 站点到分组 */
 const addOpen = ref(false)

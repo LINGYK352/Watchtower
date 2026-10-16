@@ -1,5 +1,9 @@
 # Watchtower
 
+
+Latest patch: **177B-1**. Windows downloads open the system Save As dialog; updated GUI activation and visible patch IDs are fixed. All packages are hosted on the [distribution website](https://watchtowers.info/); no GitHub binary assets.
+
+
 Current Web and Windows release: **v1.21.177**. Development began on June3,2026. Original code is licensed under GPL-3.0-only.
 
 [Website and downloads](https://watchtowers.info/) · [Releases](https://github.com/LINGYK352/Watchtower/releases) · [中文](README.md)

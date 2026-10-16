@@ -1,5 +1,9 @@
 # 瞭望塔 Watchtower
 
+
+最新补丁：**177B-1**。Windows下载统一弹出系统“另存为”，更新后自动加载新GUI；发现补丁与更新检测显示完整补丁编号。所有包统一在[分发系统](https://watchtowers.info/)下载，GitHub不上传包。
+
+
 Web与Windows当前正式版本：**v1.21.177**。开发始于2026年6月3日，原创代码采用GPL-3.0-only。
 
 [官网与下载](https://watchtowers.info/) · [版本发布](https://github.com/LINGYK352/Watchtower/releases) · [English](README.en.md)

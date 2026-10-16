@@ -13,3 +13,6 @@ export function displayVersion(value:string):string{
  if(!isPatchVersion(value))return value
  return 'v'+versionKey(value).slice(0,3).join('.')
 }
+
+export function patchLabel(value:string):string{const key=versionKey(value);return key[3]===2?`W-linux-${key[2]}B-${key[4]}`:''}
+export function updateVersionLabel(value:string):string{return patchLabel(value)||displayVersion(value)}

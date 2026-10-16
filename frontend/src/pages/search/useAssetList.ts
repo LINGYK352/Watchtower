@@ -1,3 +1,4 @@
+import { downloadApiFile } from '../../api/fileDownload'
 import { t as translate } from '../../i18n'
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -81,7 +82,7 @@ export function useAssetList(namespace: string, defaultFilters: Record<string, s
     try { await collectionApi.deleteByIds(namespace, expandIds([id])); message.success(translate('ui.m_077a6d37719a')); load() }
     catch (error) { message.error(error instanceof Error ? error.message : String(error)) }
   }
-  function exportCurrent() { window.open(collectionApi.exportUrl(namespace, buildQuery()), '_blank') }
+  async function exportCurrent() { try{await downloadApiFile(collectionApi.exportUrl(namespace,buildQuery()),namespace+'.csv')}catch(error){message.error(error instanceof Error?error.message:String(error))} }
 
   function pagination() {
     return { current: page.value, pageSize: size.value, total: total.value, showSizeChanger: true, showTotal: (t: number) => translate('ui.m_f292bcb94fe6', { p0: (t) }) }

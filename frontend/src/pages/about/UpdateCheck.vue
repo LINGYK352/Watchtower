@@ -6,6 +6,7 @@
         <div>
           <div class="ver-label">{{ translate('ui.m_837bc9576721') }}</div>
           <div class="ver-num">{{ displayVersion(version) }}</div>
+          <a-tag v-if="patchLabel(version)" color="blue" data-testid="current-patch-id">{{ patchLabel(version) }}</a-tag>
         </div>
       </div>
 
@@ -19,15 +20,15 @@
         <!-- 发现新版本 -->
         <div v-if="checked && hasUpdate && !updating && !updateDone && !updateError" class="update-found">
           <a-alert type="success" show-icon>
-            <template #message>{{ translate(isPatchVersion(latest)?'patchUpdates.available':'ui.m_ac217e4d1ca4') }} <a-tag color="blue">{{ displayVersion(latest) }}</a-tag></template>
+            <template #message>{{ translate(isPatchVersion(latest)?'patchUpdates.available':'ui.m_ac217e4d1ca4') }} <a-tag color="blue" data-testid="available-patch-id">{{ updateVersionLabel(latest) }}</a-tag></template>
             <template #description>
               <a-tag color="green" style="margin-bottom:12px">{{ translate(requiresRestart ? 'ui.native_update_note' : 'ui.m_432bb30c280d') }}</a-tag>
               <div v-if="changelogs.length" class="changelog-box">
                 <div class="changelog-title">
-                  {{ translate('ui.m_00d640b1490e') }} {{ displayVersion(latest) }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
+                  {{ translate('ui.m_00d640b1490e') }} {{ updateVersionLabel(latest) }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
                 </div>
                 <div class="changelog-item" v-for="item in changelogs" :key="item.ver">
-                  <span class="changelog-ver">{{ displayVersion(item.ver) }}</span>
+                  <span class="changelog-ver">{{ updateVersionLabel(item.ver) }}</span>
                   <span class="changelog-text">{{ item.summary }}</span>
                 </div>
               </div>
@@ -96,7 +97,7 @@
         row-key="version" size="middle" data-testid="version-history" :pagination="{ pageSize: 10 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'version'">
-            <a-tag :color="record.version === version ? 'green' : 'blue'">{{ displayVersion(record.version) }}</a-tag>
+            <a-tag :color="record.version === version ? 'green' : 'blue'">{{ updateVersionLabel(record.version) }}</a-tag>
             <a-tag v-if="record.version === version" color="green">{{ translate('ui.m_cb62ebd689ee') }}</a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
@@ -105,7 +106,7 @@
                  高于当前=前滚/升级（应走上方“检查更新→立即更新”），不在回退入口出现，避免误导。 -->
             <a-popconfirm
               v-if="isOlderThanCurrent(record.version)"
-              :title="translate('ui.m_885df13560e0', { p0: (displayVersion(record.version)) })"
+              :title="translate('ui.m_885df13560e0', { p0: (updateVersionLabel(record.version)) })"
               :ok-text="translate('ui.m_8771e3682df1')" :cancel-text="translate('ui.m_2cd0f3be8738')" @confirm="doRollback(record.version)">
               <a-button type="link" danger size="small">{{ translate('ui.m_8771e3682df1') }}</a-button>
             </a-popconfirm>
@@ -144,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { versionKey, displayVersion, isPatchVersion } from '../../config/releaseVersion'
+import { versionKey, displayVersion, isPatchVersion, patchLabel, updateVersionLabel } from '../../config/releaseVersion'
 import { t as translate } from '../../i18n'
 
 import { ref, computed, onMounted, onUnmounted } from 'vue'
@@ -191,8 +192,8 @@ function isOlderThanCurrent(v: string): boolean {
 // —— 历史版本与回退 ——
 const versions = ref<VersionItem[]>([])
 const visibleVersions=computed(()=>{
- const current=displayVersion(version.value),selected=new Map<string,VersionItem>()
- for(const row of versions.value){const key=displayVersion(row.version);if(!selected.has(key)||key===current&&row.version===version.value)selected.set(key,row)}
+ const current=updateVersionLabel(version.value),selected=new Map<string,VersionItem>()
+ for(const row of versions.value){const key=updateVersionLabel(row.version);if(!selected.has(key)||key===current&&row.version===version.value)selected.set(key,row)}
  return [...selected.values()]
 })
 const loadingVersions = ref(false)
