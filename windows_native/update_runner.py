@@ -83,12 +83,18 @@ def run(root,request_file=None):
     settings=update_state.read(root/'state/runtime.json')
     from windows_native.guardian import gui as guardian_gui
     gui=guardian_gui(root).resolve();active_gui=None
+    def owned_gui(exe):
+        if exe in {gui,(root/'WatchtowerNative.exe').resolve()}:return True
+        try:
+            parts=exe.relative_to((root/'state/guardian/generations').resolve()).parts
+            return len(parts)==2 and len(parts[0])==16 and all(c in '0123456789abcdef' for c in parts[0]) and parts[1]=='WatchtowerNative.exe'
+        except ValueError:return False
     def managed_processes():
         matches=[]
         for process in psutil.process_iter(['pid','exe']):
             try:
                 exe=Path(process.info['exe']).resolve() if process.info['exe'] else None
-                if exe in {gui,(root/'WatchtowerNative.exe').resolve()} or exe and (root/'runtime').resolve() in exe.parents:matches.append(process)
+                if exe and (owned_gui(exe) or (root/'runtime').resolve() in exe.parents):matches.append(process)
             except (psutil.Error,OSError):continue
         return matches
     def stop():
@@ -96,7 +102,7 @@ def run(root,request_file=None):
         callback_type=ctypes.WINFUNCTYPE(wintypes.BOOL,wintypes.HWND,wintypes.LPARAM)
         user32.EnumWindows.argtypes=[callback_type,wintypes.LPARAM];user32.GetWindowThreadProcessId.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.DWORD)]
         user32.PostMessageW.argtypes=[wintypes.HWND,wintypes.UINT,wintypes.WPARAM,wintypes.LPARAM]
-        pids={process.pid for process in managed_processes() if Path(process.exe()).resolve() in {gui,(root/'WatchtowerNative.exe').resolve()}}
+        pids={process.pid for process in managed_processes() if owned_gui(Path(process.exe()).resolve())}
         def close_window(handle,_):
             pid=wintypes.DWORD();user32.GetWindowThreadProcessId(handle,ctypes.byref(pid))
             if pid.value in pids:user32.PostMessageW(handle,0x10,0,0)
@@ -138,6 +144,11 @@ def run(root,request_file=None):
         if recover_only:
             stop();update_transaction.recover(root)
             if not start():raise RuntimeError('Recovered native application did not start')
+            return 0
+        if request.get('sdk_handoff') is True:
+            stop()
+            if not start():raise RuntimeError('Updated native GUI did not start')
+            update_state.progress(root,phase='done',msg='Windows更新控制组件已重新载入',target=request['target'],terminal=True)
             return 0
         update_transaction.apply(root,request['target'],health,start,stop,full=bool(request.get('full')))
         from windows_native.update_chain import success

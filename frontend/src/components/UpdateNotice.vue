@@ -4,16 +4,16 @@
     <div class="update-wrap">
       <div class="update-header">
         <h2>{{ translate(isPatchVersion(latestVersion)?'patchUpdates.available':'ui.m_ac217e4d1ca4') }}</h2>
-        <a-tag color="blue" class="update-ver">{{ displayVersion(latestVersion) }}</a-tag>
+        <a-tag color="blue" class="update-ver" data-testid="available-patch-id">{{ updateVersionLabel(latestVersion) }}</a-tag>
       </div>
       <a-tag color="green" class="update-badge">{{ translate(requiresRestart ? 'ui.native_update_note' : 'ui.m_432bb30c280d') }}</a-tag>
 
       <div class="update-changelog" v-if="changelogs.length">
         <div class="changelog-title">
-          {{ translate('ui.m_00d640b1490e') }} {{ displayVersion(latestVersion) }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
+          {{ translate('ui.m_00d640b1490e') }} {{ updateVersionLabel(latestVersion) }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
         </div>
         <div class="changelog-item" v-for="item in changelogs" :key="item.ver">
-          <span class="changelog-ver">{{ displayVersion(item.ver) }}</span>
+          <span class="changelog-ver">{{ updateVersionLabel(item.ver) }}</span>
           <span class="changelog-text">{{ item.summary }}</span>
         </div>
       </div>
@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { versionKey, displayVersion, isPatchVersion } from '../config/releaseVersion'
+import { versionKey, displayVersion, isPatchVersion, patchLabel, updateVersionLabel } from '../config/releaseVersion'
 import { t as translate } from '../i18n'
 
 import { ref, onMounted, onUnmounted, computed } from 'vue'

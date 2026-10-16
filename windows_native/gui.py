@@ -50,6 +50,8 @@ def run(a,diagnostic,candidate):
  rt=Runtime(root,backend=root/'runtime/service/NativeService.exe' if getattr(sys,'frozen',False) else None);closed=threading.Event();ready=False
  diagnostic.stage('webview',20)
  import webview
+ # Downloads are client actions; the node package's Linux target does not restrict Windows clients.
+ webview.settings['ALLOW_DOWNLOADS']=True
  if a.diagnostic_port:webview.settings['REMOTE_DEBUGGING_PORT']=a.diagnostic_port
  from windows_native import splash
  text=splash.messages(root)

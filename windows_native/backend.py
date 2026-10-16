@@ -100,6 +100,7 @@ def main():
  scheduler_command=[sys.executable,'--root',str(root),'--boot',a.boot,'--scheduler'] if getattr(sys,'frozen',False) else [sys.executable,'-m','windows_native.backend','--root',str(root),'--boot',a.boot,'--scheduler']
  with (root/'state/scheduler.log').open('ab') as log:children.append(process.popen(scheduler_command,stdout=log,stderr=log))
  threading.Thread(target=server.run,daemon=True).start()
+ threading.Thread(target=handoff_legacy_gui,args=(root,),daemon=True).start()
  try:
   while not (root/'state/shutdown').exists():
    if any(child.poll() is not None for child in children):raise RuntimeError('Native worker or scheduler exited')
@@ -111,4 +112,43 @@ def main():
    except subprocess.TimeoutExpired:process.terminate_tree(child)
    process.close(child)
  return 0
+def handoff_legacy_gui(root):
+ """Only an obsolete GUI in this installation is relaunched, after update/work completion."""
+ import psutil,hashlib
+ root=Path(root).resolve();target=root/'WatchtowerNative.exe'
+ try:
+  receipt=json.loads((root/'state/native-release-receipt.json').read_text());wanted=receipt.get('files',{}).get('WatchtowerNative.exe')
+  if not wanted or hashlib.sha256(target.read_bytes()).hexdigest()!=wanted:return
+  parent=psutil.Process(os.getpid());old=None
+  for _ in range(6):
+   parent=parent.parent()
+   if parent is None:return
+   exe=Path(parent.exe()).resolve()
+   if exe.name.casefold()=='watchtowernative.exe':old=parent;break
+  if old is None:return
+  actual=Path(old.exe()).resolve();actual.relative_to(root)
+  if hashlib.sha256(actual.read_bytes()).hexdigest()==wanted:return
+  from windows_native import update_state
+  deadline=time.monotonic()+60
+  while time.monotonic()<deadline and old.is_running():
+   progress=update_state.get_progress(root)
+   if progress.get('phase') in update_state.ACTIVE:time.sleep(.5);continue
+   from sentinel_platform.core import get_repo
+   db=get_repo()._db()
+   if db.task.count_documents({'status':{'$nin':['done','error','stop']}}) or db.intel_pentest_session.count_documents({'$or':[{'status':{'$in':['running','queued','dispatching']}},{'console_running':True}]}):time.sleep(1);continue
+   with update_state.lock(root):
+    command=root/'state/native-update-command.json'
+    if command.exists():return
+    if update_state.get_progress(root).get('phase') in update_state.ACTIVE:continue
+    marker=root/'state/native-sdk-handoff.json'
+    previous=update_state.read(marker) if marker.exists() else {}
+    if previous.get('old_pid')==old.pid and previous.get('target_sha256')==wanted:return
+    request={'action':'apply','id':uuid.uuid4().hex,'target':(root/'app/version.txt').read_text().strip(),'sdk_handoff':True}
+    update_state.write(marker,{'old_pid':old.pid,'old_gui':str(actual),'target_sha256':wanted,'queued':time.time()})
+    update_state.write(command,request)
+   return
+ except Exception as exc:
+  from windows_native import update_state
+  update_state.write(root/'state/native-sdk-handoff-error.json',{'type':type(exc).__name__,'message':str(exc)[:180]})
+
 if __name__=='__main__':raise SystemExit(main())
