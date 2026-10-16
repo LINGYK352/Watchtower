@@ -5,15 +5,15 @@
     </template>
 
     <!-- 全局参数 -->
-    <a-card class="page-card" :title="translate('ui.m_c49aa5cd5e39')" size="small">
+    <a-card data-guide="ai-global" class="page-card" :title="translate('ui.m_c49aa5cd5e39')" size="small">
       <a-form layout="vertical">
         <a-row :gutter="16">
-          <a-col :span="8">
+          <a-col :xs="24" :sm="8">
             <a-form-item :label="translate('ui.m_ff75a04c666b')">
               <a-select v-model:value="config.active_provider_id" allow-clear :options="providerOptions" :placeholder="translate('ui.m_24da1d202ee0')" />
             </a-form-item>
           </a-col>
-          <a-col :span="6"><a-form-item :label="translate('ui.m_4e99705e0137')"><a-input-number v-model:value="config.timeout" :min="1" style="width: 100%" /></a-form-item></a-col>
+          <a-col :xs="12" :md="6"><a-form-item :label="translate('ui.m_4e99705e0137')"><a-input-number v-model:value="config.timeout" :min="1" style="width: 100%" /></a-form-item></a-col>
           <!-- 问题18：删全局「出口走代理」开关。入口代理下沉到每个 provider 的「入口代理」（新增/编辑里选具体自定义代理条目）。 -->
         </a-row>
         <a-form-item :label="translate('ui.m_af32f1346f76')">
@@ -21,11 +21,11 @@
         </a-form-item>
         <a-form-item :label="translate('ui.m_ab79241df410')">
           <a-row :gutter="12" align="middle">
-            <a-col :span="8">
+            <a-col :xs="24" :sm="8">
               <a-input-number v-model:value="config.max_concurrent_sessions" :min="0" style="width: 100%"
                 :placeholder="translate('ui.m_a8752c5e47db', { p0: (config.recommend_concurrency || '-') })" />
             </a-col>
-            <a-col :span="16">
+            <a-col :xs="24" :sm="16">
               <span class="hint">{{ translate('ui.m_03dc1d1e84f1') }}<b>{{ translate('ui.m_13661d7fdc60') }} {{ config.recommend_concurrency ?? '-' }})</b>{{ translate('ui.m_5095f0748579') }} {{ config.effective_concurrency ?? '-' }}{{ translate('ui.m_b47156c4b7b9') }}</span>
             </a-col>
           </a-row>
@@ -35,22 +35,22 @@
     </a-card>
 
     <!-- Token 消耗仪表盘 -->
-    <a-card class="page-card" :title="translate('ui.m_8cf9282cd067')" size="small">
-      <template #extra><a-button size="small" @click="loadUsage">{{ translate('ui.m_aee887434131') }}</a-button></template>
+    <a-card data-guide="ai-usage" class="page-card" :title="translate('ui.m_8cf9282cd067')" size="small">
+      <template #extra><a-space><a-button size="small" @click="usageExpanded=!usageExpanded" :aria-expanded="usageExpanded" data-testid="usage-toggle">{{ translate(usageExpanded?'revision17.collapse':'revision17.expand') }}</a-button><a-button size="small" @click="loadUsage">{{ translate('ui.m_aee887434131') }}</a-button></a-space></template>
       <a-row :gutter="16" style="margin-bottom: 12px">
-        <a-col :span="6"><a-statistic :title="translate('ui.m_e3716dc029bc')" :value="usage.overall.calls" /></a-col>
-        <a-col :span="6"><a-statistic :title="translate('ui.m_9638021caee5')" :value="usage.overall.total" /></a-col>
-        <a-col :span="6"><a-statistic :title="translate('ui.m_ef899af5d2c2')" :value="usage.overall.prompt" :suffix="`/ ${usage.overall.completion}`" /></a-col>
-        <a-col :span="6"><a-statistic :title="translate('ui.m_73b3bb0ff90c')" :value="usage.overall.fail_calls" :value-style="{ color: usage.overall.fail_calls ? '#cf1322' : undefined }" /></a-col>
+        <a-col :xs="12" :md="6"><a-statistic :title="translate('ui.m_e3716dc029bc')" :value="usage.overall.calls" /></a-col>
+        <a-col :xs="12" :md="6"><a-statistic :title="translate('ui.m_9638021caee5')" :value="usage.overall.total" /></a-col>
+        <a-col :xs="12" :md="6"><a-statistic :title="translate('ui.m_ef899af5d2c2')" :value="usage.overall.prompt" :suffix="`/ ${usage.overall.completion}`" /></a-col>
+        <a-col :xs="12" :md="6"><a-statistic :title="translate('ui.m_73b3bb0ff90c')" :value="usage.overall.fail_calls" :value-style="{ color: usage.overall.fail_calls ? '#cf1322' : undefined }" /></a-col>
       </a-row>
-      <a-row :gutter="16">
-        <a-col :span="12">
+      <a-row v-show="usageExpanded" :gutter="16" data-testid="usage-details">
+        <a-col :xs="24" :sm="12">
           <p style="margin:4px 0"><b>{{ translate('ui.m_7b7a9c815742') }}</b></p>
           <a-table :columns="usageCols" :data-source="usage.by_provider" :pagination="false" size="small" row-key="name" bordered>
             <template #emptyText>{{ translate('ui.m_4ed5091ab695') }}</template>
           </a-table>
         </a-col>
-        <a-col :span="12">
+        <a-col :xs="24" :sm="12">
           <p style="margin:4px 0"><b>{{ translate('ui.m_0d71724b0cc2') }}</b></p>
           <a-table :columns="usageCols" :data-source="usage.by_scene" :pagination="false" size="small" row-key="name" bordered>
             <template #emptyText>{{ translate('ui.m_a380125a40e0') }}</template>
@@ -62,13 +62,13 @@
     <!-- Provider -->
     <a-card class="page-card" :title="translate('ui.m_ec4d10343b70')" size="small">
       <template #extra><a-button type="primary" size="small" @click="openProvider()">{{ translate('ui.m_7add78b882c2') }}</a-button></template>
-      <a-table :columns="providerColumns" :data-source="providers" :loading="loading" row-key="_id"
-        :pagination="false" size="middle" bordered :scroll="{ x: 1200 }" :row-class-name="(r: any) => r.enabled ? 'row-enabled' : ''">
+      <a-table class="provider-table" table-layout="fixed" :columns="providerColumns" :data-source="providers" :loading="loading" row-key="_id"
+        :pagination="false" size="middle" bordered :scroll="{ x: 1360 }" :row-class-name="(r: any) => r.enabled ? 'row-enabled' : ''">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'type'">
-            <span class="provider-type">
+            <span class="provider-type" :title="typeLabel(String(record.type))" data-testid="provider-type">
               <span class="provider-icon" v-html="providerIcon(iconKey(String(record.type)))"></span>
-              <a-tag>{{ typeLabel(String(record.type)) }}</a-tag>
+              <span class="provider-type-name">{{ typeLabel(String(record.type)) }}</span>
             </span>
           </template>
           <template v-else-if="column.key === 'enabled'">
@@ -93,7 +93,7 @@
     <!-- AI 测试面板:选已配 AI(绿色=已启用)→ 输入(默认你好)→ 看回复 -->
     <a-card class="page-card" :title="translate('ui.m_47cefd711383')" size="small">
       <a-row :gutter="12" align="bottom">
-        <a-col :span="9">
+        <a-col :xs="24" :sm="9">
           <div class="t-label">{{ translate('ui.m_352d74a36760') }}</div>
           <a-select v-model:value="testId" style="width:100%" :placeholder="translate('ui.m_9e12968953cd')" :options="testOptions">
             <template #option="{ label, enabled }">
@@ -101,11 +101,11 @@
             </template>
           </a-select>
         </a-col>
-        <a-col :span="10">
+        <a-col :xs="24" :sm="10">
           <div class="t-label">{{ translate('ui.m_d8f6a43cde83') }}</div>
           <a-input v-model:value="testMsg" :placeholder="translate('ui.m_670d9743542c')" @press-enter="runTest" />
         </a-col>
-        <a-col :span="5">
+        <a-col :xs="24" :sm="5">
           <a-button type="primary" block :loading="testing" :disabled="!testId" @click="runTest">{{ translate('ui.m_a49d32136de1') }}</a-button>
         </a-col>
       </a-row>
@@ -120,13 +120,27 @@
       </div>
     </a-card>
 
+    <a-card class="page-card" :title="translate('modelSkill.title')" size="small" data-testid="model-skills-card">
+      <template #extra><a-button type="primary" size="small" data-testid="bind-model-skill" @click="skillProvider=null;skillOpen=true">{{ translate('revision17.bind') }}</a-button></template>
+      <p class="hint">{{ translate('modelSkill.scope') }}</p>
+      <a-table :data-source="providers.filter(p=>p.exclusive_skill)" :pagination="false" row-key="_id" size="small" :scroll="{x:800}" :columns="skillColumns">
+        <template #bodyCell="{column,record}">
+          <template v-if="column.key==='name'"><strong>{{ record.name }}</strong><div class="hint">{{ record.model }}</div></template>
+          <template v-else-if="column.key==='entry'">{{ record.exclusive_skill?.entry || translate('modelSkill.default') }}</template>
+          <template v-else-if="column.key==='stages'">{{ (record.exclusive_skill?.stages||[]).map((stage:string)=>prompts.find(p=>p.scene===stage)?.scene_name||stage).join(' / ') || translate('revision17.rebindStages') }}</template>
+          <template v-else-if="column.key==='actions'"><a-space><a-button type="link" size="small" @click="skillProvider=record;skillOpen=true" data-testid="edit-model-skill">{{ translate('modelSkill.edit') }}</a-button><a-popconfirm v-if="record.exclusive_skill" :title="translate('modelSkill.clearConfirm')" @confirm="clearSkill(record)"><a-button type="link" danger size="small" data-testid="clear-model-skill">{{ translate('modelSkill.clear') }}</a-button></a-popconfirm></a-space></template>
+        </template>
+      </a-table>
+    </a-card>
+    <ModelSkillEditor :open="skillOpen" :provider="skillProvider" :providers="providers" :stages="Array.from(new Map(prompts.filter(p=>p.builtin).map(p=>[p.scene,{value:p.scene,label:p.scene_name||p.scene}])).values())" @close="skillOpen=false" @saved="loadAll" />
+
     <!-- Prompt -->
     <a-card class="page-card" :title="translate('ui.m_5dbfa8f40be0')" size="small">
-      <template #extra><a-button type="primary" size="small" @click="openPrompt()">{{ translate('ui.m_6e0894828d03') }}</a-button></template>
+      <template #extra><a-button type="primary" size="small" @click="openPrompt()" data-testid="prompt-create">{{ translate('ui.m_6e0894828d03') }}</a-button></template>
       <a-alert type="info" show-icon style="margin-bottom: 12px"
         :message="translate('ui.m_afdc4588e6dc')" />
-      <a-table :columns="sceneColumns" :data-source="prompts" :loading="loading" row-key="_id"
-        :pagination="false" size="middle" bordered>
+      <a-table class="prompt-table" table-layout="fixed" :columns="sceneColumns" :data-source="prompts" :loading="loading" row-key="_id"
+        :pagination="false" size="middle" bordered :scroll="{x:1120}" data-testid="prompt-table">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'enabled'">
             <!-- 内置环节属系统核心，启用开关变灰强制启用不可关（防误关坏渗透/审查链路）；自定义环节可自由启停 -->
@@ -145,24 +159,19 @@
             <!-- v1.21.157-47 冻结：模型改在「新建任务」按任务选（pentest_provider_id 等），scene 绑定已废弃。
                  只读展示已绑定值(存量保留可解析)，不允许改。 -->
             <a-tooltip :title="translate('ui.m_cb03e918971a')">
-              <a-tag :color="(record as AIPrompt).provider_id ? 'blue' : 'default'">
+              <a-tag class="scene-provider" :color="(record as AIPrompt).provider_id ? 'blue' : 'default'" :title="(record as AIPrompt).provider_name || translate('ui.m_877d315f3402')">
                 {{ (record as AIPrompt).provider_name || translate('ui.m_877d315f3402') }}
               </a-tag>
             </a-tooltip>
           </template>
           <template v-else-if="column.key === 'content'">
-            <a-tooltip v-if="(record as AIPrompt).builtin" :title="translate('ui.m_a9291a8bdf9c')">
-              <a-tag color="blue">{{ translate('ui.m_95e35aabd9a9') }}</a-tag>
-            </a-tooltip>
-            <a-tag v-else-if="!record.content" color="orange">{{ translate('ui.m_7f05190592e5') }}</a-tag>
-            <span v-else class="content-snippet">{{ String(record.content).slice(0, 40) }}…</span>
+            <a-tag v-if="!record.content" color="orange">{{ translate('ui.m_7f05190592e5') }}</a-tag>
+            <span v-else class="content-snippet" data-testid="prompt-content-mask">********</span>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a-space>
-              <a-tooltip v-if="(record as AIPrompt).builtin" :title="translate('ui.m_c634aa6e9297')">
-                <a-button type="link" size="small" disabled>{{ translate('ui.m_b52f59e63937') }}</a-button>
-              </a-tooltip>
-              <a-button v-else type="link" size="small" @click="openPrompt(record as AIPrompt)">{{ translate('ui.m_b52f59e63937') }}</a-button>
+            <a-space class="prompt-actions" wrap :size="6" data-testid="prompt-actions">
+              <a-button type="link" size="small" @click="openPrompt(record as AIPrompt)" data-testid="prompt-edit">{{ translate('ui.m_b52f59e63937') }}</a-button>
+              <a-button type="link" size="small" @click="resetPrompt(record as AIPrompt)" data-testid="prompt-reset">{{ translate('requestApproval.promptReset') }}</a-button>
               <ConfirmAction v-if="!(record as AIPrompt).builtin" danger type="link" size="small" :title="translate('ui.m_a2f3324d913a')" @confirm="removePrompt(record._id as string)">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
               <a-tooltip v-else :title="translate('ui.m_111c26cf5bf6')">
                 <a-tag color="blue">{{ translate('ui.m_95e35aabd9a9') }}</a-tag>
@@ -185,7 +194,7 @@
     <a-modal v-model:open="providerOpen" :title="editingId ? translate('ui.m_2610596303f5') : translate('ui.m_7add78b882c2')" :confirm-loading="loading" width="640" @ok="saveProvider">
       <a-form layout="vertical">
         <a-row :gutter="12" align="bottom">
-          <a-col :span="16">
+          <a-col :xs="24" :sm="16">
             <a-form-item :label="translate('ui.m_2e10281b39c0')" style="margin-bottom:8px">
               <a-select v-model:value="cfgType" :options="typeOptions" @change="(v: any) => applyTemplate(String(v))">
                 <template #option="{ value: v, label }">
@@ -197,7 +206,7 @@
               </a-select>
             </a-form-item>
           </a-col>
-          <a-col :span="8">
+          <a-col :xs="24" :sm="8">
             <a-form-item style="margin-bottom:8px">
               <a-button block @click="resetTemplate">{{ translate('ui.m_20212e1b72e2') }}</a-button>
             </a-form-item>
@@ -233,13 +242,13 @@
     <a-modal v-model:open="promptOpen" :title="promptForm._id ? translate('ui.m_f758056d328a') : translate('ui.m_5d25920d5682')" :confirm-loading="loading" width="760" @ok="savePrompt">
       <a-form layout="vertical">
         <a-row :gutter="16">
-          <a-col :span="8">
+          <a-col :xs="24" :sm="8">
             <a-form-item :label="translate('ui.m_7f72f06a8877')">
-              <a-select v-model:value="promptForm.scene" :options="sceneOptions" />
+              <a-select :disabled="promptForm.builtin" v-model:value="promptForm.scene" :options="sceneOptions" />
             </a-form-item>
           </a-col>
-          <a-col :span="8"><a-form-item :label="translate('ui.m_b55134fb6456')"><a-input v-model:value="promptForm.name" /></a-form-item></a-col>
-          <a-col :span="8">
+          <a-col :xs="24" :sm="8"><a-form-item :label="translate('ui.m_b55134fb6456')"><a-input v-model:value="promptForm.name" :disabled="promptForm.builtin" data-testid="prompt-name" /></a-form-item></a-col>
+          <a-col :xs="24" :sm="8">
             <a-form-item :label="translate('ui.m_2797f5c06fe8')">
               <!-- v1.21.157-47 冻结：改在「新建任务」按任务选 AI 模型；此处只读展示，不再绑定 -->
               <a-select v-model:value="promptForm.provider_id" disabled :placeholder="translate('ui.m_877d315f3402')">
@@ -251,9 +260,9 @@
           </a-col>
         </a-row>
         <a-form-item :label="translate('ui.m_cc1ab53aea16')">
-          <a-textarea v-model:value="promptForm.content" :rows="14" :placeholder="translate('ui.m_f5c468a5adc5')" />
+          <a-textarea v-model:value="promptForm.content" data-testid="prompt-content-editor" :rows="14" :placeholder="translate('ui.m_f5c468a5adc5')" />
         </a-form-item>
-        <a-space><span>{{ translate('ui.m_1769c58bedc4') }}</span><a-switch v-model:checked="promptForm.enabled" /></a-space>
+        <a-space v-if="!promptForm._id"><span>{{ translate('ui.m_1769c58bedc4') }}</span><a-switch v-model:checked="promptForm.enabled" data-testid="prompt-create-enabled" /></a-space>
       </a-form>
     </a-modal>
   </PageContainer>
@@ -263,13 +272,18 @@
 import { t as translate } from '../../i18n'
 
 import { computed, onMounted, reactive, ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
+import ModelSkillEditor from './ModelSkillEditor.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
 import { aiConfigApi, type AIConfig, type AIProvider, type AIPrompt, type AIPreset, type UsageStat } from '../../api/aiConfig'
 import { proxyApi, type CustomProxy } from '../../api/proxy'
 import { providerIcon } from '../../config/providerIcons'
 
+const usageExpanded=ref(false)
+const skillOpen=ref(false),skillProvider=ref<AIProvider|null>(null)
+const skillColumns=[{get title(){return translate('modelSkill.modelName')},key:'name',width:220},{get title(){return translate('modelSkill.entry')},key:'entry'},{get title(){return translate('revision17.stages')},key:'stages',width:230},{get title(){return translate('ui.m_ed31fbb483ee')},key:'actions',width:180}]
+async function clearSkill(provider:AIProvider){if(!provider.exclusive_skill)return;try{await aiConfigApi.clearModelSkill(provider._id,provider.exclusive_skill.revision);message.success(translate('ui.m_514df589127f'));await loadAll()}catch(e){message.error((e as Error).message)}}
 const loading = ref(false)
 
 const usageCols = [
@@ -321,7 +335,7 @@ const providerOptions = computed(() => providers.value.map(p => ({ label: `${p.n
 
 const providerColumns = [
   { get title() { return translate('ui.m_d44e9b3d3b31') }, dataIndex: 'name', width: 150, ellipsis: true },
-  { get title() { return translate('ui.m_ba40014ff496') }, key: 'type', width: 160 },
+  { get title() { return translate('ui.m_ba40014ff496') }, key: 'type', width: 210 },
   { get title() { return translate('ui.m_c98e118e0a43') }, dataIndex: 'model', width: 180, ellipsis: true },
   { get title() { return translate('ui.m_03b11112dc97') }, dataIndex: 'base_url', width: 200, ellipsis: true },
   { title: 'API Key', dataIndex: 'api_key', width: 160, ellipsis: true },
@@ -334,8 +348,8 @@ const sceneColumns = [
   { get title() { return translate('ui.m_f4f0ead1116b') }, key: 'enabled', width: 70 },
   { get title() { return translate('ui.m_cede383a35ed') }, key: 'scene', width: 260 },
   { get title() { return translate('ui.m_2797f5c06fe8') }, key: 'provider', width: 220 },
-  { get title() { return translate('ui.m_4b47dbae97ba') }, key: 'content', ellipsis: true },
-  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 180 }
+  { get title() { return translate('ui.m_4b47dbae97ba') }, key: 'content', width:280, ellipsis: true },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 230 }
 ]
 
 async function loadConfig() {
@@ -512,16 +526,28 @@ async function removeProvider(id: string) {
 // Prompt 编辑
 const promptOpen = ref(false)
 const promptForm = reactive<Partial<AIPrompt>>({ scene: 'pentest_exec', name: '', content: '', provider_id: '', enabled: true })
-function openPrompt(record?: AIPrompt) {
+async function openPrompt(record?: AIPrompt) {
+  const accepted = await new Promise<boolean>(resolve => Modal.confirm({title:translate('requestApproval.promptEditTitle'),content:translate('requestApproval.promptEditNotice'),onOk:()=>resolve(true),onCancel:()=>resolve(false)}))
+  if(!accepted)return
   if (record) Object.assign(promptForm, { ...record, provider_id: record.provider_id || '' })
-  else Object.assign(promptForm, { _id: undefined, scene: 'pentest_exec', name: '', content: '', provider_id: '', enabled: true })
+  else Object.assign(promptForm, { _id: undefined, builtin:false, scene: 'pentest_exec', name: '', content: '', provider_id: '', enabled: true })
   promptOpen.value = true
+}
+async function resetPrompt(record:AIPrompt) {
+  try{
+    const defaults=await aiConfigApi.defaultPrompt(record._id)
+    Modal.confirm({title:translate('requestApproval.promptResetTitle'),content:translate('requestApproval.promptResetNotice',{version:defaults.version}),onOk:async()=>{await aiConfigApi.resetPrompt(record._id);message.success(translate('requestApproval.promptResetDone'));await loadPrompts()}})
+  }catch(err){message.error((err as Error).message)}
 }
 async function savePrompt() {
   loading.value = true
   try {
-    if (promptForm._id) await aiConfigApi.updatePrompt(promptForm._id, promptForm)
-    else await aiConfigApi.addPrompt(promptForm)
+    // The editor changes prompt text, not the separately managed enable state
+    // or frozen provider binding. Builtin names/scene identities are immutable.
+    const payload: Partial<AIPrompt> = { content: promptForm.content }
+    if (!promptForm.builtin) { payload.scene = promptForm.scene; payload.name = promptForm.name }
+    if (promptForm._id) await aiConfigApi.updatePrompt(promptForm._id, payload)
+    else await aiConfigApi.addPrompt({ ...payload, provider_id: promptForm.provider_id || '', enabled: promptForm.enabled !== false })
     message.success(translate('ui.m_1bd91a7d0c53')); promptOpen.value = false; loadPrompts()
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }
@@ -548,7 +574,9 @@ onMounted(loadAll)
 .scene-cell .scene-tag { margin: 0; flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scene-cell .scene-name { flex: 1 1 auto; min-width: 0; color: var(--dt-muted, #888); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .content-snippet { color: var(--dt-muted, #888); font-size: 12px; }
-.provider-type, .provider-opt { display: inline-flex; align-items: center; gap: 6px; }
+.provider-opt { display:flex; align-items:center; gap:6px; min-width:0; max-width:100%; overflow:hidden; }.provider-opt>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.provider-type { display:flex; align-items:center; gap:6px; width:100%; max-width:100%; min-width:0; overflow:hidden; }
+.provider-type-name{flex:1 1 0;min-width:0;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--dt-text)}.provider-table{min-width:0;max-width:100%}.provider-table :deep(.ant-table-container){max-width:100%;overflow:hidden}.provider-table :deep(td){overflow:hidden}.field-guide{overflow-wrap:anywhere}
 .provider-icon { display: inline-flex; width: 18px; height: 18px; flex: none; }
 .provider-icon :deep(svg) { width: 18px; height: 18px; }
 .row-enabled > :deep(td) { background: #f6ffed; }
@@ -577,4 +605,5 @@ onMounted(loadAll)
 [data-theme="dark"] .field-guide .fg-title { color: #e6edf3; }
 [data-theme="dark"] .field-guide .fg-item b { color: #6cb6ff; }
 [data-theme="dark"] .field-guide code { background: rgba(110,118,129,.4); color: #e6edf3; }
+.prompt-actions{display:flex;max-width:100%;flex-wrap:wrap}.prompt-actions :deep(.ant-space-item){min-width:0;max-width:100%}.scene-provider{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}.prompt-table :deep(.ant-table-cell){overflow-wrap:anywhere}.scene-cell{min-width:0;max-width:100%}.scene-cell .scene-tag{max-width:100%;white-space:normal;overflow-wrap:anywhere}
 </style>

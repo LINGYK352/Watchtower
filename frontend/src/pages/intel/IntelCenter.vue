@@ -9,18 +9,18 @@
     </template>
 
     <a-row :gutter="16" style="margin-bottom: 16px">
-      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_29ae9ac44b49')" :value="stat.asset_total" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_38aa407393df')" :value="stat.system_total" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_7ed61f4f27fc')" :value="stat.asset_with_vuln" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f0e83aad71c7')" :value="stat.asset_with_leak" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f4d8d39d3204')" :value="stat.asset_with_secret" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_9f70256c2f4d')" :value="stat.asset_pentested" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_29ae9ac44b49')" :value="stat.asset_total" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_38aa407393df')" :value="stat.system_total" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_7ed61f4f27fc')" :value="stat.asset_with_vuln" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f0e83aad71c7')" :value="stat.asset_with_leak" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f4d8d39d3204')" :value="stat.asset_with_secret" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card :bordered="false"><a-statistic :title="translate('ui.m_9f70256c2f4d')" :value="stat.asset_pentested" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
     </a-row>
 
     <a-row :gutter="16" style="margin-bottom: 16px">
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_dad2903d50cb')" :value="stat.code_total" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_3aa0781d6595')" :value="stat.code_audited" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_285bc741cad0')" :value="stat.report_total" /></a-card></a-col>
+      <a-col :xs="12" :sm="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_dad2903d50cb')" :value="stat.code_total" /></a-card></a-col>
+      <a-col :xs="12" :sm="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_3aa0781d6595')" :value="stat.code_audited" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
+      <a-col :xs="12" :sm="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_285bc741cad0')" :value="stat.report_total" /></a-card></a-col>
     </a-row>
 
     <a-card :bordered="false">

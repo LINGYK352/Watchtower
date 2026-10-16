@@ -1,7 +1,7 @@
 <template>
   <PageContainer :title="translate('ui.m_56b3909705f3')" kicker="Task Detail" :description="translate('ui.m_f42972d89f9e')">
     <template #extra><a-button @click="router.push('/tasks')">{{ translate('ui.m_e9d5ca6c1406') }}</a-button></template>
-    <a-card :bordered="false" :loading="loading" style="margin-bottom: 16px">
+    <a-card data-guide="task-identity" :bordered="false" :loading="loading" style="margin-bottom: 16px">
       <a-descriptions bordered size="small" :column="2">
         <a-descriptions-item :label="translate('ui.m_68c60746f1d0')"><CopyText :text="id" /></a-descriptions-item>
         <a-descriptions-item :label="translate('ui.m_2c43cd7db149')">{{ task.name || '-' }}</a-descriptions-item>
@@ -27,7 +27,7 @@
       :message="translate('ui.m_a043b3e5f4d5')"
       :description="translate('ui.m_80f2fbda4c50')" />
 
-    <a-card :title="translate('ui.m_0c907aa7861b')" :bordered="false" style="margin-bottom: 16px">
+    <a-card data-guide="task-results" :title="translate('ui.m_0c907aa7861b')" :bordered="false" style="margin-bottom: 16px">
       <a-row :gutter="16">
         <a-col :span="4" v-for="s in statItems" :key="s.key">
           <a-statistic :title="s.title" :value="statValue(s.key)" />
@@ -36,7 +36,7 @@
       </a-row>
     </a-card>
 
-    <a-card :title="translate('ui.m_3c21b1f29bd5')" :bordered="false">
+    <a-card data-guide="task-options" :title="translate('ui.m_3c21b1f29bd5')" :bordered="false">
       <a-space wrap>
         <a-tag v-for="(v, k) in enabledOptions" :key="k" color="blue">{{ k }}</a-tag>
         <span v-if="!Object.keys(enabledOptions).length">{{ translate('ui.m_484d55613910') }}</span>

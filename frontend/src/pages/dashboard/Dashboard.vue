@@ -10,7 +10,7 @@
 
     <div class="metric-grid">
       <div v-for="item in metrics" :key="item.key">
-        <a-card :bordered="false" class="metric-card" hoverable @click="item.to && router.push(item.to)">
+        <a-card :bordered="false" class="metric-card" hoverable role="button" tabindex="0" @click="item.to && router.push(item.to)" @keydown.enter="item.to && router.push(item.to)" @keydown.space.prevent="item.to && router.push(item.to)">
           <div class="metric-body">
             <div class="metric-icon" :style="{ background: item.bg, color: item.color }">
               <component :is="item.icon" />
@@ -180,8 +180,10 @@
 
 <script setup lang="ts">
 import { t as translate, appLocale } from '../../i18n'
+import { useTheme } from '../../composables/useTheme'
+const { isDark } = useTheme()
 
-import { onMounted, reactive, ref, markRaw, computed, nextTick, watch } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, markRaw, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ProfileOutlined, GlobalOutlined, ClusterOutlined, CloudServerOutlined, BugOutlined, RobotOutlined } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
@@ -216,12 +218,12 @@ function fmtBytes(n: number) {
 
 const metricLoading = ref(false)
 const metrics = ref([
-  { key: 'task', get title() { return translate('ui.m_f1cc96bb316f') }, value: 0, sub: '', to: '/tasks', icon: markRaw(ProfileOutlined), color: '#1677ff', bg: '#e6f4ff' },
-  { key: 'domain', get title() { return translate('ui.m_222952431147') }, value: 0, sub: '', to: '/search', icon: markRaw(GlobalOutlined), color: '#13c2c2', bg: '#e6fffb' },
-  { key: 'ip', title: 'IP', value: 0, sub: '', to: '/search', icon: markRaw(ClusterOutlined), color: '#722ed1', bg: '#f9f0ff' },
-  { key: 'site', get title() { return translate('ui.m_a59fe62777ff') }, value: 0, sub: '', to: '/search', icon: markRaw(CloudServerOutlined), color: '#fa8c16', bg: '#fff7e6' },
-  { key: 'vuln', get title() { return translate('ui.m_e4246b7d0651') }, value: 0, sub: '', to: '/vuln-center', icon: markRaw(BugOutlined), color: '#cf1322', bg: '#fff1f0' },
-  { key: 'sess', get title() { return translate('ui.m_13b1fa2f1b42') }, value: 0, sub: '', to: '/pentest', icon: markRaw(RobotOutlined), color: '#2f54eb', bg: '#f0f5ff' }
+  { key: 'task', get title() { return translate('ui.m_f1cc96bb316f') }, value: 0, sub: '', to: '/tasks', icon: markRaw(ProfileOutlined), color: 'var(--dt-primary)', bg: 'var(--dt-accent-soft)' },
+  { key: 'domain', get title() { return translate('ui.m_222952431147') }, value: 0, sub: '', to: '/search', icon: markRaw(GlobalOutlined), color: 'var(--dt-cyan)', bg: 'var(--metric-cyan-bg)' },
+  { key: 'ip', title: 'IP', value: 0, sub: '', to: '/search', icon: markRaw(ClusterOutlined), color: 'var(--dt-success)', bg: 'var(--dt-success-soft)' },
+  { key: 'site', get title() { return translate('ui.m_a59fe62777ff') }, value: 0, sub: '', to: '/search', icon: markRaw(CloudServerOutlined), color: 'var(--metric-violet)', bg: 'var(--metric-violet-bg)' },
+  { key: 'vuln', get title() { return translate('ui.m_e4246b7d0651') }, value: 0, sub: '', to: '/vuln-center', icon: markRaw(BugOutlined), color: 'var(--dt-danger)', bg: 'var(--dt-danger-soft)' },
+  { key: 'sess', get title() { return translate('ui.m_13b1fa2f1b42') }, value: 0, sub: '', to: '/pentest', icon: markRaw(RobotOutlined), color: 'var(--dt-primary)', bg: 'var(--dt-accent-soft)' }
 ])
 
 async function loadMetrics(silent = false) {
@@ -245,12 +247,12 @@ async function loadMetrics(silent = false) {
 const sessLoading = ref(false)
 const sess = reactive({ total: 0, running: 0, queued: 0, waiting: 0, paused: 0, done: 0, fatal: 0, stopped: 0, active: 0 })
 const sessCards = computed(() => [
-  { key: 'active', get label() { return translate('ui.m_dc9591e56d50') }, value: sess.active, color: '#1677ff' },
-  { key: 'running', get label() { return translate('ui.m_5026a63b58cd') }, value: sess.running, color: '#52c41a' },
-  { key: 'done', get label() { return translate('ui.m_f28461bb49c8') }, value: sess.done, color: '#8c8c8c' },
-  { key: 'paused', get label() { return translate('ui.m_eb0c326b60ae') }, value: sess.paused, color: '#fa8c16' },
-  { key: 'fatal', get label() { return translate('ui.m_28384d7afd2e') }, value: sess.fatal, color: '#cf1322' },
-  { key: 'total', get label() { return translate('ui.m_e8dc871a7fde') }, value: sess.total, color: '#2f54eb' }
+  { key: 'active', get label() { return translate('ui.m_dc9591e56d50') }, value: sess.active, color: 'var(--dt-primary)' },
+  { key: 'running', get label() { return translate('ui.m_5026a63b58cd') }, value: sess.running, color: 'var(--dt-success)' },
+  { key: 'done', get label() { return translate('ui.m_f28461bb49c8') }, value: sess.done, color: 'var(--dt-muted)' },
+  { key: 'paused', get label() { return translate('ui.m_eb0c326b60ae') }, value: sess.paused, color: 'var(--dt-warning)' },
+  { key: 'fatal', get label() { return translate('ui.m_28384d7afd2e') }, value: sess.fatal, color: 'var(--dt-danger)' },
+  { key: 'total', get label() { return translate('ui.m_e8dc871a7fde') }, value: sess.total, color: 'var(--dt-primary)' }
 ])
 async function loadSession(silent = false) {
   if (!silent) sessLoading.value = true
@@ -406,9 +408,25 @@ function loadAll(silent = false): Promise<void> {
 useAutoRefresh(() => loadAll(true), 30000)
 onMounted(() => loadAll(false))
 watch(appLocale, () => { void loadAll(true).then(drawChart) })
+watch(isDark, async () => { await nextTick(); scheduleChart() })
 
 /* 资源趋势图(Canvas, 后端历史数据) */
 const chartCanvas = ref<HTMLCanvasElement | null>(null)
+let chartResize: ResizeObserver | undefined
+let chartFrame = 0
+function scheduleChart() {
+  cancelAnimationFrame(chartFrame)
+  chartFrame = requestAnimationFrame(drawChart)
+}
+watch(chartCanvas, canvas => {
+  chartResize?.disconnect()
+  if (canvas) {
+    chartResize = new ResizeObserver(scheduleChart)
+    chartResize.observe(canvas)
+    scheduleChart()
+  }
+}, { flush: 'post' })
+onUnmounted(() => { chartResize?.disconnect(); cancelAnimationFrame(chartFrame) })
 const chartDays = ref(1)
 const chartLoading = ref(false)
 const chartPoints = ref<Array<{ts: number; cpu: number; memory: number; disk: number}>>([])
@@ -446,10 +464,12 @@ function drawChart() {
   ctx.clearRect(0, 0, w, h)
 
   // Grid
-  ctx.strokeStyle = '#f0f0f0'
+  const palette = getComputedStyle(document.documentElement)
+  const token = (name: string) => palette.getPropertyValue(name).trim()
+  ctx.strokeStyle = token('--dt-border')
   ctx.lineWidth = 1
   ctx.font = '10px sans-serif'
-  ctx.fillStyle = '#aaa'
+  ctx.fillStyle = token('--dt-muted')
   for (const pct of [0, 25, 50, 75, 100]) {
     const y = pad.top + chartH * (1 - pct / 100)
     ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + chartW, y); ctx.stroke()
@@ -458,14 +478,14 @@ function drawChart() {
 
   // Threshold line 80%
   const threshY = pad.top + chartH * (1 - 80 / 100)
-  ctx.strokeStyle = '#ff4d4f'
+  ctx.strokeStyle = token('--dt-danger')
   ctx.lineWidth = 1
   ctx.setLineDash([4, 4])
   ctx.beginPath(); ctx.moveTo(pad.left, threshY); ctx.lineTo(pad.left + chartW, threshY); ctx.stroke()
   ctx.setLineDash([])
 
   if (points.length < 2) {
-    ctx.fillStyle = '#ccc'
+    ctx.fillStyle = token('--dt-muted')
     ctx.font = '13px sans-serif'
     ctx.fillText(translate('ui.m_bee985624afb'), w / 2 - 40, h / 2)
     return
@@ -481,7 +501,7 @@ function drawChart() {
   const tx = (ts: number) => pad.left + chartW * Math.min(1, Math.max(0, (ts - t0) / span))
 
   // X 轴时间刻度(4 等分，按真实时间；跨度>2天显日期，否则显时:分)
-  ctx.fillStyle = '#aaa'
+  ctx.fillStyle = token('--dt-muted')
   ctx.font = '10px sans-serif'
   ctx.textAlign = 'center'
   const multiDay = chartDays.value > 2
@@ -512,9 +532,9 @@ function drawChart() {
     ctx.stroke()
   }
 
-  drawLine('cpu', '#1677ff')
-  drawLine('memory', '#52c41a')
-  drawLine('disk', '#fa8c16')
+  drawLine('cpu', token('--dt-primary'))
+  drawLine('memory', token('--dt-success'))
+  drawLine('disk', token('--dt-warning'))
 }
 </script>
 
@@ -522,44 +542,44 @@ function drawChart() {
 .metric-card { cursor: pointer; transition: transform .15s ease; }
 .metric-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(190px,100%),1fr)); gap: 16px; }
 .metric-grid .metric-card { height: 100%; margin-bottom: 0; }
-.metric-card:hover { transform: translateY(-2px); }
+.metric-card:hover { border-color: var(--dt-border-strong); }
 .metric-body { display: flex; align-items: center; gap: 14px; }
 .metric-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
 .metric-text { min-width: 0; }
-.metric-title { font-size: 13px; color: #8c8c8c; line-height: 1.4; }
+.metric-title { font-size: 13px; color: var(--dt-muted); line-height: 1.4; }
 /* 数值用主题文字色变量：亮=#0f1f33 / 暗=#cfe6f5。修复夜间模式暗字压在暗卡底(#0d1424)看不清 */
 .metric-value { font-size: 26px; font-weight: 600; color: var(--dt-text, #1f2937); line-height: 1.2; }
 .metric-value.loading { opacity: .4; }
-.metric-sub { font-size: 11px; color: #bbb; margin-top: 2px; }
+.metric-sub { font-size: 11px; color: var(--dt-muted); margin-top: 2px; }
 .section-row { margin-top: 16px; }
 /* 同行卡片等高对齐：a-row 是 flex，列默认等高；让卡片撑满列高，三卡底部齐平
    （治代理状态卡 5 行比左右两卡高、参差不齐）。 */
 .section-row :deep(.ant-col) { display: flex; }
 .section-row :deep(.ant-card) { width: 100%; }
-.muted { color: #aaa; }
+.muted { color: var(--dt-muted); }
 .refresh-ts { font-size: 12px; }
 .sess-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .sess-item { text-align: center; padding: 6px 0; }
 .sess-num { font-size: 24px; font-weight: 600; line-height: 1.1; }
-.sess-label { font-size: 12px; color: #8c8c8c; margin-top: 2px; }
-.token-sub { font-size: 12px; color: #8c8c8c; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.sess-label { font-size: 12px; color: var(--dt-muted); margin-top: 2px; }
+.token-sub { font-size: 12px; color: var(--dt-muted); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
 .token-scene { font-size: 12px; margin-top: 6px; }
 .uptime { font-weight: 600; color: #389e0d; }
 /* 设备状态：label 固定宽 + 值区弹性，进度条与副文字同一行对齐，彻底消除 progress/文字错位 */
 .dev-list { display: flex; flex-direction: column; gap: 12px; }
 .dev-row { display: flex; align-items: center; gap: 10px; min-height: 24px; }
-.dev-label { flex: 0 0 88px; font-size: 13px; color: #8c8c8c; white-space: nowrap; }
+.dev-label { flex: 0 0 88px; font-size: 13px; color: var(--dt-muted); white-space: nowrap; }
 .dev-val { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
 .dev-val :deep(.ant-progress) { flex: 1 1 auto; margin: 0; min-width: 0; }
 .dev-val :deep(.ant-progress-text) { font-variant-numeric: tabular-nums; }
-.dev-sub { flex: 0 0 auto; font-size: 12px; color: #888; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.dev-hint { font-size: 11px; color: #bbb; white-space: nowrap; }
+.dev-sub { flex: 0 0 auto; font-size: 12px; color: var(--dt-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dev-hint { font-size: 11px; color: var(--dt-muted); white-space: normal; overflow-wrap:anywhere; min-width:0; }
 .dev-tag { margin: 0; flex: 0 0 auto; }
 .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
 .proxy-ok { font-size: 11px; color: #52c41a; margin-left: 6px; }
 .proxy-warn { font-size: 11px; color: #fa8c16; margin-left: 6px; }
 .proxy-err { font-size: 11px; color: #cf1322; margin-left: 6px; font-weight: 500; }
-.proxy-traffic { font-weight: 500; color: #1f2937; }
+.proxy-traffic { font-weight: 500; color: var(--dt-text); }
 .proxy-ip { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
 /* 出口归属：长文本(机场订阅·profile·节点)单行省略号,不撑破窄卡片,全文见 tooltip */
 .proxy-src { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
@@ -567,7 +587,7 @@ function drawChart() {
 .netq-fix, .ant-descriptions-item-content { min-width: 0; }
 /* 网络质量总评卡 */
 .netq-card { cursor: pointer; transition: transform .15s ease; }
-.netq-card:hover { transform: translateY(-2px); }
+.netq-card:hover { border-color: var(--dt-border-strong); }
 .netq-bar { display: flex; align-items: center; gap: 18px; }
 .netq-badge { display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-width: 88px; padding: 6px 14px; border-radius: 10px; color: #fff; }
@@ -577,11 +597,11 @@ function drawChart() {
 .netq-dim { margin: 0; font-size: 11px; line-height: 18px; }
 .netq-summary { font-size: 14px; color: var(--dt-text, #333); }
 .netq-time { font-size: 12px; color: var(--dt-muted, #999); margin-top: 4px; }
-.nq-excellent .netq-badge, .nq-good .netq-badge { background: #52c41a; }
+.nq-excellent .netq-badge, .nq-good .netq-badge { background: var(--dt-success); }
 .nq-fair .netq-badge { background: #faad14; }
-.nq-poor .netq-badge { background: #fa8c16; }
+.nq-poor .netq-badge { background: var(--dt-warning); }
 .nq-critical .netq-badge { background: #cf1322; }
-.nq-unknown .netq-badge { background: #bfbfbf; }
+.nq-unknown .netq-badge { background: var(--dt-fill); color: var(--dt-muted); border: 1px solid var(--dt-border); }
 /* 资源运行可靠性总评（设备状态卡内，仿网络质量徽章紧凑版）*/
 /* --dt-hover 两个主题都没定义→恒 fallback #fafafa 近白；夜间模式下白板压在暗卡上刺眼。
    改用两态都有定义的 --dt-fill(亮 #fafafa / 暗 #0d1424) + --dt-border，暗色下自动跟随。 */
@@ -595,17 +615,17 @@ function drawChart() {
 .rv-verdict { font-size: 12px; color: var(--dt-muted, #888); line-height: 1.5; }
 .rv-disknote { font-size: 11px; color: #d48806; line-height: 1.5; margin-top: 2px; }
 .rv-slots { font-size: 11px; color: var(--dt-muted, #888); line-height: 1.5; margin-top: 2px; }
-.rv-excellent .rv-badge, .rv-good .rv-badge { background: #52c41a; }
+.rv-excellent .rv-badge, .rv-good .rv-badge { background: var(--dt-success); }
 .rv-tight .rv-badge { background: #faad14; }
 .rv-critical .rv-badge { background: #cf1322; }
 .resource-chart { width: 100%; height: 180px; display: block; }
-.chart-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #8c8c8c; }
+.chart-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--dt-muted); }
 .legend-item { display: flex; align-items: center; gap: 4px; }
 .legend-dot { width: 10px; height: 3px; border-radius: 2px; }
 .legend-line { width: 14px; height: 0; border-top: 2px dashed #ff4d4f; }
-.cpu-dot { background: #1677ff; }
-.mem-dot { background: #52c41a; }
-.disk-dot { background: #fa8c16; }
+.cpu-dot { background: var(--dt-primary); }
+.mem-dot { background: var(--dt-success); }
+.disk-dot { background: var(--dt-warning); }
 .thresh-line { }
 </style>
 

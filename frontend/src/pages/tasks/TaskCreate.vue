@@ -1,5 +1,10 @@
 <template>
   <PageContainer :title="translate('ui.m_6bee2372805a')" kicker="Create Task" :description="translate('ui.m_2ed2113990f5')">
+    <a-alert v-if="groupScopeId" data-testid="group-task-info" :type="groupError ? 'error' : 'info'" show-icon style="margin-bottom:16px"
+      :message="groupError || (groupLoading ? translate('groupTask.loading') : translate('groupTask.from', { name: groupSource?.name || '' }))"
+      :description="groupSource ? translate('groupTask.hint') : undefined" />
+    <a-alert v-if="groupSource?.skipped.length" type="warning" show-icon style="margin-bottom:16px"
+      :message="translate('groupTask.skipped', { targets: groupSource.skipped.join(', ') })" />
     <a-card :bordered="false">
       <a-form layout="vertical" :model="form" @finish="submit">
         <a-row :gutter="16">
@@ -11,14 +16,14 @@
           </a-col>
           <a-col :xs="24" :md="12">
             <a-form-item :label="translate('ui.m_4064b1b6e5f6')" required>
-              <a-select v-model:value="form.policy_id" :options="policyOptions" :placeholder="translate('ui.m_ae88804e2014')"
+              <a-select v-model:value="form.policy_id" :options="taskPolicyOptions" :placeholder="translate('ui.m_ae88804e2014')"
                 show-search :filter-option="filterPolicy" :loading="policyLoading" />
               <div class="muted">{{ translate('ui.m_5c2cd186a84b') }}</div>
             </a-form-item>
           </a-col>
         </a-row>
         <a-form-item :label="translate('ui.m_d04da2799b60')">
-          <a-radio-group v-model:value="form.target_type" button-style="solid">
+          <a-radio-group :disabled="!!groupScopeId" v-model:value="form.target_type" button-style="solid">
             <a-radio-button value="normal">{{ translate('ui.m_ee1f158b2356') }}</a-radio-button>
             <a-radio-button value="fofa">{{ translate('ui.m_6518c904a840') }}</a-radio-button>
             <a-radio-button value="unit">{{ translate('ui.m_702aab59cae9') }}</a-radio-button>
@@ -29,7 +34,7 @@
         <!-- 普通目标 / 单位名：共用文本框 -->
         <a-form-item v-if="form.target_type !== 'fofa'"
           :label="form.target_type === 'unit' ? translate('ui.m_926e0936f410') : translate('ui.m_f617beed33b0')" required>
-          <a-textarea v-model:value="form.target" :rows="3"
+          <a-textarea data-testid="task-target" :readonly="!!groupScopeId" v-model:value="form.target" :rows="3"
             :placeholder="form.target_type === 'unit' ? translate('ui.m_2cb4feacb0ff') : translate('ui.m_06a4b644d6ba')" />
         </a-form-item>
 
@@ -39,7 +44,7 @@
           <div class="src-grid">
             <div v-for="s in sources" :key="s.id" class="src-block">
               <div class="src-head">
-                <span :class="s.available ? 'src-ok' : 'src-off'">{{ s.available ? '✓' : '✗' }} {{ s.name }}</span>
+                <span :class="s.available ? 'src-ok' : 'src-off'">{{ s.available ? '✓' : '✗' }} {{ s.id==='hunter' ? translate('sources.hunterName') : s.name }}</span>
                 <span v-if="!s.available" class="muted">{{ translate('ui.m_72d8e42e04f1') }}</span>
                 <span v-if="srcEst[s.id]" class="src-est"
                   :style="{ color: srcEst[s.id].error ? '#cf1322' : '#52c41a' }">
@@ -51,7 +56,7 @@
                   :disabled="!s.available" :placeholder="translate('ui.m_9ee3c076a148')" :title="translate('ui.m_ff09dc036470')" />
               </div>
               <a-textarea v-model:value="srcQueries[s.id]" :rows="2" :disabled="!s.available"
-                :placeholder="s.placeholder" />
+                :placeholder="s.id==='hunter' ? translate('sources.hunterExample') : s.placeholder" />
             </div>
           </div>
           <div style="margin-top:6px">
@@ -74,7 +79,7 @@
           <a-divider style="margin:8px 0">{{ translate('ui.m_fb5d9045edd7') }}</a-divider>
 
           <a-form-item :label="translate('ui.m_fec95897fa0a')">
-            <a-select v-model:value="form.pentest_provider_id" :options="providerOptions" allow-clear
+            <a-select data-guide="task-ai-model" v-model:value="form.pentest_provider_id" :options="providerOptions" allow-clear
               style="max-width:360px" :placeholder="translate('ui.m_8b6340d797b6', { p0: (globalDefaultName) })" />
             <div v-if="!form.pentest_provider_id" class="default-hint">
               <BulbOutlined /> {{ translate('ui.m_dd87bdfbdeef') }}<b>{{ globalDefaultName }}</b>
@@ -91,7 +96,7 @@
           </a-form-item>
 
           <a-form-item :label="translate('ui.m_4568f2dbe40b')">
-            <a-radio-group v-model:value="form.pentest_egress_mode" button-style="solid" size="small">
+            <a-radio-group data-guide="task-ai-egress" v-model:value="form.pentest_egress_mode" button-style="solid" size="small">
               <a-radio-button value="direct">{{ translate('ui.m_b06325c5660f') }}</a-radio-button>
               <a-tooltip :title="egressOpts.global && !egressOpts.global.available ? egressOpts.global.reason : ''">
                 <a-radio-button value="global" :disabled="egressOpts.global && !egressOpts.global.available">{{ translate('ui.m_63d6b47116de') }}</a-radio-button>
@@ -149,7 +154,7 @@
           </a-form-item>
 
           <a-form-item :label="translate('ui.m_cec77f7bc5e2')">
-            <a-textarea v-model:value="form.pentest_whitelist" :rows="2"
+            <a-textarea data-guide="task-intel" v-model:value="form.pentest_whitelist" :rows="2"
               :placeholder="translate('ui.m_92f58e4f2833')" />
             <div class="muted">{{ translate('ui.m_f9f80d9cf3f7') }}</div>
           </a-form-item>
@@ -180,7 +185,7 @@
         <a-divider style="margin:8px 0">{{ translate('ui.m_fd7719273970') }}</a-divider>
         <a-form-item>
           <a-space wrap>
-            <a-button @click="downloadTemplate"><template #icon><DownloadOutlined /></template>{{ translate('ui.m_e9b35c4ab08a') }}</a-button>
+            <a-button @click="downloadTemplate" data-guide="task-batch"><template #icon><DownloadOutlined /></template>{{ translate('ui.m_e9b35c4ab08a') }}</a-button>
             <a-upload :before-upload="handleCsvUpload" :show-upload-list="false" accept=".csv">
               <a-button type="dashed"><template #icon><UploadOutlined /></template>{{ translate('ui.m_c3a654bd3919') }}</a-button>
             </a-upload>
@@ -197,7 +202,7 @@
 
         <a-form-item>
           <a-space>
-            <a-button type="primary" html-type="submit" :loading="loading">{{ translate('ui.m_36d5f450ffc8') }}</a-button>
+            <a-button type="primary" data-testid="task-submit" html-type="submit" :loading="loading || preparing" :disabled="groupLoading || !!groupError">{{ translate('ui.m_36d5f450ffc8') }}</a-button>
             <a-button @click="router.push('/tasks')">{{ translate('ui.m_e9d5ca6c1406') }}</a-button>
           </a-space>
         </a-form-item>
@@ -212,10 +217,11 @@
 import { t as translate } from '../../i18n'
 
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { DownloadOutlined, UploadOutlined, PlusOutlined, DeleteOutlined, BulbOutlined } from '@ant-design/icons-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
+import { assetScopeApi } from '../../api/scope'
 import { taskApi, taskFofaApi } from '../../api/task'
 import { intelApi, type OverlapResult } from '../../api/intel'
 import OverlapConfirmModal from '../../components/OverlapConfirmModal.vue'
@@ -226,6 +232,12 @@ import { getSetupStatus, type SetupStatusResult } from '../../api/meta'
 import type { RowRecord } from '../../api/types'
 
 const router = useRouter()
+const route = useRoute()
+const groupScopeId = computed(() => typeof route.query.asset_scope === 'string' ? route.query.asset_scope : '')
+const groupSource = ref<Awaited<ReturnType<typeof assetScopeApi.taskSource>>>()
+const groupLoading = ref(false)
+const groupError = ref('')
+const preparing = ref(false)
 const loading = ref(false)
 const policyLoading = ref(false)
 type PolicyOption = { label: string; value: string }
@@ -256,6 +268,9 @@ const form = reactive({
 const egressOpts = ref<Record<string, { available: boolean; reason: string }>>({})
 
 // 当前所选策略的完整对象 + 是否启用扫描后 AI 渗透（决定渗透相关选项是否显示）
+const taskPolicyOptions = computed(() => groupScopeId.value
+  ? policyOptions.value.filter(o => !!(policyRaw.value.find(p => String(p._id) === o.value)?.policy as RowRecord | undefined)?.auto_pentest)
+  : policyOptions.value)
 const selectedPolicy = computed(() => policyRaw.value.find(p => String(p._id) === String(form.policy_id)))
 const pentestEnabled = computed(() => !!(selectedPolicy.value?.policy as RowRecord | undefined)?.auto_pentest)
 // 可选模型选项：仅已启用 provider（带协议标注，便于识别）
@@ -453,6 +468,7 @@ async function submitBatch(items: Array<{ target: string; name: string; priority
   for (const it of items) {
     try {
       await taskApi.policy({
+        ...(groupScopeId.value ? { asset_scope_id: groupScopeId.value } : {}),
         name: it.name, task_tag: 'task', target: it.target,
         policy_id: form.policy_id as string, priority: Number.isNaN(it.priority) ? form.priority : it.priority,
         pentest_whitelist: form.pentest_whitelist || '',
@@ -547,6 +563,11 @@ async function testSources() {
 }
 
 async function submit() {
+  if (loading.value || preparing.value || overlapOpen.value || groupLoading.value) return
+  if (groupScopeId.value && !groupSource.value) return message.warning(translate('groupTask.unavailable'))
+  if (groupScopeId.value && !pentestEnabled.value) return message.warning(translate('groupTask.policy'))
+  preparing.value = true
+  try {
   // unit 模式:任务名(第一级)+ 单位全称(第二级,多行)都要;其余模式需任务名+目标
   let srcQ: Record<string, string> = {}
   if (form.target_type === 'unit') {
@@ -578,6 +599,7 @@ async function submit() {
     } catch { /* 检测失败不阻断建任务 */ }
   }
   await doSubmit()
+  } finally { preparing.value = false }
 }
 
 // 重叠确认弹窗状态
@@ -587,6 +609,7 @@ function onOverlapConfirm() { doSubmit() }
 function onOverlapCancel() { message.info(translate('ui.m_4454cee2320e')) }
 
 async function doSubmit() {
+  if (loading.value) return
   const srcQ: Record<string, string> = form.target_type === 'fofa' ? collectQueries() : {}
   loading.value = true
   const missionIntelJson = buildMissionIntel()
@@ -634,6 +657,7 @@ async function doSubmit() {
       })
     } else {
       await taskApi.policy({
+        ...(groupScopeId.value ? { asset_scope_id: groupScopeId.value } : {}),
         name: form.name,
         task_tag: 'task',
         target: form.target,
@@ -660,7 +684,22 @@ async function doSubmit() {
   }
 }
 
+async function loadGroupSource() {
+  if (!groupScopeId.value) return
+  groupLoading.value = true
+  try {
+    const source = await assetScopeApi.taskSource(groupScopeId.value)
+    groupSource.value = source
+    form.name = source.name
+    form.target = source.scope
+    form.target_type = 'normal'
+    form.pentest_whitelist = source.black_scope
+  } catch { groupError.value = translate('groupTask.unavailable') }
+  finally { groupLoading.value = false }
+}
+
 onMounted(() => {
+  loadGroupSource()
   loadPolicies()
   loadProviders()
   loadSources()

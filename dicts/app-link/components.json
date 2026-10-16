@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "version": "1.6",
+  "version_code": 7,
+  "protocol_version": 2,
+  "members": {
+    "watchtower-fiber-template.apk": {
+      "bytes": 4627325,
+      "sha256": "148de841731d815652e57c36000b28aacf07c0af36a0c3b784d5b322c73d4cf6"
+    },
+    "Watchtower-Link-USB-template.zip": {
+      "bytes": 19840847,
+      "sha256": "d5dd7f9e4c2283bdaa4991a8ac5392bcac6d46f7b5b1f2579e40ae447c32cb76"
+    }
+  },
+  "kind": "shared-app-link-templates",
+  "configuration": "runtime injection only; no keys in template metadata"
+}

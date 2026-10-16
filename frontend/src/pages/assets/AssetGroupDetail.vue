@@ -3,6 +3,7 @@
     <template #extra>
       <a-space>
         <a-button v-if="tab === 'domain' || tab === 'site'" type="primary" @click="openAdd">{{ translate('ui.m_7a8a11ead507') }}{{ tab === 'domain' ? translate('ui.m_222952431147') : translate('ui.m_a59fe62777ff') }}</a-button>
+        <a-button v-if="hasPerm('task:write')" data-testid="group-create-task" @click="router.push({ path: '/tasks/create', query: { asset_scope: scopeId } })">{{ translate('groupTask.action') }}</a-button>
         <a-button @click="exportCurrent">{{ translate('ui.m_929e5852cc18') }}</a-button>
         <a-button @click="router.push('/asset-groups')">{{ translate('ui.m_26712eb0693b') }}</a-button>
       </a-space>
@@ -51,6 +52,7 @@ import PageContainer from '../../layouts/PageContainer.vue'
 import SearchBar from '../../components/SearchBar.vue'
 import CopyText from '../../components/CopyText.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
+import { hasPerm } from '../../api/request'
 import { assetDomainApi, assetIpApi, assetSiteApi, assetWihApi } from '../../api/scope'
 import type { RowRecord, PortInfo } from '../../api/types'
 

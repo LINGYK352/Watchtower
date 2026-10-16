@@ -26,6 +26,7 @@
         <a-descriptions-item :label="translate('ui.m_058f672b8779')">
           <code class="key-masked">{{ info.key_masked || '-' }}</code>
         </a-descriptions-item>
+        <a-descriptions-item :label="translate('platformIdentity.number')"><a-input :value="info.platform_id || '—'" readonly data-testid="activation-platform-id" /></a-descriptions-item>
       </a-descriptions>
 
       <a-divider style="margin:18px 0" />
@@ -74,6 +75,7 @@ const info = reactive({
   expired: false,
   revoked: false,
   key_masked: '',
+  platform_id:'',source_id:'',
   activated_at: '',
   expires_at: '',
   remaining_days: 0,

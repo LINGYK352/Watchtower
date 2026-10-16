@@ -92,6 +92,7 @@ INDEX_SPECS: List = [
     (Collections.UNIT_INTEL_PROFILE, [([("key", 1)], {"unique": True})]),
     # 漏洞情报
     (Collections.VULN_INTEL, [([("dedup_key", 1)], {"unique": True, "sparse": True}),
+                              ([("watchtower_id", 1)], {"unique": True, "sparse": True}),
                               ([("sources.name", 1)], {}), ([("severity", 1)], {})]),
     # AI 渗透会话
     (Collections.PENTEST_SESSION, [([("status", 1)], {}), ([("active_key", 1)], {"unique": True, "sparse": True}),
@@ -192,6 +193,12 @@ def create_app() -> Any:
     """Web/API 入口：委托 router.create_app（router 内部调 register_all 装配 + 挂 HTTP）。
     集中于此便于 gunicorn 统一 import `sentinel_platform.bootstrap:create_app`。
     额外 ensure_indexes（含默认管理员播种，幂等）——保证 web 独立起也能开箱即用登录。"""
+    # NativeService invokes this factory directly; it never imports wsgi.
+    try:
+        from sentinel_platform.modules.system.window_defaults import ensure as _ensure_window_defaults
+        _ensure_window_defaults()
+    except OSError as exc:
+        logger.warning("默认页面比例未保存，保留现有显示：%s", type(exc).__name__)
     from sentinel_platform.router import create_app as _create_app
     app = _create_app()
     try:
@@ -214,4 +221,3 @@ def create_app() -> Any:
     except Exception as exc:
         logger.debug("create_app resume_chain_if_pending skip: %s", exc)
     return app
-

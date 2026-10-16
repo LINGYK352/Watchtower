@@ -6,8 +6,10 @@
     :row-key="rowKey"
     :pagination="pagination"
     :row-selection="selectable ? rowSelection : undefined"
+    :custom-row="customRow"
+    :scroll="scroll"
     size="middle"
-    bordered
+    :bordered="false"
     @change="onChange"
   >
     <template #bodyCell="scope"><slot name="bodyCell" v-bind="scope" /></template>
@@ -28,7 +30,10 @@ const props = withDefaults(defineProps<{
   total?: number
   rowKey?: string
   selectable?: boolean
+  preserveSelectedRowKeys?: boolean
   selectedRowKeys?: string[]
+  scroll?: { x?: number | string; y?: number | string }
+  customRow?: (record: any, index?: number) => Record<string, unknown>
 }>(), { rowKey: '_id', page: 1, size: 10, total: 0, selectable: false, selectedRowKeys: () => [] })
 
 const emit = defineEmits<{
@@ -38,6 +43,7 @@ const emit = defineEmits<{
 
 const rowSelection = computed(() => ({
   selectedRowKeys: props.selectedRowKeys,
+  preserveSelectedRowKeys: props.preserveSelectedRowKeys,
   onChange: (keys: string[]) => emit('update:selectedRowKeys', keys)
 }))
 

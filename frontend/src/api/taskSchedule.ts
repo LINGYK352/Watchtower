@@ -14,6 +14,12 @@ export const taskScheduleApi = {
     task_tag: 'task' | 'risk_cruising'
     cron?: string
     start_date?: string
+    editable_target?: boolean
+    target_scope_id?: string
+    pentest_provider_id?: string
+    pentest_backup_provider_id?: string
+    observer_enabled?: boolean
+    observer_provider_id?: string
   }) => request<RowRecord>(`${base}/`, { method: 'POST', body: JSON.stringify(payload) }),
   delete: (ids: string[]) =>
     request<RowRecord>(`${base}/delete/`, { method: 'POST', body: JSON.stringify({ _id: ids }) }),

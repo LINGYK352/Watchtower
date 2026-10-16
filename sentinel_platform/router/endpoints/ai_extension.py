@@ -21,6 +21,74 @@ def _svc(): return get_registry().get("ai_extension_service")
 def _username(): return (getattr(g, "current_user", None) or {}).get("username", "")
 def _bad_service(): return err(CODE_ERROR, "AI 扩展服务未就绪")
 
+@ns.route('/cloud-code')
+class CloudUploadCode(Resource):
+    def post(self):
+        if not request.content_length or request.content_length>4096:return err(CODE_BAD_REQUEST,'请求大小无效 / Invalid request size')
+        body=request.get_json(silent=True)
+        if not isinstance(body,dict):return err(CODE_BAD_REQUEST,'Invalid request body')
+        from sentinel_platform.modules.ai_pentest._extension_store import cloud_code
+        result=cloud_code(body.get('email',''),body.get('locale','zh-CN'))
+        if result.get('ok'):return ok(result)
+        return {'code':CODE_BAD_REQUEST,'message':result.get('error','验证码请求失败 / Code request failed'),'data':{'retry_after':result.get('retry_after',0)}}
+
+@ns.route('/prepare')
+class PrepareUpload(Resource):
+    def post(self):
+        svc=_svc()
+        if not svc:return _bad_service()
+        if not request.content_length or request.content_length>300*1024*1024+65536:return err(CODE_BAD_REQUEST,'ZIP超过300MiB / ZIP exceeds 300 MiB')
+        f=request.files.get('file')
+        if not f or not (f.filename or '').lower().endswith('.zip'):return err(CODE_BAD_REQUEST,'程序主体必须为ZIP / Program body must be a ZIP')
+        fd,path=tempfile.mkstemp(prefix='watchtower-ext-prepare-',suffix='.zip');os.close(fd)
+        try:
+            f.save(path)
+            return ok(svc.prepare_upload(path,_username(),request.form.get('target',''),request.form.get('platform','')))
+        except (ValueError,TypeError) as exc:return err(CODE_BAD_REQUEST,str(exc))
+        finally:
+            try:os.unlink(path)
+            except OSError:pass
+
+@ns.route('/body/start')
+class StartUploadBody(Resource):
+    def post(self):
+        if not request.content_length or request.content_length>4096:return err(CODE_BAD_REQUEST,'Invalid request size')
+        from sentinel_platform.modules.ai_pentest._extension_upload import start_body
+        try:return ok(start_body(_username(),request.get_json(silent=True)))
+        except (ValueError,TypeError) as exc:return err(CODE_BAD_REQUEST,str(exc))
+
+@ns.route('/body/<string:upload_id>/chunk')
+class AppendUploadBody(Resource):
+    def post(self,upload_id):
+        if not request.content_length or request.content_length>8*1024*1024:return err(CODE_BAD_REQUEST,'数据块最大8MiB / Maximum chunk size is 8 MiB')
+        from sentinel_platform.modules.ai_pentest._extension_upload import append_body
+        try:return ok(append_body(upload_id,_username(),int(request.headers.get('X-Upload-Offset','-1')),request.get_data()))
+        except (ValueError,TypeError) as exc:return err(CODE_BAD_REQUEST,str(exc))
+
+@ns.route('/body/<string:upload_id>/prepare')
+class PrepareUploadBody(Resource):
+    def post(self,upload_id):
+        from sentinel_platform.modules.ai_pentest._extension_upload import prepare_body
+        try:return ok(prepare_body(upload_id,_username()))
+        except (ValueError,TypeError) as exc:return err(CODE_BAD_REQUEST,str(exc))
+
+@ns.route('/prepared/<string:upload_id>/finish')
+class FinishUpload(Resource):
+    def post(self,upload_id):
+        svc=_svc()
+        if not svc:return _bad_service()
+        if not request.content_length or request.content_length>65536:return err(CODE_BAD_REQUEST,'上传配置过大 / Upload settings too large')
+        try:return ok(svc.finish_upload(upload_id,_username(),request.get_json(silent=True)))
+        except (ValueError,TypeError) as exc:return err(CODE_BAD_REQUEST,str(exc))
+
+@ns.route('/prepared/<string:upload_id>/discard')
+class DiscardUpload(Resource):
+    def post(self,upload_id):
+        svc=_svc()
+        if not svc:return _bad_service()
+        try:return ok(svc.discard_upload(upload_id,_username()))
+        except ValueError as exc:return err(CODE_BAD_REQUEST,str(exc))
+
 
 @ns.route("")
 class ExtensionList(Resource):

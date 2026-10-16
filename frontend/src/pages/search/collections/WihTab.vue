@@ -10,6 +10,8 @@
     <template #bodyCell="{ column, record }">
       <template v-if="column.key === 'content'"><CopyText :text="String(record.content || '')" /></template>
       <template v-else-if="column.key === 'record_type'"><a-tag color="purple">{{ record.record_type || '-' }}</a-tag></template>
+      <template v-else-if="column.key === 'capture_status'"><span :title="String(record.incomplete_reason || '')">{{ record.capture_status ? hasMessage('jsDiscovery.state_'+record.capture_status) ? translate('jsDiscovery.state_'+record.capture_status) : record.capture_status : '—' }}</span></template>
+      <template v-else-if="column.key === 'source_url'"><CopyText :text="String(record.source_url || '')" /></template>
       <template v-else-if="column.key === 'action'">
         <a-space size="small">
           <a-button type="link" size="small" @click="ctx.showDetail(record)">{{ translate('ui.m_979a332955c8') }}</a-button>
@@ -21,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { t as translate } from '../../../i18n'
+import { t as translate, hasMessage } from '../../../i18n'
 
 import AssetCollectionTable from '../AssetCollectionTable.vue'
 import CopyText from '../../../components/CopyText.vue'
@@ -34,6 +36,8 @@ const columns = [
   { get title() { return translate('ui.m_7a688306423b') }, key: 'content', ellipsis: true },
   { get title() { return translate('ui.m_a59fe62777ff') }, dataIndex: 'site', key: 'site', width: 220, ellipsis: true },
   { get title() { return translate('ui.m_a488e93d69cc') }, dataIndex: 'source', key: 'source', ellipsis: true },
+  { get title() { return translate('jsDiscovery.status') }, key: 'capture_status', width: 130 },
+  { get title() { return translate('jsDiscovery.sourceFile') }, key: 'source_url', width: 230, ellipsis: true },
   { get title() { return translate('ui.m_aa2353039024') }, dataIndex: 'task_id', key: 'task_id', width: 130, ellipsis: true },
   { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 110, fixed: 'right' }
 ]

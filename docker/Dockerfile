@@ -7,6 +7,23 @@
 # 打包边界铁律（2026-08-06 用户明令）：镜像**只含主平台运行所需**——用精确 COPY 白名单。
 # 绝不打进：分发系统(云端/distribution)、文档(云端/docs)、注册库/密钥(*.db/*.key/update_keys.json)、
 # 真实配置(config.yaml)、系统数据。分发系统是独立系统(运营方 /opt/sentinel-cloud/ 独立部署)。
+FROM python:3.8-slim AS python_dependencies
+# Offline wheel inputs and build output never enter the delivered image layers.
+# Plain multi-stage COPY works with the legacy builder as well as BuildKit.
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' \
+        /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
+    && pip config set global.trusted-host mirrors.aliyun.com \
+    && pip install --no-cache-dir "pip<24.1" "setuptools<70"
+COPY requirements.txt /tmp/requirements.txt
+COPY vendor/wheels /tmp/wheels
+RUN (pip install --no-cache-dir --ignore-installed --prefix=/opt/python-runtime \
+        --no-index --find-links /tmp/wheels "pip<24.1" "setuptools<70" -r /tmp/requirements.txt \
+        || (rm -rf /opt/python-runtime && pip install --no-cache-dir --ignore-installed \
+            --prefix=/opt/python-runtime "pip<24.1" "setuptools<70" -r /tmp/requirements.txt))
+
 FROM python:3.8-slim
 
 # 系统工具：侦察外部工具在 external/ 走 PATH 调用；build-essential 供 C 扩展编译
@@ -31,14 +48,12 @@ RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
 
 WORKDIR /opt/sentinel/current
 
-# 依赖单独一层（利用 docker 层缓存：仅 requirements 变才重装）
-COPY requirements.txt /tmp/requirements.txt
-COPY vendor/wheels /tmp/wheels
-# 优先离线 vendor wheel，缺失回退在线（celery 5.1.2 需 pip<24.1）
-RUN pip install --no-cache-dir "pip<24.1" "setuptools<70" \
-    && (pip install --no-cache-dir --no-index --find-links /tmp/wheels -r /tmp/requirements.txt \
-        || pip install --no-cache-dir -r /tmp/requirements.txt) \
-    && rm -rf /tmp/wheels
+# Keep the original interpreter and /usr/local layout. Remove inherited bootstrap
+# metadata before copying the pinned pip/setuptools and required runtime output;
+# otherwise two distribution metadata versions would coexist in the final stage.
+RUN python -m pip uninstall --yes pip setuptools
+COPY --from=python_dependencies /opt/python-runtime/ /usr/local/
+RUN python -m pip check
 
 # —— AI 渗透真浏览器（Playwright Chromium）——
 # 设计分工：扫描内核截图/collect_js=PhantomJS 轻量全量；AI 渗透 browser_navigate/browser_login=

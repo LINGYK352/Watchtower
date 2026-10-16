@@ -12,6 +12,13 @@
       :message="translate('ui.m_ae494fbdb102')" />
 
     <a-card v-for="grp in groups" :key="grp" class="page-card" :title="grp" size="small">
+      <section v-if="itemsByGroup(grp).some(item=>item.id==='feishu') && forms.feishu" class="push-settings" data-testid="notification-settings">
+        <h3>{{ translate('platformIdentity.settings') }}</h3>
+        <a-form layout="vertical">
+          <a-form-item :label="translate('platformIdentity.number')"><a-input :value="platformId || (identityUnavailable?translate('platformIdentity.unavailable'):'—')" readonly data-testid="notification-platform-id" /><p class="push-note">{{ translate('platformIdentity.readonly') }}</p></a-form-item>
+          <a-form-item :label="translate('platformIdentity.threshold')"><a-select v-model:value="(forms.feishu.min_severity as string)" :options="severityOptions" style="width:100%;max-width:280px" data-testid="notification-min-severity" /></a-form-item>
+        </a-form>
+      </section>
       <a-form layout="vertical">
         <a-row :gutter="20">
           <a-col :span="12" v-for="item in itemsByGroup(grp)" :key="item.id">
@@ -31,12 +38,12 @@
                 :placeholder="secretPlaceholder(item, 'webhook')" autocomplete="new-password" style="margin-bottom:8px" />
               <a-input-password v-if="item.fields.includes('secret')" v-model:value="(forms[item.id].secret as string)"
                 :placeholder="secretPlaceholder(item, 'secret')" autocomplete="new-password" style="margin-bottom:8px" />
-              <div v-if="item.select && item.select['min_severity']" style="margin-top:8px">
+              <div v-if="item.id!=='feishu' && item.select && item.select['min_severity']" style="margin-top:8px">
                 <span style="margin-right:8px;color:#888;font-size:12px">{{ translate('ui.m_a29dc96e5060') }}</span>
                 <a-select v-model:value="(forms[item.id].min_severity as string)" size="small" style="width:160px"
                   :options="item.select['min_severity']" />
               </div>
-              <div v-if="item.fields.includes('vuln_feed_notify')" style="margin-top:8px;display:flex;align-items:center;gap:8px">
+              <div data-guide="key-notification" v-if="item.fields.includes('vuln_feed_notify')" style="margin-top:8px;display:flex;align-items:center;gap:8px">
                 <span style="color:#888;font-size:12px">{{ translate('ui.m_8c17fa75cd55') }}</span>
                 <a-switch v-model:checked="(forms[item.id].vuln_feed_notify as boolean)" size="small" checked-children="开" un-checked-children="关" />
                 <span style="color:#aaa;font-size:11px">{{ translate('ui.m_31fc29a6fdaa') }}</span>
@@ -68,12 +75,16 @@ import { onMounted, reactive, ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import { apiKeysApi, type ApiKeyItem } from '../../api/apiKeys'
+import { getActivationInfo } from '../../api/meta'
 import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 
 const loading = ref(false)
 const items = ref<ApiKeyItem[]>([])
 const updatedAt = ref('')
 const forms = reactive<Record<string, Record<string, unknown>>>({})
+const platformId=ref(''),identityUnavailable=ref(false)
+const severityOptions=computed(()=>[{value:'critical',label:translate('platformIdentity.critical')},{value:'high',label:translate('platformIdentity.high')},{value:'medium',label:translate('platformIdentity.medium')}])
+async function loadIdentity(){try{const data=await getActivationInfo();platformId.value=data.platform_id||'';identityUnavailable.value=false}catch{identityUnavailable.value=true}}
 
 // 未保存提示（问题4）：编辑后未点「保存全部」就切走会静默丢失设置。
 const { dirty, markSaved } = useUnsavedGuard(() => JSON.stringify(forms),
@@ -130,7 +141,7 @@ async function saveAll() {
   } catch (e) { message.error((e as Error).message) } finally { loading.value = false }
 }
 
-onMounted(load)
+onMounted(()=>{void load();void loadIdentity()})
 </script>
 
 <style scoped>
@@ -141,4 +152,5 @@ onMounted(load)
 .key-site { font-size: 12px; color: #1677ff; margin-left: auto; }
 .updated { color: #999; font-size: 12px; }
 .dirty-flag { color: #d48806; font-size: 12px; font-weight: 600; }
+.push-settings{margin-bottom:20px;padding:16px;border:1px solid var(--dt-border);border-radius:8px;background:var(--dt-fill)}.push-settings h3{color:var(--dt-text);font-size:14px;margin:0 0 14px}.push-note{font-size:12px;color:var(--dt-muted);line-height:1.6;margin:8px 0 0}
 </style>

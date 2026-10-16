@@ -43,6 +43,7 @@ export interface PolicyConfig {
   collect_sources?: string[]
   auto_pentest?: boolean
   pentest_mode?: string
+  redteam_notice_acknowledged?: boolean
   honeypot_detection?: boolean  // 蜜罐检测开关（默认启用）
   // 代理出口 4模式（2026-08 重构，废旧 pentest_proxy/scan_proxy/proxy_source）。defaultPolicyConfig 保证有值。
   scan_egress: { mode: string; rule_id?: string }
@@ -51,7 +52,7 @@ export interface PolicyConfig {
   scan_proxy?: string
   proxy_source?: string
   dedup_level?: number        // 去重策略 1不去重/2保守(默认)/3激进
-  scope_drift_level?: number  // scope偏移 1零偏移/2轻度(默认)/3中度
+  scope_drift_level?: number  // scope偏移1零/2轻度/3中度/4不限制
   intel_enabled?: boolean     // 情报体系开关(默认启用;关闭=不创建情报/不沉淀,查询照常)
   max_context_tokens?: number // 单会话上下文上限 0=跟随全局默认/-1=原生上限/正数=固定token
   findvhost?: boolean

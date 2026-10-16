@@ -26,7 +26,7 @@
     <a-card :bordered="false">
       <a-space style="margin-bottom: 12px">
         <ConfirmAction danger type="primary" :disabled="!selectedRowKeys.length" :title="translate('ui.m_278d5f2da09f')" @confirm="removeSelected">{{ translate('ui.m_469f67cf665e') }}{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</ConfirmAction>
-        <a-button :disabled="!selectedRowKeys.length" @click="openReport"><CloudUploadOutlined /> {{ translate('ui.m_279d607a8f0f') }}{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</a-button>
+        <a-button :disabled="!selectedRowKeys.length" @click="openReport" data-guide="log-report"><CloudUploadOutlined /> {{ translate('ui.m_279d607a8f0f') }}{{ selectedRowKeys.length ? ` (${selectedRowKeys.length})` : '' }}</a-button>
       </a-space>
       <a-table :columns="columns" :data-source="items" :loading="loading" row-key="_id" :pagination="pagination"
         :scroll="{ x: 'max-content' }" size="middle" bordered

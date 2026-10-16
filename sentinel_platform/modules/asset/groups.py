@@ -109,6 +109,23 @@ def list_scopes(page: int = 1, size: int = 10, **filters: Any) -> Dict[str, Any]
         return {"items": [], "total": 0, "page": page, "size": size}
 
 
+def get_task_source(scope_id: str) -> Dict[str, Any]:
+    """Read authoritative group scope for the task draft and final submission."""
+    if not isinstance(scope_id, str) or not re.fullmatch(r"[0-9a-fA-F]{24}", scope_id):
+        return {"error": "资产分组ID无效"}
+    try:
+        group = _scope_coll().find_one({"_id": _oid(scope_id)})
+    except Exception:
+        return {"error": "资产分组读取失败，请重试"}
+    if not group:
+        return {"error": "资产分组不存在或已删除"}
+    from ._task_scope import prepare
+    result = prepare(group)
+    if not result['scope']:
+        return {"error": "资产分组没有可用范围（空范围或全部与排除范围相交）"}
+    return result
+
+
 def add_scope_group(data: Dict[str, Any]) -> Dict[str, Any]:
     """新建资产组。scope_type ip/domain（默认 domain），逐条校验范围。返回 {scope_id,...} 或 {error}。"""
     data = data or {}
@@ -354,6 +371,7 @@ def sync_task_to_scope(task_id: str, scope_id: str) -> Dict[str, Any]:
 
 class AssetGroupServiceImpl:
     """资产分组服务。注册字符串键 "asset_group_service"。"""
+    def get_task_source(self, scope_id): return get_task_source(scope_id)
     def list_scopes(self, **kw): return list_scopes(**kw)
     def add_scope_group(self, data): return add_scope_group(data)
     def delete_scope_groups(self, scope_ids): return delete_scope_groups(scope_ids)

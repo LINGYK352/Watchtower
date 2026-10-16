@@ -60,6 +60,16 @@ def tick() -> dict:
         logger.debug("scheduler tick reclaim_stalled degraded: %s", exc)
     result["due_schedules"] = _promote_due_schedules()
     result["sessions"] = _tick_sessions()
+    try:
+        from sentinel_platform.modules.ai_pentest import _request_approvals
+        _request_approvals.expire()
+        _request_approvals.flush_notifications()
+        from .modules.ai_pentest import _afk
+        _afk.tick()
+        from .modules.system import guard_log
+        guard_log.ensure_capped();guard_log.migrate_legacy();guard_log.maintain()
+    except Exception as exc:
+        logger.debug('scheduler request approvals degraded: %s', type(exc).__name__)
     # 会话台后台回合 crash 兜底（独立于自动会话；只清 console_running 死锁 + 按 pending 重投，不碰 status）
     try:
         result["console_sessions"] = _tick_console_sessions()

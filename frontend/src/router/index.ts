@@ -23,7 +23,9 @@ export const menuGroups: MenuGroup[] = [
   { key: 'workspace', get title() { return translate('ui.m_f9e02d3c13aa') }, icon: 'DashboardOutlined', children: [
     { key: 'dashboard', get title() { return translate('ui.m_70a1534aa33c') }, icon: 'DashboardOutlined', path: '/dashboard' },
     { key: 'attackAlert', get title() { return translate('ui.m_22d1a41590ad') }, icon: 'AlertOutlined', path: '/attack-alert', perm: 'system:read' },
-    { key: 'systemExtension', get title() { return translate('ui.m_f6c93a56a62a') }, icon: 'AppstoreAddOutlined', path: '/system-extensions', perm: 'ai_extension:read' }
+    { key: 'systemExtension', get title() { return translate('ui.m_f6c93a56a62a') }, icon: 'AppstoreAddOutlined', path: '/system-extensions', perm: 'ai_extension:read' },
+    { key: 'controlSync', get title() { return translate('navigation.controlSync') }, icon: 'CloudSyncOutlined', path: '/control-sync', perm: 'user:manage' },
+    { key: 'collaboration', get title() { return translate('navigation.collaboration') }, icon: 'TeamOutlined', path: '/collaboration', perm: 'collaboration:read' }
   ] },
   { key: 'taskPlan', get title() { return translate('ui.m_f9cbf8329c61') }, icon: 'ProfileOutlined', children: [
     { key: 'tasks', get title() { return translate('ui.m_c5ced4b36c07') }, icon: 'ProfileOutlined', path: '/tasks' },
@@ -80,6 +82,8 @@ const routes: RouteRecordRaw[] = [
     component: AppLayout,
     redirect: '/dashboard',
     children: [
+      { path: 'collaboration', name: 'collaboration', component: () => import('../pages/workspace/Collaboration.vue'), meta: { get title() { return translate('navigation.collaboration') } } },
+      { path: 'control-sync', name: 'controlSync', component: () => import('../pages/workspace/ControlSync.vue'), meta: { get title() { return translate('control.title') } } },
       { path: 'dashboard', name: 'dashboard', component: () => import('../pages/dashboard/Dashboard.vue'), meta: { get title() { return translate('ui.m_70a1534aa33c') } } },
       { path: 'attack-alert', name: 'attackAlert', component: () => import('../pages/workspace/AttackAlert.vue'), meta: { get title() { return translate('ui.m_22d1a41590ad') } } },
       { path: 'tasks', name: 'tasks', component: () => import('../pages/tasks/TaskList.vue'), meta: { get title() { return translate('ui.m_c5ced4b36c07') } } },
@@ -136,6 +140,10 @@ const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach((to) => {
   if (!to.meta.public && !getToken()) {
+    if (['/collaboration','/control-sync'].includes(to.path) && to.hash.startsWith('#wt-invite=')) {
+      try { sessionStorage.setItem('watchtower.pendingInvitation', location.origin + to.fullPath) } catch { /* User can paste again after login. */ }
+      return { path: '/login', query: { redirect: to.path } }
+    }
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 })

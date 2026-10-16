@@ -3,20 +3,22 @@
     :description="translate('ui.m_daa256b9fb37')">
     <template #extra>
       <a-space>
-        <a-switch v-model:checked="auto.enabled.value" checked-children="自动" un-checked-children="手动" size="small" />
+        <span class="finding-live-state" :class="{ reconnecting: liveState === 'reconnecting' }"
+          role="status" aria-live="polite" data-testid="finding-live-state" :data-state="liveState"
+          :title="translate('findingsLive.description')">{{ translate(`findingsLive.${liveState}`) }}</span>
         <a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button>
       </a-space>
     </template>
 
-    <a-row :gutter="12" style="margin-bottom:16px">
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_94cf4e239cf2')" :value="stat.ai.verified" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_7a668db4b7c8')" :value="(stat.ai.by_severity.critical || 0) + (stat.ai.by_severity.high || 0)" :value-style="{ color: '#a8071a' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :value="stat.poc.total">
+    <a-row :gutter="12" class="vuln-stat-grid" style="margin-bottom:16px">
+      <a-col :xs="12" :sm="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_94cf4e239cf2')" :value="stat.ai.verified" :value-style="{ color: 'var(--dt-danger)' }" /></a-card></a-col>
+      <a-col :xs="12" :sm="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_7a668db4b7c8')" :value="(stat.ai.by_severity.critical || 0) + (stat.ai.by_severity.high || 0)" :value-style="{ color: 'var(--dt-danger)' }" /></a-card></a-col>
+      <a-col :xs="12" :sm="6"><a-card :bordered="false"><a-statistic :value="stat.poc.total">
         <template #title><span>{{ translate('ui.m_e053a02071aa') }}</span>
           <a-tooltip :title="translate('ui.m_68df28fde4b1')">
             <QuestionCircleOutlined style="margin-left:4px;color:#aaa" /></a-tooltip>
         </template></a-statistic></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_289346a2e212')" :value="stat.combined_total" :value-style="{ color: '#1677ff' }" /></a-card></a-col>
+      <a-col :xs="12" :sm="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_289346a2e212')" :value="stat.combined_total" :value-style="{ color: 'var(--dt-primary)' }" /></a-card></a-col>
     </a-row>
 
     <div style="margin-bottom:12px">
@@ -31,7 +33,7 @@
       <a-form-item :label="translate('ui.m_4e1449e7d5e5')">
         <a-select v-model:value="query.dedup" style="width:130px" :options="dedupOptions" @change="reload" />
       </a-form-item>
-      <a-form-item :label="translate('ui.m_80b19d68b149')" v-if="query.source === '' || query.source === 'ai'">
+      <a-form-item :label="translate('ui.m_80b19d68b149')" v-if="query.source === '' || query.source === 'ai' || query.source === 'group'">
         <a-input v-model:value="query.unit" allow-clear :placeholder="translate('ui.m_cc25ff071e10')" style="width:150px" />
       </a-form-item>
       <a-form-item :label="translate('ui.m_d5e74de3449e')">
@@ -48,12 +50,12 @@
       </a-popconfirm>
     </div>
 
-    <AppTable :columns="columns" :data="rows" :loading="loading" selectable
+    <AppTable :columns="columns" :data="rows" :loading="loading" selectable preserve-selected-row-keys :scroll="{ x: 1700 }"
       v-model:selectedRowKeys="selectedKeys"
       :page="query.page" :size="query.size" :total="total" row-key="_id" @change="onPage">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'source'">
-          <a-tag :color="srcMeta(record.source).color">{{ srcLabel(record) }}</a-tag>
+          <a-tag :color="srcMeta(record.origin_category || record.source).color">{{ srcLabel(record) }}</a-tag>
         </template>
         <template v-else-if="column.key === 'name'">
           <div style="display:flex;align-items:center;gap:6px">
@@ -139,6 +141,7 @@
     </AppTable>
 
     <a-drawer v-model:open="detailOpen" :title="detailTitle" width="62%">
+      <a-alert v-if="detailMissing" :message="translate('findingsLive.removed')" type="warning" show-icon style="margin-bottom:12px" />
       <a-spin :spinning="detailLoading">
         <!-- AI 渗透漏洞详情 -->
         <a-descriptions v-if="cur.source === 'ai'" :column="1" size="small" bordered>
@@ -151,7 +154,7 @@
             <span v-if="isSuspectMode(String(cur.pentest_mode))" class="muted">{{ translate('ui.m_2b4cde2e1e17') }}</span>
           </a-descriptions-item>
           <a-descriptions-item label="CVSS">{{ cur.cvss_vector || '—' }} <b v-if="cur.cvss_score != null">({{ cvssLabel(cur) }})</b></a-descriptions-item>
-          <a-descriptions-item :label="translate('ui.m_f8b6f7daacce')">{{ String(cur.severity || 'unknown').toUpperCase() }}<span v-if="!cur.verified" class="muted"> {{ translate('ui.m_6dc3d59bba2d') }}</span></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_f8b6f7daacce')">{{ sevLabel(cur.severity) }}<span v-if="!cur.verified" class="muted"> {{ translate('ui.m_6dc3d59bba2d') }}</span></a-descriptions-item>
           <a-descriptions-item v-if="curCalibrated" :label="translate('ui.m_5f2cf12a79d0')">
             <a-tag color="orange">{{ translate('ui.m_8cb7c0a54b21') }} {{ String(cur.cvss_severity).toUpperCase() }} {{ translate('ui.m_fdbbb8e6e278') }} {{ String(cur.severity).toUpperCase() }}</a-tag>
             <span class="muted">{{ cur.severity_basis || translate('ui.m_bb787f05a6c4') }}</span>
@@ -193,7 +196,7 @@
         <a-descriptions v-else-if="cur.source === 'nuclei'" :column="1" size="small" bordered>
           <a-descriptions-item :label="translate('ui.m_2cbd51b8f743')">{{ cur.template_id }}</a-descriptions-item>
           <a-descriptions-item :label="translate('ui.m_cb1049ef7a06')">{{ cur.vuln_name }}</a-descriptions-item>
-          <a-descriptions-item :label="translate('ui.m_337717173807')"><a-tag :color="sevColor(String(cur.vuln_severity || ''))">{{ String(cur.vuln_severity || '-').toUpperCase() }}</a-tag></a-descriptions-item>
+          <a-descriptions-item :label="translate('ui.m_337717173807')"><a-tag :color="sevColor(String(cur.vuln_severity || ''))">{{ sevLabel(cur.vuln_severity) }}</a-tag></a-descriptions-item>
           <a-descriptions-item :label="translate('ui.m_53d4e9d01707')"><CopyText :text="String(cur.vuln_url || '')" /></a-descriptions-item>
           <a-descriptions-item :label="translate('ui.m_57060c88a36b')">{{ cur.target }}</a-descriptions-item>
           <a-descriptions-item :label="translate('ui.m_51bab09b2d4c')"><pre class="ev">{{ cur.curl_command || '—' }}</pre></a-descriptions-item>
@@ -251,9 +254,10 @@
 
 <script setup lang="ts">
 import { t as translate } from '../../i18n'
+import { severityLabel } from '../../utils/severity'
 
 import { cvssLabel, evidenceLabel, pocLabel } from '../../utils/findingDisplay'
-import { onMounted, onUnmounted, reactive, ref, computed } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { DownOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue'
@@ -262,11 +266,11 @@ import SearchBar from '../../components/SearchBar.vue'
 import AppTable from '../../components/AppTable.vue'
 import CopyText from '../../components/CopyText.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
-import { pentestApi, type UnifiedFinding, type FindingStat } from '../../api/pentest'
+import { pentestApi, type UnifiedFinding, type FindingStat, type UnifiedQuery } from '../../api/pentest'
 import { vulnApi, nucleiResultApi } from '../../api/poc'
 import { reportTemplateApi, findingShotApi } from '../../api/intel'
 import type { SelectOption, RowRecord } from '../../api/types'
-import { useAutoRefresh } from '../../composables/useAutoRefresh'
+import { createFindingFeed, type FindingFeedState } from '../../utils/findingFeed'
 
 const router = useRouter()
 const loading = ref(false)
@@ -276,7 +280,7 @@ const selectedKeys = ref<string[]>([])
 const stat = reactive<FindingStat>({ ai: { total: 0, verified: 0, leads: 0, by_severity: {}, by_type: {} }, poc: { total: 0 }, combined_total: 0, unit: '' })
 
 const query = reactive({
-  source: '' as '' | 'ai' | 'poc' | 'nuclei',
+  source: '' as '' | 'ai' | 'kernel' | 'group' | 'poc' | 'nuclei',
   keyword: '',
   min_severity: 'low' as string,   // 漏洞等级阈值:默认 low 及以上(隐藏 info 噪声);设 'info' 则显示全部
   dedup: '1' as '1' | '0',         // 显示:1=漏洞去重(默认,同漏洞点只留最新一条);0=全部漏洞(含重复)
@@ -289,8 +293,8 @@ const dateRange = ref<[string, string] | undefined>(undefined)   // 时间范围
 const sourceOptions = [
   { get label() { return translate('ui.m_9f357adb6100') }, value: '' },
   { get label() { return translate('ui.m_fd02482a8251') }, value: 'ai' },
-  { get label() { return translate('ui.m_9c3cdde19ad9') }, value: 'poc' },
-  { label: 'Nuclei', value: 'nuclei' }
+  { get label() { return translate('findingOrigin.kernel') }, value: 'kernel' },
+  { get label() { return translate('findingOrigin.group') }, value: 'group' }
 ]
 // 显示模式:漏洞去重(默认,同资产+同接口+同类型只留最新一条,隐藏重复) / 全部漏洞(含所有重复条目)
 const dedupOptions = [
@@ -320,42 +324,40 @@ function handleMeta(s?: string) { return HANDLE_META[s || ''] || HANDLE_META['']
 const columns = [
   { get title() { return translate('ui.m_a488e93d69cc') }, key: 'source', width: 90 },
   { get title() { return translate('ui.m_6320b4a8722a') }, key: 'verified', width: 90 },
-  { get title() { return translate('ui.m_cb1049ef7a06') }, key: 'name', ellipsis: true },
-  { get title() { return translate('ui.m_57060c88a36b') }, key: 'target', ellipsis: true },
+  { get title() { return translate('ui.m_cb1049ef7a06') }, key: 'name', width: 260, ellipsis: true },
+  { get title() { return translate('ui.m_57060c88a36b') }, key: 'target', width: 240, ellipsis: true },
   { get title() { return translate('ui.m_e54ebcd7ee6d') }, key: 'severity', width: 140 },
   { get title() { return translate('ui.m_2c43cd7db149') }, key: 'task_name', width: 150, ellipsis: true },
   { get title() { return translate('ui.m_80b19d68b149') }, key: 'unit', width: 140, ellipsis: true },
   { get title() { return translate('ui.m_e99a6717b691') }, key: 'handle_status', width: 110 },
   { get title() { return translate('ui.m_8b6ff498515b') }, dataIndex: 'save_date', width: 160 },
-  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 150 }
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 150, fixed: 'right' }
 ]
 
 const SRC_META: Record<string, { label: string; color: string }> = {
   ai: { get label() { return translate('ui.m_fd02482a8251') }, color: 'red' },
-  poc: { get label() { return translate('ui.m_9c3cdde19ad9') }, color: 'blue' },
-  nuclei: { label: 'Nuclei', color: 'green' }
+  kernel: { get label() { return translate('findingOrigin.kernel') }, color: 'blue' },
+  group: { get label() { return translate('findingOrigin.group') }, color:'purple' },
+  poc: { get label() { return translate('findingOrigin.kernel') }, color: 'blue' },
+  nuclei: { get label() { return translate('findingOrigin.kernel') }, color: 'blue' }
 }
 function srcMeta(s: string) { return SRC_META[s] || { label: s, color: 'default' } }
 // 来源标签：AI 渗透带上具体模式（AI 渗透·探测/保守/常规/红队）；poc/nuclei 不变
 function srcLabel(r: UnifiedFinding) {
-  const base = srcMeta(r.source).label
-  return r.source === 'ai' && r.mode_label ? `${base}·${r.mode_label}` : base
+  const category=r.origin_category || (r.source==='ai'?'ai':'kernel')
+  const base = srcMeta(category).label
+  return category === 'ai' && r.mode_label ? `${base}·${r.mode_label}` : base
 }
 const _MODE_CN: Record<string, string> = { detect: '探测', conservative: '保守', src: '常规', redteam: '红队' }
 function modeLabelCn(m: string) { return _MODE_CN[m] || m }
 function isSuspectMode(m: string) { return m === 'detect' || m === 'conservative' }
 function sevColor(s: string) {
-  // 问题19：none/空/unknown 归到 info 档（蓝色），别露无颜色的裸值
   const k = String(s || '').toLowerCase()
-  if (k === 'none' || k === 'unknown' || k === '') return 'blue'
+  if (k === 'none') return 'blue'
   return ({ critical: 'magenta', high: 'red', medium: 'orange', low: 'gold', info: 'blue' } as Record<string, string>)[k] || 'default'
 }
-// 问题19：severity 展示归一——CVSS 全零向量(C:N/I:N/A:N)base=0.0→规范定性 "none"，直接大写成 "NONE"
-// 难看且无意义（配置缺失类）。none/空/unknown 统一显示 "INFO"（信息级），与校准后语义一致。
 function sevLabel(s: unknown): string {
-  const k = String(s || '').toLowerCase()
-  if (k === 'none' || k === 'unknown' || k === '') return 'INFO'
-  return k.toUpperCase()
+  return severityLabel(s)
 }
 // 校准判定:AI 漏洞的原始 CVSS 等级与展示等级不同 → 发生了 triage 校准降级(信息型泄露等)
 function isCalibrated(r: UnifiedFinding) {
@@ -368,34 +370,90 @@ function cvssNote(r: UnifiedFinding) {
   return translate('ui.m_8360a471025b', { p0: (r.cvss_score) })
 }
 
-async function loadStat() {
-  try { Object.assign(stat, await pentestApi.findingStat(query.unit || undefined)) } catch { /* 忽略 */ }
+// Keep draft inputs independent from the query that the user actually submitted.
+function querySnapshot(): UnifiedQuery {
+  return { source: query.source || undefined, keyword: query.keyword || undefined,
+    min_severity: query.min_severity || 'low', dedup: query.dedup,
+    unit: query.unit || undefined, handle_status: query.handle_status,
+    date_from: dateRange.value?.[0] || undefined, date_to: dateRange.value?.[1] || undefined,
+    page: query.page, size: query.size }
 }
-async function loadList() {
-  loading.value = true
+let appliedQuery = querySnapshot(), generation = 0, disposed = false
+let dataController: AbortController | undefined
+const selectedRecords = new Map<string, UnifiedFinding>()
+watch(selectedKeys, keys => {
+  for (const row of rows.value) if (keys.includes(row._id)) selectedRecords.set(row._id, row)
+  for (const id of selectedRecords.keys()) if (!keys.includes(id)) selectedRecords.delete(id)
+}, { flush: 'sync' })
+
+async function fetchResults(quiet: boolean, feedSignal?: AbortSignal): Promise<boolean> {
+  const epoch = ++generation
+  dataController?.abort()
+  const controller = new AbortController(); dataController = controller
+  const abort = () => controller.abort()
+  feedSignal?.addEventListener('abort', abort, { once: true })
+  if (feedSignal?.aborted) controller.abort()
+  const deadline = window.setTimeout(abort, 12000)
+  const options = { signal: controller.signal, silent: quiet }
+  const params = { ...appliedQuery }
+  const detailId = detailOpen.value ? curFindingId.value : ''
+  const detailSource = String(cur.source || ''), detailVersion = detailGeneration
+  const watched: Record<string, string[]> = {}
+  for (const row of selectedRecords.values()) (watched[row.source] ||= []).push(row._id)
+  if (detailId && detailSource) (watched[detailSource] ||= []).push(detailId)
+  if (Object.keys(watched).length) params.watch = JSON.stringify(watched)
+  if (!quiet) loading.value = true
   try {
-    const res = await pentestApi.unifiedList({
-      source: query.source || undefined,
-      keyword: query.keyword || undefined,
-      // 漏洞等级阈值(含 'info'=显示全部)。显式传:后端缺省=low,"全部"须显式 info 才看全。
-      min_severity: query.min_severity || 'low',
-      // 显示模式:1=漏洞去重(默认,隐藏重复);0=全部漏洞(含重复条目)
-      dedup: query.dedup,
-      unit: query.unit || undefined,
-      handle_status: query.handle_status,
-      date_from: dateRange.value?.[0] || undefined,
-      date_to: dateRange.value?.[1] || undefined,
-      page: query.page, size: query.size
+    const [initial, stats] = await Promise.all([
+      pentestApi.unifiedList(params, options), pentestApi.findingStat(params.unit, options)
+    ])
+    let result = initial
+    const maxPage = Math.max(1, Math.ceil(result.total / (params.size || 20)))
+    if ((params.page || 1) > maxPage) {
+      params.page = maxPage
+      result = await pentestApi.unifiedList(params, options)
+    }
+    let detail: Record<string, unknown> | undefined
+    const detailPresent = !detailId || !result.present_ids || result.present_ids.includes(detailId)
+    if (detailId && detailPresent && detailOpen.value && detailVersion === detailGeneration)
+      detail = await pentestApi.unifiedDetail(detailSource, detailId, options)
+    if (disposed || epoch !== generation || controller.signal.aborted) return false
+    // Stable row keys and unchanged objects keep the current table/scroll intact.
+    const old = new Map(rows.value.map(row => [row._id, row]))
+    rows.value = result.items.map(row => {
+      const previous = old.get(row._id)
+      return previous && JSON.stringify(previous) === JSON.stringify(row) ? previous : row
     })
-    rows.value = res.items; total.value = res.total
-    selectedKeys.value = []
-  } catch (e) { message.error((e as Error).message || translate('ui.m_d1d044826a45')) } finally { loading.value = false }
+    total.value = result.total; Object.assign(stat, stats)
+    if (params.page !== appliedQuery.page) { appliedQuery.page = params.page; query.page = params.page || 1 }
+    if (result.present_ids) {
+      const watchedIds = new Set(Object.values(watched).flat())
+      selectedKeys.value = selectedKeys.value.filter(id => !watchedIds.has(id) || result.present_ids!.includes(id))
+    }
+    if (detailId && detailOpen.value && detailId === curFindingId.value && detailVersion === detailGeneration) {
+      detailMissing.value = !detailPresent
+      if (detail) {
+        const taskName = cur.task_name
+        for (const key of Object.keys(cur)) if (!(key in detail) && key !== 'task_name') delete cur[key]
+        Object.assign(cur, detail)
+        if (!cur.task_name && taskName) cur.task_name = taskName
+      }
+    }
+    return true
+  } catch (error) {
+    if (disposed || epoch !== generation || feedSignal?.aborted) return false
+    if (!quiet) message.error((error as Error).message || translate('ui.m_d1d044826a45'))
+    throw error
+  } finally {
+    window.clearTimeout(deadline); feedSignal?.removeEventListener('abort', abort)
+    if (epoch === generation) { loading.value = false; dataController = undefined }
+  }
 }
 async function batchDelete() {
   if (!selectedKeys.value.length) return
   // 按来源分组(unified 删除按 source 删对应集合)
   const bySrc: Record<string, string[]> = {}
-  for (const r of rows.value) {
+  for (const r of selectedRecords.values()) {
     if (selectedKeys.value.includes(r._id)) {
       (bySrc[r.source] = bySrc[r.source] || []).push(r._id)
     }
@@ -410,22 +468,27 @@ async function batchDelete() {
     loadAll()
   } catch (e) { message.error((e as Error).message || translate('ui.m_c228558cf257')) }
 }
-function loadAll() { loadStat(); loadList() }
-function reload() { query.page = 1; loadAll() }
+function loadAll() { appliedQuery = querySnapshot(); void fetchResults(false).catch(() => {}) }
+function reload() { query.page = 1; selectedKeys.value = []; loadAll() }
 function onReset() { query.keyword = ''; query.min_severity = 'low'; query.dedup = '1'; query.unit = ''; query.handle_status = undefined; dateRange.value = undefined; reload() }
-function onPage(page: number, size: number) { query.page = page; query.size = size; loadList() }
+function onPage(page: number, size: number) { query.page = page; query.size = size; selectedKeys.value = []; appliedQuery = { ...appliedQuery, page, size }; void fetchResults(false).catch(() => {}) }
 
 /* 详情抽屉:按来源拉完整记录 */
 const detailOpen = ref(false)
 const detailLoading = ref(false)
+const detailMissing = ref(false)
+let detailGeneration = 0
+watch(detailOpen, open => { if (!open) detailGeneration++ })
 const cur = reactive<Record<string, unknown>>({})
-const detailTitle = computed(() => translate('ui.m_6f626d5c7ffb', { p0: (srcMeta(String(cur.source || '')).label) }))
+const detailTitle = computed(() => translate('ui.m_6f626d5c7ffb', { p0: (srcMeta(String(cur.origin_category || cur.source || '')).label) }))
 // 详情里是否发生了 triage 校准(原始 CVSS 等级 ≠ 展示等级)
 const curCalibrated = computed(() =>
   cur.source === 'ai' && !!cur.cvss_severity &&
   String(cur.cvss_severity).toLowerCase() !== String(cur.severity || '').toLowerCase())
 
 async function showDetail(r: UnifiedFinding) {
+  const epoch = ++detailGeneration
+  detailMissing.value = false
   Object.keys(cur).forEach(k => delete cur[k])
   cur.source = r.source
   curFindingId.value = String(r._id)
@@ -434,10 +497,11 @@ async function showDetail(r: UnifiedFinding) {
   loadShots(String(r._id))
   try {
     const doc = await pentestApi.unifiedDetail(r.source, r._id)
+    if (disposed || epoch !== detailGeneration || !detailOpen.value) return
     Object.assign(cur, doc)
     // task_name 是列表层反查回填的(原始文档无此字段),详情接口拉不到 → 用列表行的值补上
     if (!cur.task_name && r.task_name) cur.task_name = r.task_name
-  } catch (e) { message.error((e as Error).message || translate('ui.m_19a7ca44a09a')) } finally { detailLoading.value = false }
+  } catch (e) { message.error((e as Error).message || translate('ui.m_19a7ca44a09a')) } finally { if (epoch === detailGeneration) { detailLoading.value = false; if (!disposed) feed.start() } }
 }
 
 /* 漏洞证据截图（按 finding_id 全局绑定）：上传后用模板生成本漏洞报告时自动嵌入证据/复现区。 */
@@ -589,7 +653,7 @@ async function genReport(r: UnifiedFinding, type: 'session' | 'task' | 'finding'
     const data = await reportTemplateApi.list({ page: 1, size: 200, scope: type })
     const ready = (data.items || []).filter((t: RowRecord) => t.status === 'ready')
     repTplOptions.value = ready.map((t: RowRecord) => ({ label: String(t.name), value: String(t._id) }))
-    const builtinId = type === 'task' ? 'builtin_task_v1' : type === 'finding' ? 'ncc_event_finding_v1' : 'builtin_session_v1'
+    const builtinId = type === 'task' ? 'builtin_task_v1' : type === 'finding' ? 'builtin_finding_v1' : 'builtin_session_v1'
     const builtin = ready.find((t: RowRecord) => t._id === builtinId)
     repTplId.value = builtin ? String(builtin._id) : (repTplOptions.value[0]?.value as string || '')
   } catch (e) { message.error((e as Error).message || translate('ui.m_ebf73320fa75')) }
@@ -629,45 +693,62 @@ async function removeOne(r: UnifiedFinding) {
     message.success(translate('ui.m_077a6d37719a')); loadAll()
   } catch (e) { message.error((e as Error).message || translate('ui.m_c228558cf257')) }
 }
-const auto = useAutoRefresh(loadAll, 30000)
-onMounted(loadAll)
-let revisionSeen=-1;let revisionBusy=false
-const revisionTimer=window.setInterval(async()=>{
-  if(document.hidden || revisionBusy)return
-  revisionBusy=true
-  try {
-    const value=await pentestApi.findingRevision()
-    if(revisionSeen>=0 && value.revision!==revisionSeen) {loadStat();if(!selectedKeys.value.length && !detailOpen.value)loadList()}
-    revisionSeen=value.revision
-  } catch {/* Existing manual refresh remains available. */}
-  finally {revisionBusy=false}
-},1000)
-onUnmounted(()=>window.clearInterval(revisionTimer))
+const liveState = ref<FindingFeedState>('live')
+const feed = createFindingFeed({
+  revision: async signal => {
+    const value = await pentestApi.findingRevision({ signal, silent: true })
+    return `${value.revision}:${value.stamp || ''}`
+  },
+  refresh: signal => fetchResults(true, signal),
+  state: state => { if (!disposed) liveState.value = state },
+})
+function resumeFeed() {
+  if (!navigator.onLine) liveState.value = 'reconnecting'
+  if (!document.hidden && navigator.onLine) feed.start(); else feed.pause()
+}
+onMounted(() => {
+  // The first successful revision/data pair is the baseline; no startup lost-update race.
+  loading.value = true
+  document.addEventListener('visibilitychange', resumeFeed)
+  window.addEventListener('online', resumeFeed); window.addEventListener('offline', resumeFeed)
+  resumeFeed()
+})
+onUnmounted(() => {
+  disposed = true; generation++; detailGeneration++; feed.pause(); dataController?.abort()
+  document.removeEventListener('visibilitychange', resumeFeed)
+  window.removeEventListener('online', resumeFeed); window.removeEventListener('offline', resumeFeed)
+})
+
 </script>
 
 <style scoped>
-.muted { color: #aaa; }
+.finding-live-state { font-size: 12px; color: var(--dt-success); white-space: nowrap; }
+.finding-live-state::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; }
+.finding-live-state.reconnecting { color: var(--dt-warning); }
+.vuln-stat-grid :deep(.ant-col) { display: flex; }
+.vuln-stat-grid :deep(.ant-card) { width: 100%; }
+.muted { color: var(--dt-muted); }
 .calibrated { color: #d46b08; border-bottom: 1px dashed #d46b08; cursor: help; }
-.ev { white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 12px; margin: 0; max-height: 360px; overflow: auto; }
+.ev { background:var(--dt-evidence-surface,#eef3fa);color:var(--dt-text);border:1px solid var(--dt-border);border-left:3px solid var(--dt-primary);border-radius:9px;padding:14px 16px;line-height:1.75;white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 12px; margin: 0; max-height: 360px; overflow: auto; }
 .ev-packet { margin-bottom: 14px; }
 .ev-pkt-head { margin-bottom: 4px; }
-.ev-label { font-size: 12px; color: #888; margin-bottom: 2px; }
+.ev-label { font-size: 12px; color: var(--dt-muted); margin-bottom: 2px; }
 .shot-thumb { position: relative; border: 1px solid #303030; border-radius: 4px; padding: 4px; }
 .shot-thumb img { width: 168px; height: 112px; object-fit: cover; border-radius: 2px; display: block; }
 .shot-del { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,.45); border-radius: 3px; padding: 0 6px; }
 
 /* 证据请求/响应包：日夜模式适配(v1.21.139 fix) */
 .burp-req {
-  background: #f6ffed;
+  background: #edf6f2;
   border: 1px solid #d9f7be;
-  color: #000;
+  color: var(--dt-text);
   padding: 6px;
   border-radius: 4px;
 }
 .burp-resp {
-  background: #f0f5ff;
+  background: #edf3fc;
   border: 1px solid #d6e4ff;
-  color: #000;
+  color: var(--dt-text);
   padding: 6px;
   border-radius: 4px;
 }

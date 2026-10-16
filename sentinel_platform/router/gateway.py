@@ -36,6 +36,10 @@ PUBLIC_METHOD_PREFIXES = (
 
 def is_public(path: str, method: str = "") -> bool:
     """该路径是否豁免鉴权。method 传入时额外匹配"仅某方法公开"的路径。"""
+    # These two transports perform their own compulsory credential checks. Management
+    # paths never inherit the transport exemption, including prefix lookalikes.
+    if path in ("/api/control_sync/mcp", "/api/control_sync/watchtower_operations", "/api/control_sync/watchtower_request") or path.startswith(("/api/control_sync/peer/", "/api/collaboration/peer/")):
+        return True
     if any(path.startswith(p) for p in PUBLIC_PREFIXES):
         return True
     m = (method or "").upper()
@@ -195,9 +199,12 @@ def install_gateway(app: Any) -> None:
             resp.status_code = CODE_ACTIVATION_REQUIRED
             return resp
         if not auth_enabled():
-            return None
+            return _sync_admission(path)
         token = request.headers.get("Token", "") or request.headers.get("token", "")
-        user = verify_token(token)
+        # Only the authenticated control adapter can construct this WSGI dictionary;
+        # external HTTP headers cannot inject an object into the server environ.
+        delegated = request.environ.get("watchtower.control_delegate")
+        user = delegated if isinstance(delegated, dict) and delegated.get("via") == "control_key" else verify_token(token)
         if not user:
             resp = jsonify(envelope(code=CODE_UNAUTHORIZED))
             resp.status_code = CODE_UNAUTHORIZED
@@ -208,10 +215,45 @@ def install_gateway(app: Any) -> None:
             resp = jsonify(envelope(code=CODE_FORBIDDEN, message="无权限: {}".format(reason)))
             resp.status_code = CODE_FORBIDDEN
             return resp
+        return _sync_admission(path)
+
+    def _sync_admission(path):
+        prefixes = ("/api/task", "/api/pentest", "/api/intel", "/api/policy", "/api/ai_config", "/api/api_keys", "/api/proxy",
+                    "/api/domain", "/api/ip", "/api/site", "/api/url", "/api/cert", "/api/service", "/api/fileleak", "/api/wih",
+                    "/api/asset_", "/api/fingerprint", "/api/vuln", "/api/nuclei_result", "/api/github_", "/api/scheduler")
+        if any(path.startswith(prefix) for prefix in prefixes):
+            service = get_registry().get("control_sync_service")
+            if service:
+                try:
+                    g._sync_lease_service = service.snapshots
+                    g._sync_lease = service.snapshots.admission()
+                except Exception:
+                    return jsonify(envelope(code=423, message="同步维护中，请稍后再试 / Sync maintenance in progress")), 423
         return None
 
     @app.after_request
     def _access_log(resp):
+        lease_service = getattr(g, "_sync_lease_service", None)
+        if lease_service:
+            try:
+                lease_service.release(getattr(g, "_sync_lease", None))
+            except Exception:
+                pass
+        # Normalize only the view DTO, including responses from the native frozen
+        # update adapter. Signed release descriptors and chain order are untouched.
+        if request.method == "GET" and request.path == "/api/about/versions" and resp.is_json:
+            from sentinel_platform.core.update_policy import key as version_key
+            body = resp.get_json()
+            data = body.get("data") if isinstance(body, dict) else None
+            if isinstance(body, dict) and body.get("code") == 200 and isinstance(data, dict) and isinstance(data.get("versions"), list):
+                def history_key(row):
+                    try:
+                        return version_key(row.get("version", ""))
+                    except (ValueError, TypeError, AttributeError):
+                        return (0, 0, 0, 0, 0)
+                data["versions"] = sorted(data["versions"], key=history_key, reverse=True)
+                import json
+                resp.set_data(json.dumps(body, ensure_ascii=False, separators=(",", ":")))
         # 闭合交接待办③：access_log 叶子经字符串键 "audit_service" 提供 record/should_record。
         # 审计失败绝不阻断响应（日志系统不反噬业务）。审计服务未建时静默跳过（缺失降级）。
         try:

@@ -14,12 +14,20 @@ export function useUnsavedGuard(serialize: () => string, opts?: { content?: stri
 
   // 载入 / 保存成功后调用，把当前状态设为「已保存基线」，脏标记归零
   function markSaved() { baseline.value = serialize() }
+  let confirmedNavigation = false
+  // An explicit "go configure" confirmation is already the leave decision.
+  // Scope this exception to that one awaited navigation, including failures.
+  async function navigateConfirmed(navigate: () => Promise<unknown>) {
+    confirmedNavigation = true
+    try { return await navigate() } finally { confirmedNavigation = false }
+  }
 
   function onBeforeUnload(e: BeforeUnloadEvent) {
     if (dirty.value) { e.preventDefault(); e.returnValue = '' }
   }
 
   onBeforeRouteLeave((_to, _from, next) => {
+    if (confirmedNavigation) return next()
     if (!dirty.value) return next()
     Modal.confirm({
       get title() { return translate('ui.m_c2277872cdce') },
@@ -33,5 +41,5 @@ export function useUnsavedGuard(serialize: () => string, opts?: { content?: stri
   onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
   onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
-  return { dirty, markSaved }
+  return { dirty, markSaved, navigateConfirmed }
 }

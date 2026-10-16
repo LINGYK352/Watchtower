@@ -9,7 +9,7 @@
 
         <a-divider orientation="left">{{ translate('ui.m_2c6b55fdab6c') }}</a-divider>
         <a-form-item :label="translate('ui.m_045de1543346')">
-          <a-radio-group v-model:value="cfg.collect_mode" button-style="solid" size="small" class="collect-mode-group">
+          <a-radio-group v-model:value="cfg.collect_mode" button-style="solid" size="small" class="collect-mode-group" data-guide="policy-collect">
             <a-radio-button value="single">{{ translate('ui.m_eebe96e369fc') }}</a-radio-button>
             <a-radio-button value="multi_brute">{{ translate('ui.m_986831d241ec') }}</a-radio-button>
           </a-radio-group>
@@ -93,7 +93,7 @@
         <a-space wrap>
           <a-checkbox v-model:checked="cfg.file_leak">{{ translate('ui.m_ddca902e3201') }}</a-checkbox>
           <a-checkbox v-model:checked="cfg.npoc_service_detection">{{ translate('ui.m_cc7415825f0d') }}</a-checkbox>
-          <a-checkbox v-model:checked="cfg.auto_pentest" class="ai-pentest-choice" :class="{ 'is-selected': cfg.auto_pentest }">{{ translate('ui.m_8607b3118600') }}</a-checkbox>
+          <a-checkbox v-model:checked="cfg.auto_pentest" class="ai-pentest-choice" data-guide="policy-auto-ai" :class="{ 'is-selected': cfg.auto_pentest }">{{ translate('ui.m_8607b3118600') }}</a-checkbox>
         </a-space>
         <a-collapse v-if="cfg.file_leak" ghost style="margin-top:8px">
           <a-collapse-panel key="fileleak" header="自定义文件泄露字典（可选，留空用内置默认）">
@@ -117,7 +117,7 @@
         <div v-if="cfg.auto_pentest" style="margin-top:8px;color:#888;font-size:12px">{{ translate('ui.m_905c7468d710') }}</div>
         <div v-if="cfg.auto_pentest" style="margin-top:10px">
           <span style="margin-right:8px">{{ translate('ui.m_e9a48548c635') }}</span>
-          <a-radio-group v-model:value="cfg.pentest_mode" button-style="solid" size="small">
+          <a-radio-group :value="cfg.pentest_mode" data-guide="policy-mode" @change="choosePentestMode($event.target.value)" button-style="solid" size="small">
             <a-radio-button v-for="m in PENTEST_MODES" :key="m.value" :value="m.value">{{ m.label }}</a-radio-button>
           </a-radio-group>
           <div style="margin-top:6px;color:#d46b08;font-size:12px" v-if="currentModeWarn">⚠ {{ currentModeWarn }}</div>
@@ -148,10 +148,11 @@
           </div>
           <div style="margin-top:10px">
             <span style="margin-right:8px">{{ translate('ui.m_08da50eac159') }}</span>
-            <a-radio-group v-model:value="cfg.scope_drift_level" button-style="solid" size="small">
+            <a-radio-group v-model:value="cfg.scope_drift_level" data-guide="policy-drift" button-style="solid" size="small">
               <a-radio-button :value="1">{{ translate('ui.m_111a0abb2051') }}</a-radio-button>
               <a-radio-button :value="2">{{ translate('ui.m_dab4ad500f41') }}</a-radio-button>
               <a-radio-button :value="3">{{ translate('ui.m_51f190b423bb') }}</a-radio-button>
+              <a-radio-button :value="4">{{ translate('policy.scopeUnlimited') }}</a-radio-button>
             </a-radio-group>
             <div style="margin-top:6px;color:#888;font-size:12px">{{ translate('ui.m_16910f648da7') }}</div>
           </div>
@@ -193,13 +194,14 @@
 
         <a-form-item style="margin-top: 24px">
           <a-space>
-            <a-button type="primary" :loading="saving" @click="save">{{ translate('ui.m_a3030bf8f16d') }}</a-button>
+            <a-button type="primary" :loading="saving" @click="save" data-guide="policy-save">{{ translate('ui.m_a3030bf8f16d') }}</a-button>
             <a-button @click="router.push('/policy')">{{ translate('ui.m_572cf45ba436') }}</a-button>
             <span v-if="dirty" style="color:#d48806;font-size:12px;font-weight:600">{{ translate('ui.m_e08bdc3722e2') }}</span>
           </a-space>
         </a-form-item>
       </a-form>
     </a-card>
+  <RedteamNotice :open="redteamNoticeOpen" @confirm="confirmRedteam" @cancel="redteamNoticeOpen=false;saveAfterNotice=false" />
   </PageContainer>
 </template>
 
@@ -210,6 +212,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
+import RedteamNotice from '../../components/RedteamNotice.vue'
 import { policyApi, defaultPolicyConfig, type PolicyConfig } from '../../api/policy'
 import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 import { PENTEST_MODES } from '../../api/pentest'
@@ -231,6 +234,9 @@ const saving = ref(false)
 const name = ref('')
 const desc = ref('')
 const cfg = reactive<PolicyConfig>(defaultPolicyConfig())
+const redteamNoticeOpen=ref(false), saveAfterNotice=ref(false)
+function choosePentestMode(value:string){if(value==='redteam' && cfg.pentest_mode!=='redteam'){redteamNoticeOpen.value=true;return}cfg.pentest_mode=value;if(value!=='redteam')cfg.redteam_notice_acknowledged=false}
+function confirmRedteam(){cfg.pentest_mode='redteam';cfg.redteam_notice_acknowledged=true;redteamNoticeOpen.value=false;if(saveAfterNotice.value){saveAfterNotice.value=false;void save()}}
 const currentModeWarn = computed(() => PENTEST_MODES.find(m => m.value === cfg.pentest_mode)?.warn)
 
 // #3：单会话上下文上限 UI 已移到「新建任务」。此处不再提供三态控件；cfg.max_context_tokens 仍随
@@ -279,7 +285,7 @@ const pocKeys = ref<string[]>([])
 const bruteKeys = ref<string[]>([])
 
 // 未保存提示（问题4）：策略编辑改了没点保存就切走会丢失。序列化覆盖名称/描述/配置/插件选择。
-const { dirty, markSaved } = useUnsavedGuard(
+const { dirty, markSaved, navigateConfirmed } = useUnsavedGuard(
   () => JSON.stringify({ name: name.value, desc: desc.value, cfg, pocKeys: pocKeys.value, bruteKeys: bruteKeys.value }),
   { get content() { return translate('ui.m_2c5966258581') } })
 function filterPlugin(input: string, option: TransferItem) {
@@ -351,7 +357,7 @@ async function loadOne() {
       cfg.collect_mode = ['single', 'multi_brute', 'multi_passive'].includes(String(cfg.collect_mode)) ? cfg.collect_mode : 'multi_brute'
       // 去重/范围偏移级别:旧策略无此字段 → 回落默认 2;情报开关无字段 → 默认启用
       cfg.dedup_level = [1, 2, 3].includes(Number(cfg.dedup_level)) ? Number(cfg.dedup_level) : 2
-      cfg.scope_drift_level = [1, 2, 3].includes(Number(cfg.scope_drift_level)) ? Number(cfg.scope_drift_level) : 2
+      cfg.scope_drift_level = [1, 2, 3, 4].includes(Number(cfg.scope_drift_level)) ? Number(cfg.scope_drift_level) : 2
       cfg.intel_enabled = cfg.intel_enabled !== false
       // 从已有 poc_config/brute_config 还原已启用的插件
       pocKeys.value = (cfg.poc_config || []).filter(p => p.enable !== false).map(p => p.plugin_name)
@@ -365,6 +371,7 @@ async function loadOne() {
   markSaved()   // 载入 + 各字段迁移落定后设为基线，避免迁移写入被误判为「未保存修改」
 }
 async function save() {
+  if(cfg.pentest_mode==='redteam' && !cfg.redteam_notice_acknowledged){saveAfterNotice.value=true;redteamNoticeOpen.value=true;return}
   if (!name.value) return message.warning(translate('ui.m_083703c7d853'))
   // 启用 AI 渗透需有 AI 配置
   if (cfg.auto_pentest && setupStatus.value && !setupStatus.value.ai_configured) {
@@ -373,7 +380,7 @@ async function save() {
       get content() { return translate('ui.m_3e37535190af') },
       get okText() { return translate('ui.m_a34d0b8031af') },
       get cancelText() { return translate('ui.m_97fb4813eb17') },
-      onOk: () => router.push('/ai-config'),
+      onOk: () => navigateConfirmed(() => router.push('/ai-config')),
     })
     return
   }
@@ -384,7 +391,7 @@ async function save() {
       get content() { return translate('ui.m_b9c95d4c1e69') },
       get okText() { return translate('ui.m_a34d0b8031af') },
       get cancelText() { return translate('ui.m_97fb4813eb17') },
-      onOk: () => router.push('/api-keys'),
+      onOk: () => navigateConfirmed(() => router.push('/api-keys')),
     })
     return
   }
@@ -430,8 +437,9 @@ onMounted(() => {
 .source-ready { color: #52c41a; }
 .source-missing { color: #999; }
 .source-empty { margin-top: 6px; color: #d46b08; font-size: 12px; }
-.ai-pentest-choice { padding: 6px 10px; border: 1px solid transparent; border-radius: 6px; }
-.ai-pentest-choice.is-selected { background: rgba(250,173,20,.18); border-color: #faad14; color: #d48806; }
+.ai-pentest-choice { padding: 8px 12px; border: 1px solid #d5a12c; border-radius: 8px; background: rgba(250,173,20,.14); color: var(--dt-warning); font-weight: 600; }
+.ai-pentest-choice :deep(.ant-checkbox-inner) { border-color: #d5a12c; }
+.ai-pentest-choice.is-selected { background: rgba(250,173,20,.22); border-color: #d5a12c; }
 .ai-pentest-choice.is-selected :deep(.ant-checkbox-inner) { background-color: #faad14; border-color: #faad14; }
 .ai-pentest-choice.is-selected :deep(.ant-checkbox-inner::after) { border-color: #262626; }
 @media (max-width: 900px) {

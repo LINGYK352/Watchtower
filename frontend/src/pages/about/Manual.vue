@@ -2,24 +2,27 @@
   <PageContainer :title="translate('ui.m_396c685466aa')" kicker="Manual" :description="translate('ui.m_0e788d30ca81')">
     <div class="manual-wrap">
       <!-- 左侧分类导航 -->
-      <div class="manual-nav">
+      <nav class="manual-nav" :aria-label="labels.directory" data-testid="manual-directory">
         <a-input v-model:value="keyword" :placeholder="translate('ui.m_9d61392dc653')" allow-clear size="small" style="margin-bottom:10px">
           <template #prefix><SearchOutlined /></template>
         </a-input>
-        <div v-for="sec in filteredSections" :key="sec.key"
-          class="nav-item" :class="{ active: sec.key === activeKey }" @click="go(sec.key)">
-          <component :is="sec.icon" class="nav-icon" />
-          <span>{{ sec.title }}</span>
+        <div v-for="group in filteredGroups" :key="group.key" class="manual-group">
+          <button class="nav-parent" :aria-expanded="isOpen(group.key)" :aria-controls="'manual-group-'+group.key" :data-manual-group="group.key" @click="toggleGroup(group.key)"><span aria-hidden="true">{{ isOpen(group.key)?'▾':'▸' }}</span>{{ group.title }}<small>{{ group.children.length }}</small></button>
+          <div v-show="isOpen(group.key)" :id="'manual-group-'+group.key" class="nav-leaves">
+            <button v-for="sec in group.children" :key="sec.key" class="nav-item" :class="{active:sec.key===activeKey}" :aria-current="sec.key===activeKey?'page':undefined" :data-manual-leaf="sec.key" @click="go(sec.key)">{{ sec.title }}</button>
+          </div>
         </div>
-        <a-empty v-if="!filteredSections.length" :image="false" :description="translate('ui.m_7a54f3fc4716')" />
-      </div>
+        <button v-if="!keyword||sections.find(s=>s.key==='topic:verse')?.title.toLowerCase().includes(keyword.toLowerCase())" class="nav-item verse-leaf" :class="{active:activeKey==='topic:verse'}" data-manual-leaf="topic:verse" @click="go('topic:verse')">{{ sections.find(s=>s.key==='topic:verse')?.title }}</button>
+        <a-empty v-if="!filteredGroups.length" :image="false" :description="translate('ui.m_7a54f3fc4716')" />
+      </nav>
 
       <!-- 右侧正文 -->
-      <a-card class="manual-body" :bordered="false">
+      <a-card class="manual-body" :bordered="false" data-testid="manual-body">
         <template v-if="active">
           <h2 class="doc-h1"><component :is="active.icon" /> {{ active.title }}</h2>
+          <router-link v-if="active.path && active.key!=='manual'" :to="active.path" class="manual-open" data-testid="manual-open-page">{{ labels.open }} →</router-link>
           <!-- 免责声明章节：显示服务端签署状态徽标（已签署=淡绿） -->
-          <a-tag v-if="activeKey === 'disclaimer' && disc.accepted" color="green" class="disc-signed-tag">
+          <a-tag v-if="activeKey === 'topic:disclaimer' && disc.accepted" color="green" class="disc-signed-tag">
             <CheckCircleOutlined /> {{ translate('ui.m_51ae950c5f10') }}<template v-if="disc.accepted_at"> · {{ disc.accepted_at }}</template>
           </a-tag>
           <p class="doc-lead">{{ active.lead }}</p>
@@ -57,30 +60,36 @@
 </template>
 
 <script setup lang="ts">
-import { t as translate } from '../../i18n'
+import { t as translate, appLocale } from '../../i18n'
+import PageContainer from '../../layouts/PageContainer.vue'
 
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { menuGroups } from '../../router'
+import guideCatalog from '../../help/pageGuides.json'
+import manualZh from '../../locales/manual/zh-CN.json'
+import manualEn from '../../locales/manual/en-US.json'
 import {
   SearchOutlined, BulbOutlined, WarningOutlined, RocketOutlined, RadarChartOutlined,
   RobotOutlined, BugOutlined, GlobalOutlined, SafetyOutlined, CloudSyncOutlined, QuestionCircleOutlined,
   ExclamationCircleOutlined, CheckCircleOutlined, ReadOutlined,
 } from '@ant-design/icons-vue'
 
-import { DISCLAIMER_SECTIONS } from '../../config/disclaimer'
+import { DISCLAIMER_SECTIONS, DISCLAIMER_VERSION } from '../../config/disclaimer'
 import { getDisclaimerStatus } from '../../api/meta'
 
 // 免责声明签署状态（服务端持久化）——章节顶部显示已签署淡绿徽标。
 const disc = reactive({ accepted: false, accepted_version: '', accepted_at: '' })
 onMounted(async () => {
-  try { Object.assign(disc, await getDisclaimerStatus()) } catch { /* ignore */ }
+  try { const status=await getDisclaimerStatus();Object.assign(disc,status,{accepted:status.accepted && status.accepted_version===DISCLAIMER_VERSION && status.status!=='unavailable'}) } catch { /* unknown is not accepted */ }
 })
 
 interface Verse { cipai?: string; title?: string; stanzas: string[][]; author?: string }
 interface Block { h?: string; p?: string; list?: string[]; steps?: string[]; tip?: string; warn?: string; verse?: Verse }
-interface Section { key: string; title: string; icon: any; lead: string; blocks: Block[] }
+interface Section { key: string; title: string; icon: any; lead: string; blocks: Block[]; path?:string }
 
 // 面向用户的说明（依据 云端/docs 提炼，非内部架构）。纯内置，离线可用。
-const sections = computed<Section[]>(() => [
+const topics = computed<Section[]>(() => [
   {
     key: 'disclaimer', get title() { return translate('ui.m_280af617c87f') }, icon: ExclamationCircleOutlined,
     get lead() { return translate('ui.m_28d2a62baffa') },
@@ -258,17 +267,30 @@ const sections = computed<Section[]>(() => [
   },
 ])
 
-const activeKey = ref('quickstart')
+const labels=computed(()=>appLocale.value==='en-US'?{directory:'Manual directory',topics:'Basics and reference',steps:'Step-by-step workflow',result:'Results and troubleshooting',open:'Open page'}:{directory:'手册目录',topics:'基础与专题',steps:'完整操作步骤',result:'结果判读与异常处理',open:'打开对应页面'})
+const extraGuides:Record<string,string[]>={collaboration:['collaborationWorkspace'],policy:['policyEdit'],assetGroups:['assetGroupDetail']}
+const sections=computed<Section[]>(()=>menuGroups.flatMap(group=>group.children).map<Section>(item=>{
+ const catalog=guideCatalog as Record<string,{key:string}[]>,workflow=(appLocale.value==='en-US'?manualEn:manualZh) as Record<string,{steps:string[];check:string}>
+ const entries=[item.key,...(extraGuides[item.key]||[])].flatMap(key=>(catalog[key]||[]).map(step=>({h:translate('guides.'+step.key+'.title'),p:translate('guides.'+step.key+'.body')})))
+ const own=workflow[item.key]
+ return {key:item.key,title:translate('navigation.'+item.key),icon:ReadOutlined,path:item.path,lead:entries[0]?.p||translate('navigation.'+item.key),blocks:[...entries.slice(1),...(own?[{h:labels.value.steps,steps:own.steps},{h:labels.value.result,p:own.check}]:[])]}
+}).concat(topics.value.map(topic=>({...topic,key:'topic:'+topic.key}))))
+const route=useRoute(),router=useRouter()
+const activeKey = ref('dashboard')
 const keyword = ref('')
 const active = computed(() => sections.value.find(s => s.key === activeKey.value) || sections.value[0])
-const filteredSections = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return sections.value
-  return sections.value.filter(s =>
-    s.title.toLowerCase().includes(kw) || s.lead.toLowerCase().includes(kw) ||
-    JSON.stringify(s.blocks).toLowerCase().includes(kw))
+const opened=reactive(new Set(['workspace']))
+const groups=computed(()=>[...menuGroups.map(group=>({key:group.key,title:translate('navigation.'+group.key),children:group.children.map(item=>sections.value.find(s=>s.key===item.key)!)})),{key:'reference',title:labels.value.topics,children:sections.value.filter(s=>s.key.startsWith('topic:')&&s.key!=='topic:verse')}])
+const filteredGroups=computed(()=>{
+ const kw=keyword.value.trim().toLocaleLowerCase()
+ return groups.value.map(group=>({...group,children:group.children.filter(s=>!kw||group.title.toLocaleLowerCase().includes(kw)||[s.title,s.lead,JSON.stringify(s.blocks)].some(text=>text.toLocaleLowerCase().includes(kw)))})).filter(group=>group.children.length)
 })
-function go(k: string) { activeKey.value = k }
+function isOpen(key:string){return opened.has(key)}
+watch(keyword,()=>{if(keyword.value.trim())for(const group of filteredGroups.value)opened.add(group.key)})
+function toggleGroup(key:string){if(opened.has(key))opened.delete(key);else opened.add(key)}
+function reveal(key:string){for(const group of groups.value)if(group.children.some(s=>s.key===key))opened.add(group.key)}
+watch(()=>route.query.chapter,value=>{const key=typeof value==='string'&&sections.value.some(s=>s.key===value)?value:'dashboard';activeKey.value=key;reveal(key)},{immediate:true})
+async function go(k:string){activeKey.value=k;reveal(k);await router.replace({query:{...route.query,chapter:k}});await nextTick();document.querySelector('[data-testid=manual-body]')?.scrollIntoView({block:'start',behavior:'auto'})}
 function renderInline(text: string): string {
   // 极简内联渲染：`code` → <code>，「」保持原样，转义 < >
   const esc = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -278,7 +300,8 @@ function renderInline(text: string): string {
 
 <style scoped>
 .manual-wrap { display: flex; gap: 16px; align-items: flex-start; }
-.manual-nav { width: 200px; flex: none; position: sticky; top: 12px; }
+.manual-nav { width: 238px; flex: none; position: sticky; top: 12px; max-height:calc(100dvh - 180px); overflow:auto; padding-right:4px; }
+.manual-group{margin:3px 0}.nav-parent{display:flex;width:100%;align-items:center;gap:8px;border:0;background:transparent;color:var(--dt-text);font:600 13px/1.5 var(--dt-font);text-align:left;cursor:pointer;padding:10px 8px}.nav-parent small{margin-left:auto;color:var(--dt-muted);font-weight:400}.nav-leaves{padding-left:12px}.manual-nav button{width:100%;border:0;text-align:left;font-family:inherit}.nav-item{background:transparent}.manual-open{display:inline-block;margin:6px 0 12px;font-size:13px}.manual-nav button:focus-visible{outline:2px solid var(--dt-primary);outline-offset:-2px}
 .nav-item { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: var(--dt-muted); font-size: 14px; transition: all .15s; }
 .nav-item:hover { background: var(--dt-hover, #f0f3f8); color: var(--dt-text, #1f2328); }
 .nav-item.active { background: var(--dt-primary, #2f6bff); color: #fff; }
@@ -324,5 +347,18 @@ function renderInline(text: string): string {
   border-color: rgba(212,175,120,.3); box-shadow: 0 6px 24px rgba(0,0,0,.3); }
 [data-theme="dark"] .verse-title, [data-theme="dark"] .verse-line { color: #e7dcc6; }
 [data-theme="dark"] .verse-author { color: #b8a988; }
+/* The old fixed 200px navigation left only 81px for English paragraphs. */
+.manual-body { overflow-wrap:anywhere; }
+.nav-item > span { min-width:0; overflow-wrap:anywhere; }
+.nav-icon { flex:none; }
+.nav-item:focus-visible { outline:2px solid var(--dt-primary); outline-offset:2px; }
+@media(max-width:900px) {
+ .manual-wrap { flex-direction:column; }
+ .manual-nav { width:100%; position:static; max-height:300px; padding:8px; border:1px solid var(--dt-border);border-radius:8px; }
+ .manual-nav > .ant-input-affix-wrapper { grid-column:1/-1; }
+ .nav-item { font-size:13px; line-height:1.5; }
+ .manual-body { width:100%; }
+ .doc-verse { padding:28px 20px; }
+}
 </style>
 

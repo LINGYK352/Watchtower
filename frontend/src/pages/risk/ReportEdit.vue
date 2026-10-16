@@ -1,7 +1,7 @@
 <template>
   <PageContainer :title="translate('ui.m_8468b4359dd8')" kicker="Report Editor"
     :description="translate('ui.m_a5e95723de15')">
-    <template #extra>
+    <template v-if="activeTab!=='template'" #extra>
       <a-button @click="reload">{{ translate('ui.m_aee887434131') }}</a-button>
     </template>
 
@@ -12,14 +12,13 @@
           <a-alert type="info" show-icon style="margin-bottom:12px"
             :message="translate('ui.m_06874e957bfd')" />
           <a-space style="margin-bottom:12px" wrap>
-            <a-input v-model:value="genTaskId" :placeholder="translate('ui.m_0c8e5053c6d6')" style="width:320px" allow-clear />
-            <a-button type="primary" :loading="generating" @click="doGenerateTask">{{ translate('ui.m_97f759e869a5') }}</a-button>
+            <a-button type="primary" data-testid="generate-task-report" @click="openReportGenerator('task')">{{ translate('reportGenerate.task') }}</a-button>
             <a-button :disabled="!taskSelected.length" :loading="exporting" @click="batchExport('task')">{{ translate('ui.m_d2fcdde81f06') }}{{ taskSelected.length ? `(${taskSelected.length})` : '' }}</a-button>
             <a-popconfirm :title="translate('ui.m_a052d5160ce5', { p0: (taskSelected.length) })" :disabled="!taskSelected.length" @confirm="batchDelete('task')">
               <a-button danger :disabled="!taskSelected.length">{{ translate('ui.m_ddae7a0fc554') }}{{ taskSelected.length ? `(${taskSelected.length})` : '' }}</a-button>
             </a-popconfirm>
           </a-space>
-          <AppTable :columns="taskColumns" :data="taskReports.items" :loading="loading" selectable
+          <AppTable :columns="taskColumns" :data="taskReports.items" :loading="loading" selectable :scroll="{x:1250}"
             v-model:selectedRowKeys="taskSelected"
             :page="taskReports.page" :size="taskReports.size" :total="taskReports.total"
             @change="(p:number, s:number) => loadTaskReports(p, s)">
@@ -48,14 +47,13 @@
           <a-alert type="info" show-icon style="margin-bottom:12px"
             :message="translate('ui.m_facc746d874a')" />
           <a-space style="margin-bottom:12px" wrap>
-            <a-input v-model:value="genSessionId" :placeholder="translate('ui.m_7f6967149814')" style="width:320px" allow-clear />
-            <a-button type="primary" :loading="generating" @click="doGenerateSession">{{ translate('ui.m_e5fc1fa0f824') }}</a-button>
+            <a-button type="primary" data-testid="generate-session-report" @click="openReportGenerator('session')">{{ translate('reportGenerate.session') }}</a-button>
             <a-button :disabled="!sessionSelected.length" :loading="exporting" @click="batchExport('session')">{{ translate('ui.m_d2fcdde81f06') }}{{ sessionSelected.length ? `(${sessionSelected.length})` : '' }}</a-button>
             <a-popconfirm :title="translate('ui.m_a052d5160ce5', { p0: (sessionSelected.length) })" :disabled="!sessionSelected.length" @confirm="batchDelete('session')">
               <a-button danger :disabled="!sessionSelected.length">{{ translate('ui.m_ddae7a0fc554') }}{{ sessionSelected.length ? `(${sessionSelected.length})` : '' }}</a-button>
             </a-popconfirm>
           </a-space>
-          <AppTable :columns="sessionColumns" :data="sessionReports.items" :loading="loading" selectable
+          <AppTable :columns="sessionColumns" :data="sessionReports.items" :loading="loading" selectable :scroll="{x:1250}"
             v-model:selectedRowKeys="sessionSelected"
             :page="sessionReports.page" :size="sessionReports.size" :total="sessionReports.total"
             @change="(p:number, s:number) => loadSessionReports(p, s)">
@@ -84,14 +82,13 @@
           <a-alert type="info" show-icon style="margin-bottom:12px"
             :message="translate('ui.m_acca6c3741b7')" />
           <a-space style="margin-bottom:12px" wrap>
-            <a-input v-model:value="genFindingId" :placeholder="translate('ui.m_3561bca2fc5a')" style="width:320px" allow-clear />
-            <a-button type="primary" :loading="generating" @click="doGenerateFinding">{{ translate('ui.m_414c5dfc0cfb') }}</a-button>
+            <a-button type="primary" data-testid="generate-finding-report" @click="openReportGenerator('finding')">{{ translate('reportGenerate.finding') }}</a-button>
             <a-button :disabled="!findingSelected.length" :loading="exporting" @click="batchExport('finding')">{{ translate('ui.m_d2fcdde81f06') }}{{ findingSelected.length ? `(${findingSelected.length})` : '' }}</a-button>
             <a-popconfirm :title="translate('ui.m_a052d5160ce5', { p0: (findingSelected.length) })" :disabled="!findingSelected.length" @confirm="batchDelete('finding')">
               <a-button danger :disabled="!findingSelected.length">{{ translate('ui.m_ddae7a0fc554') }}{{ findingSelected.length ? `(${findingSelected.length})` : '' }}</a-button>
             </a-popconfirm>
           </a-space>
-          <AppTable :columns="findingColumns" :data="findingReports.items" :loading="loading" selectable
+          <AppTable :columns="findingColumns" :data="findingReports.items" :loading="loading" selectable :scroll="{x:1250}"
             v-model:selectedRowKeys="findingSelected"
             :page="findingReports.page" :size="findingReports.size" :total="findingReports.total"
             @change="(p:number, s:number) => loadFindingReports(p, s)">
@@ -115,23 +112,17 @@
           </AppTable>
         </a-tab-pane>
 
-        <!-- 模板学习 -->
-        <a-tab-pane key="template" tab="模板学习">
+        <!-- 模板编辑：人工确定性打标与可选AI学习共存 -->
+        <a-tab-pane key="template" :tab="translate('manualTemplate.tab')">
+          <div class="template-toolbar">
+            <a-button type="primary" data-testid="report-template-create" @click="openWord()">{{ translate('wordTemplate.create') }}</a-button>
+            </div>
+          <p class="manual-note">{{ translate('manualTemplate.intro') }}</p>
           <a-alert type="info" show-icon style="margin-bottom:12px"
             :message="translate('ui.m_74bd5384e2c9')" />
-          <a-space style="margin-bottom:8px" wrap>
-            <a-input v-model:value="tplName" :placeholder="translate('ui.m_fc05c697a9f1')" style="width:240px" allow-clear />
-            <a-select v-model:value="tplProviderId" :options="providerOptions" allow-clear
-              style="width:260px" :placeholder="translate('ui.m_36000c39b09d', { p0: (globalDefaultName ? '（' + globalDefaultName + '）' : '') })" />
-            <a-checkbox v-model:checked="tplNeedReview">{{ translate('ui.m_d4dfce346931') }}</a-checkbox>
-            <a-upload :before-upload="onTplUpload" :show-upload-list="false" accept=".docx">
-              <a-button type="primary" :loading="tplUploading">{{ translate('ui.m_eee67104eaf4') }}</a-button>
-            </a-upload>
-            <a-button @click="loadTemplates">{{ translate('ui.m_aee887434131') }}</a-button>
-          </a-space>
           <a-alert type="warning" show-icon style="margin-bottom:12px"
             :message="translate('ui.m_ce5b82898717')" />
-          <AppTable :columns="tplColumns" :data="templates.items" :loading="tplLoading"
+          <AppTable :columns="tplColumns" :data="templates.items" :loading="tplLoading" :scroll="{x:1250}"
             :page="templates.page" :size="templates.size" :total="templates.total"
             @change="(p:number, s:number) => loadTemplates(p, s)">
             <template #bodyCell="{ column, record }">
@@ -154,6 +145,8 @@
               </template>
               <template v-else-if="column.key === 'action'">
                 <a-space>
+                  <a-button v-if="record.editor_mode==='manual_word' && !record.builtin" type="link" size="small" data-testid="word-template-edit" @click="openWord(record)">{{ translate('wordTemplate.edit') }}</a-button>
+                  <a-button v-if="record.editor_mode==='manual' && !record.builtin" type="link" size="small" data-testid="manual-template-edit" @click="openManual(record)">{{ translate('manualTemplate.edit') }}</a-button>
                   <a-button v-if="record.status === 'review' || record.status === 'failed'" type="link" size="small" @click="openReview(record)">
                     {{ record.status === 'failed' ? translate('ui.m_4e657dcc3c03') : translate('ui.m_4a0c25752429') }}
                   </a-button>
@@ -173,7 +166,7 @@
       <a-spin :spinning="reportPreviewLoading">
         <a-alert v-if="reportPreviewError" type="error" show-icon :message="reportPreviewError" />
         <a-empty v-else-if="!reportPreviewLoading && !reportPreviewHtml" />
-        <div v-else class="cmp-doc report-preview" data-testid="generated-report-preview" v-html="reportPreviewHtml"></div>
+        <div v-else class="cmp-doc report-preview" data-testid="generated-report-preview" @click="openReportImage" @keydown.enter.prevent="openReportImage" v-html="reportPreviewHtml"></div>
       </a-spin>
     </a-drawer>
 
@@ -207,24 +200,7 @@
       </a-row>
     </a-drawer>
 
-    <!-- 用模板生成报告：选数据源 -->
-    <a-modal v-model:open="genOpen" :title="translate('ui.m_037f25ae3c2e', { p0: (genTpl?.name || '') })"
-      :confirm-loading="genLoading" @ok="doGenerateFromTemplate" :ok-text="translate('ui.m_1ad1463fe16f')">
-      <a-form layout="vertical">
-        <a-form-item :label="translate('ui.m_186be2232e2c')">
-          <a-radio-group v-model:value="genType">
-            <a-radio value="task">{{ translate('ui.m_527e375031ba') }}</a-radio>
-            <a-radio value="session">{{ translate('ui.m_8dae5cd37eb0') }}</a-radio>
-            <a-radio value="finding">{{ translate('ui.m_6cf3519585c4') }}</a-radio>
-          </a-radio-group>
-        </a-form-item>
-        <a-form-item :label="genType === 'task' ? translate('ui.m_68c60746f1d0') : genType === 'finding' ? translate('ui.m_9d915a47a5e6') : translate('ui.m_a76bd2d8b6ba')">
-          <a-input v-model:value="genSourceId" :placeholder="genType === 'task' ? translate('ui.m_fad97f89a826') : genType === 'finding' ? translate('ui.m_3a37b5d4cb13') : translate('ui.m_421754e9cd01')" allow-clear />
-        </a-form-item>
-        <a-alert type="info" show-icon
-          :message="translate('ui.m_dc8f8975af31')" />
-      </a-form>
-    </a-modal>
+    <ReportSourcePicker v-if="generatorOpen" :initial-kind="generatorKind" :preset-template="generatorTemplate || undefined" :allow-kind="generatorAllowKind" @close="generatorOpen=false" @generated="reportGenerated" />
 
     <!-- 模板复核：在线左右对比（左原报告/右打标记模板）+ 结构判定表 + 换模型重学 + 确认定稿 -->
     <a-drawer v-model:open="reviewOpen" :title="translate('ui.m_5f2bd6280377', { p0: (reviewTpl?.name || '') })" width="90%"
@@ -244,7 +220,7 @@
         </a-row>
       </a-spin>
       <a-collapse style="margin-bottom:12px">
-        <a-collapse-panel key="diff" header="结构判定明细（每段 AI 判成了什么）">
+        <a-collapse-panel key="diff" :header="translate('wordTemplate.structure')">
           <div v-if="reviewDiff?.summary" style="color:#666;margin-bottom:8px">
             {{ translate('ui.m_76e547a8fa54') }} {{ reviewDiff.summary.total }} {{ translate('ui.m_62ae6a220758') }} {{ reviewDiff.summary.scalar }} {{ translate('ui.m_fd161ef26c7f') }} {{ reviewDiff.summary.loop }}
             {{ translate('ui.m_d988315bbfe1') }} {{ reviewDiff.summary.image }} {{ translate('ui.m_f6197822febb') }} {{ reviewDiff.summary.fixed }}
@@ -268,8 +244,8 @@
         :message="translate('ui.m_7faed8560fa9')"
         :description="translate('ui.m_23f5651925e5')" />
       <template v-if="!reviewTpl?.builtin">
-      <a-divider style="margin:8px 0">{{ translate('ui.m_8162ed49c6d0') }}</a-divider>
-      <a-form layout="vertical">
+      <a-divider style="margin:8px 0">{{ translate(reviewTpl?.editor_mode==='manual_word'?'wordTemplate.reviewTitle':'ui.m_8162ed49c6d0') }}</a-divider>
+      <a-form v-if="reviewTpl?.editor_mode!=='manual_word'" layout="vertical">
         <a-form-item :label="translate('ui.m_aaebb96a765a')">
           <a-select v-model:value="refineProviderId" :options="providerOptions" allow-clear
             style="width:320px" :placeholder="translate('ui.m_74877253ad57', { p0: (globalDefaultName ? '（' + globalDefaultName + '）' : '') })" />
@@ -279,41 +255,60 @@
             :placeholder="translate('ui.m_35a3ef46e1bc')" />
         </a-form-item>
       </a-form>
-      <div style="position:absolute;bottom:0;left:0;right:0;padding:12px 24px;border-top:1px solid #f0f0f0;background:#fff;text-align:right">
+      <div style="position:absolute;bottom:0;left:0;right:0;padding:12px 24px;border-top:1px solid var(--dt-border);background:var(--dt-panel);text-align:right">
         <a-space>
-          <a-button :loading="refineLoading" @click="doRefine">{{ translate('ui.m_55ce6a91935d') }}</a-button>
+          <a-button v-if="reviewTpl?.editor_mode!=='manual_word'" :loading="refineLoading" @click="doRefine">{{ translate('ui.m_55ce6a91935d') }}</a-button>
           <a-button type="primary" :loading="confirmLoading" @click="doConfirm">{{ translate('ui.m_35c21059dafa') }}</a-button>
         </a-space>
       </div>
       </template>
     </a-drawer>
+    <a-modal :open="!!reportImage" :title="translate('manualTemplate.imagePreview')" :width="'96vw'" :footer="null" :z-index="1600" @cancel="reportImage=''">
+      <p class="manual-note">{{ translate('manualTemplate.originalHelp') }}</p>
+      <div class="original-report-image" data-testid="original-report-image"><img :src="reportImage" :alt="translate('manualTemplate.imagePreview')" /></div>
+    </a-modal>
+    <WordTemplateEditor v-if="wordOpen" :template-id="wordTemplateId || undefined" :providers="providerOptions" @close="wordOpen=false" @saved="loadTemplates(1)" />
+    <a-modal :open="manualOpen" :title="translate(manualId?'manualTemplate.edit':'manualTemplate.create')" :width="880" :mask-closable="false" :keyboard="false" :confirm-loading="manualSaving" @ok="saveManual" @cancel="closeManual">
+      <a-form layout="vertical" data-testid="manual-template-form">
+        <a-form-item :label="translate('manualTemplate.name')" required><a-input v-model:value="manualName" :maxlength="120" data-testid="manual-template-name" /></a-form-item>
+        <a-form-item :label="translate('manualTemplate.tags')">
+          <div class="manual-tags"><a-button v-for="tag in manualTags" :key="tag" size="small" @click="insertManualTag(manualTag(tag))">{{ manualTag(tag) }}</a-button><a-button size="small" data-testid="manual-template-loop" @click="insertManualTag('\n{{#findings}}\n{{finding.vuln_type}}\n{{finding.poc}}\n{{finding.screenshots}}\n{{/findings}}\n')">{{ translate('manualTemplate.loop') }}</a-button></div>
+        </a-form-item>
+        <a-form-item :label="translate('manualTemplate.body')" required><a-textarea v-model:value="manualBody" :rows="16" :maxlength="100000" spellcheck="false" data-testid="manual-template-body" /></a-form-item>
+        <p class="manual-note">{{ translate('manualTemplate.help') }}</p>
+      </a-form>
+    </a-modal>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
 import { t as translate } from '../../i18n'
 
-import { onMounted, onUnmounted, ref, computed, type Ref } from 'vue'
+import { onMounted, onUnmounted, ref, computed, nextTick, type Ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import AppTable from '../../components/AppTable.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
-import { intelApi, reportTemplateApi, type ReportDetail, type ReportTemplate, type ReportData } from '../../api/intel'
+import { intelApi, reportTemplateApi, type ReportDetail, type ReportData } from '../../api/intel'
 import ReportTemplateEditor from './ReportTemplateEditor.vue'
 import ReportAiAssist from './ReportAiAssist.vue'
+import WordTemplateEditor from './WordTemplateEditor.vue'
+import ReportSourcePicker from './ReportSourcePicker.vue'
 import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 import { aiConfigApi } from '../../api/aiConfig'
 import type { ListResult, RowRecord } from '../../api/types'
 import { safeReportHtml } from '../../utils/reportPreview'
 
 const loading = ref(false)
-const generating = ref(false)
 const saving = ref(false)
 const exporting = ref(false)
 const activeTab = ref<'task' | 'session' | 'finding' | 'template'>('task')
 const reportPreviewOpen=ref(false),reportPreviewLoading=ref(false),reportPreviewId=ref(''),reportPreviewTitle=ref(''),reportPreviewHtml=ref(''),reportPreviewError=ref('')
 let reportPreviewGeneration=0
-function closeReportPreview(){reportPreviewGeneration++;reportPreviewOpen.value=false;reportPreviewLoading.value=false;reportPreviewHtml.value=''}
+const reportImage=ref('')
+function openReportImage(event:Event){const image=event.target;if(image instanceof HTMLImageElement && /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(image.src))reportImage.value=image.src}
+function interactiveReportHtml(html:string){const container=document.createElement('div');container.innerHTML=safeReportHtml(html);container.querySelectorAll('img').forEach(image=>{image.tabIndex=0;image.setAttribute('role','button');image.alt=translate('manualTemplate.imagePreview');image.title=translate('manualTemplate.imagePreview')});return container.innerHTML}
+function closeReportPreview(){reportImage.value='';reportPreviewGeneration++;reportPreviewOpen.value=false;reportPreviewLoading.value=false;reportPreviewHtml.value=''}
 async function openReportPreview(record:RowRecord){
   const generation=++reportPreviewGeneration
   reportPreviewId.value=String(record._id);reportPreviewTitle.value=String(record.title || translate('ui.m_13d61fea9f17'))
@@ -323,7 +318,7 @@ async function openReportPreview(record:RowRecord){
     if(data.byteLength>20*1024*1024)throw new Error(translate('ui.report_preview_large'))
     const mammoth=(await import('mammoth')).default
     const result=await mammoth.convertToHtml({arrayBuffer:data})
-    if(generation===reportPreviewGeneration)reportPreviewHtml.value=safeReportHtml(result.value || '')
+    if(generation===reportPreviewGeneration)reportPreviewHtml.value=interactiveReportHtml(result.value || '')
   } catch(error){if(generation===reportPreviewGeneration)reportPreviewError.value=(error as Error).message || translate('ui.report_preview_failed')}
   finally{if(generation===reportPreviewGeneration)reportPreviewLoading.value=false}
 }
@@ -401,62 +396,11 @@ function onTabChange(key: string) {
   else loadSessionReports(1)
 }
 
-// 生成任务级报告
-const genTaskId = ref('')
-async function doGenerateTask() {
-  const tid = genTaskId.value.trim()
-  if (!tid) return message.warning(translate('ui.m_ebec9110521f'))
-  generating.value = true
-  const hide = message.loading(translate('ui.m_68804fe9d1a0'), 0)
-  try {
-    const res = await intelApi.generatePentestReport({ type: 'task', task_id: tid })
-    hide()
-    message.success(translate('ui.m_fbde910e6ce8', { p0: (res.updated ? '更新' : '生成'), p1: (res.session_count ?? 0), p2: (res.vuln_total ?? 0) }))
-    genTaskId.value = ''
-    loadTaskReports(1)
-  } catch (e) { hide(); message.error((e as Error).message || translate('ui.m_470f92db3d64')) }
-  finally { generating.value = false }
-}
-
-// 重生成会话级报告
-const genSessionId = ref('')
-async function doGenerateSession() {
-  const sid = genSessionId.value.trim()
-  if (!sid) return message.warning(translate('ui.m_47d5638ae46e'))
-  generating.value = true
-  const hide = message.loading(translate('ui.m_51fbaa8b2aec'), 0)
-  try {
-    await intelApi.generatePentestReport({ type: 'session', session_id: sid })
-    hide()
-    message.success(translate('ui.m_f0e010a52555'))
-    genSessionId.value = ''
-    loadSessionReports(1)
-  } catch (e) { hide(); message.error((e as Error).message || translate('ui.m_470f92db3d64')) }
-  finally { generating.value = false }
-}
-
-// 生成单漏洞报告（走漏洞级内置模板；漏洞中心一键生成也复用此 API）
-const FINDING_TEMPLATE_ID = 'ncc_event_finding_v1'
-const genFindingId = ref('')
-async function doGenerateFinding() {
-  const fid = genFindingId.value.trim()
-  if (!fid) return message.warning(translate('ui.m_8ade685a4b4b'))
-  generating.value = true
-  const hide = message.loading(translate('ui.m_8608fb96c788'), 0)
-  try {
-    const r = await reportTemplateApi.generate({ template_id: FINDING_TEMPLATE_ID, type: 'finding', finding_id: fid })
-    hide()
-    if (r.delivery_ready) {
-      message.success(translate('ui.m_74dc7fe8973a'))
-      await intelApi.exportPentestDocx(r.report_id)
-    } else {
-      message.warning(translate('ui.m_8fcf4fcbff1c', { p0: (r.generation_warnings?.length || 0) }))
-    }
-    genFindingId.value = ''
-    loadFindingReports(1)
-  } catch (e) { hide(); message.error((e as Error).message || translate('ui.m_470f92db3d64')) }
-  finally { generating.value = false }
-}
+type ReportKind='task'|'session'|'finding'
+const generatorOpen=ref(false),generatorKind=ref<ReportKind>('task'),generatorTemplate=ref(''),generatorAllowKind=ref(false)
+function openReportGenerator(kind:ReportKind){generatorKind.value=kind;generatorTemplate.value='';generatorAllowKind.value=false;generatorOpen.value=true}
+function openGenerate(record:RowRecord){generatorKind.value=['task','session','finding'].includes(String(record.scope))?record.scope as ReportKind:'task';generatorTemplate.value=String(record._id);generatorAllowKind.value=true;generatorOpen.value=true}
+function reportGenerated(kind:ReportKind){activeTab.value=kind;if(kind==='task')void loadTaskReports(1);else if(kind==='session')void loadSessionReports(1);else void loadFindingReports(1)}
 
 // 删除报告（单条）
 async function removeReport(record: RowRecord, reload: (p?: number) => void) {
@@ -584,12 +528,40 @@ async function doExportCurrent() {
   catch (e) { message.error((e as Error).message || translate('ui.m_6e4445df6957')) }
 }
 
-// ============ 模板学习 ============
+// ============ 模板编辑 ============
+const wordOpen=ref(false),wordTemplateId=ref('')
+function openWord(row?:RowRecord){wordTemplateId.value=row?String(row._id):'';wordOpen.value=true}
+
+const manualOpen=ref(false),manualSaving=ref(false),manualId=ref(''),manualRevision=ref(0),manualName=ref(''),manualBody=ref('')
+let manualEpoch=0
+const manualTags=['report.title','report.unit','report.system_name','report.period','report.summary','stat.total','finding.vuln_type','finding.target','finding.severity_cn','finding.impact','finding.poc','finding.remediation','finding.screenshots']
+function manualTag(tag:string){return '{{'+tag+'}}'}
+const {dirty:manualDirty,markSaved:markManualSaved}=useUnsavedGuard(()=>manualOpen.value?JSON.stringify([manualName.value,manualBody.value]):'')
+async function openManual(row?:RowRecord){
+  const epoch=++manualEpoch
+  try{
+    const detail=row?await reportTemplateApi.detail(String(row._id)):null
+    if(epoch!==manualEpoch)return
+    if(detail && detail.editor_mode!=='manual')throw new Error(translate('manualTemplate.manualOnly'))
+    manualId.value=detail?detail._id:'';manualRevision.value=detail?.revision||0;manualName.value=detail?.name||'';manualBody.value=detail?.manual_body||translate('manualTemplate.sample');manualOpen.value=true;markManualSaved()
+  }catch(e){message.error((e as Error).message)}
+}
+function closeManual(){
+  if(manualSaving.value)return
+  const close=()=>{++manualEpoch;manualOpen.value=false;markManualSaved()}
+  if(manualDirty.value)Modal.confirm({title:translate('ui.m_c2277872cdce'),content:translate('manualTemplate.unsaved'),onOk:close});else close()
+}
+async function insertManualTag(tag:string){
+  const input=document.querySelector<HTMLTextAreaElement>('[data-testid="manual-template-body"]');const start=input?.selectionStart??manualBody.value.length,end=input?.selectionEnd??start
+  manualBody.value=manualBody.value.slice(0,start)+tag+manualBody.value.slice(end)
+  await nextTick();input?.focus();input?.setSelectionRange(start+tag.length,start+tag.length)
+}
+async function saveManual(){
+  if(!manualName.value.trim()||!manualBody.value.trim()){message.warning(translate('manualTemplate.required'));return}
+  manualSaving.value=true
+  try{await reportTemplateApi.saveManual({name:manualName.value.trim(),body:manualBody.value,...(manualId.value?{template_id:manualId.value,revision:manualRevision.value}:{})});manualOpen.value=false;markManualSaved();message.success(translate('ui.m_514df589127f'));await loadTemplates(1)}catch(e){message.error((e as Error).message)}finally{manualSaving.value=false}
+}
 const tplLoading = ref(false)
-const tplUploading = ref(false)
-const tplName = ref('')
-const tplProviderId = ref('')        // 学习模型（空=跟随全局默认）
-const tplNeedReview = ref(true)      // 需人工复核（默认勾选→学成落 review 待确认；取消勾选才直接 ready）
 const templates = ref<ListResult<RowRecord>>({ ...empty })
 const tplColumns = [
   { get title() { return translate('ui.m_f7816a356dbc') }, dataIndex: 'name', ellipsis: true },
@@ -638,27 +610,6 @@ async function loadTemplates(page = 1, size = templates.value.size) {
     if ((templates.value.items || []).some((t: RowRecord) => t.status === 'learning')) startTplPolling()
   }
   catch (e) { message.error((e as Error).message) } finally { tplLoading.value = false }
-}
-
-// before-upload 返回 false 阻止 antd 自动上传，改走我们的原生 fetch。
-// **异步**：上传后端秒回 status=learning，后台学习；此处立即刷新列表（显示学习中+进度）+ 启动轮询，不阻塞。
-function onTplUpload(file: File) {
-  if (!file.name.toLowerCase().endsWith('.docx')) {
-    message.warning(translate('ui.m_e70fda398b5c'))
-    return false
-  }
-  tplUploading.value = true
-  reportTemplateApi.upload(file, tplName.value.trim() || undefined,
-    { provider_id: tplProviderId.value || '', need_review: tplNeedReview.value })
-    .then(() => {
-      message.success(translate('ui.m_64202155c92e'))
-      tplName.value = ''
-      loadTemplates(1)          // 立即显示新条目（学习中+进度）
-      startTplPolling()         // 启动轮询直到全部学完
-    })
-    .catch((e) => { message.error((e as Error).message || translate('ui.m_1440c7e23865')) })
-    .finally(() => { tplUploading.value = false })
-  return false
 }
 
 // 学习进度轮询：有任何 learning 模板时每 3s 刷新列表；全部离开 learning 态即停（省请求）。
@@ -725,7 +676,7 @@ async function doConfirm() {
   if (!reviewTpl.value) return
   confirmLoading.value = true
   try {
-    await reportTemplateApi.confirm(String(reviewTpl.value._id))
+    await reportTemplateApi.confirm(String(reviewTpl.value._id),typeof reviewTpl.value.revision==='number'?reviewTpl.value.revision:undefined)
     message.success(translate('ui.m_ab4ef002442c'))
     reviewOpen.value = false
     loadTemplates(templates.value.page)
@@ -736,43 +687,6 @@ async function doConfirm() {
 async function removeTemplate(record: RowRecord) {
   try { await reportTemplateApi.remove(String(record._id)); message.success(translate('ui.m_077a6d37719a')); loadTemplates(1) }
   catch (e) { message.error((e as Error).message) }
-}
-
-// 用模板生成
-const genOpen = ref(false)
-const genLoading = ref(false)
-const genTpl = ref<ReportTemplate | null>(null)
-const genType = ref<'task' | 'session' | 'finding'>('task')
-const genSourceId = ref('')
-function openGenerate(record: RowRecord) {
-  genTpl.value = record as unknown as ReportTemplate
-  genType.value = 'task'
-  genSourceId.value = ''
-  genOpen.value = true
-}
-async function doGenerateFromTemplate() {
-  const sid = genSourceId.value.trim()
-  if (!genTpl.value || !sid) return message.warning(translate('ui.m_dc6823784516'))
-  genLoading.value = true
-  const hide = message.loading(translate('ui.m_07251f2311e9'), 0)
-  try {
-    const tplId = String(genTpl.value._id)
-    const payload = genType.value === 'task'
-      ? { template_id: tplId, type: 'task' as const, task_id: sid }
-      : genType.value === 'finding'
-        ? { template_id: tplId, type: 'finding' as const, finding_id: sid }
-        : { template_id: tplId, type: 'session' as const, session_id: sid }
-    const r = await reportTemplateApi.generate(payload)
-    hide()
-    const label = genType.value === 'task' ? translate('ui.m_5c53d89019fd') : genType.value === 'finding' ? translate('ui.m_b0475a364bcb') : translate('ui.m_0b4596e3020c')
-    if (r.generation_warnings?.length) message.warning(translate('ui.m_010176b57af7', { p0: (r.generation_warnings.length) }))
-    else message.success(translate('ui.m_3e22497e2c35', { p0: (r.vuln_total ?? 0), p1: (label) }))
-    genOpen.value = false
-    if (genType.value === 'task') { loadTaskReports(1); activeTab.value = 'task' }
-    else if (genType.value === 'finding') { loadFindingReports(1); activeTab.value = 'finding' }
-    else { loadSessionReports(1); activeTab.value = 'session' }
-  } catch (e) { hide(); message.error((e as Error).message || translate('ui.m_470f92db3d64')) }
-  finally { genLoading.value = false }
 }
 
 // 轻量 Markdown→HTML 预览（不引第三方依赖）：转义 HTML 后处理 标题/粗体/行内代码/代码块/列表/表格/段落
@@ -826,11 +740,12 @@ function renderMarkdown(md: string): string {
 }
 const previewHtml = computed(() => renderMarkdown(editContent.value))
 
-onMounted(() => loadTaskReports(1))
+onMounted(() => {loadTaskReports(1)})
 onUnmounted(() => { if (_tplPollTimer) { clearInterval(_tplPollTimer); _tplPollTimer = undefined } })
 </script>
 
 <style scoped>
+.template-toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 12px}.manual-note{line-height:1.7;overflow-wrap:anywhere;margin:0 0 12px}
 .muted { color: #999; }
 .editor-row { min-height: 60vh; }
 .editor-label { font-weight: 600; margin-bottom: 6px; color: #555; }
@@ -855,7 +770,9 @@ onUnmounted(() => { if (_tplPollTimer) { clearInterval(_tplPollTimer); _tplPollT
 .cmp-doc :deep(th) { background: #f6f8fa; }
 .cmp-doc :deep(p) { margin: 4px 0; }
 .cmp-doc :deep(a) { color: #0969da; }
+.cmp-doc :deep(img){display:block;max-width:100%;height:auto}.report-preview{overflow-wrap:anywhere}.report-preview :deep(img[role=button]){cursor:zoom-in}.report-preview :deep(img:focus-visible){outline:2px solid var(--dt-primary)}.original-report-image{max-height:72vh;overflow:auto;background:#fff}.original-report-image img{display:block;max-width:none;height:auto}
 /* 右侧模板里的 {{占位符}}/{%tr%} 标记高亮，一眼看出"去了原数据、打了标记"的位 */
 .cmp-tpl :deep(p), .cmp-tpl :deep(td) { }
+.manual-toolbar{margin-bottom:16px}.manual-note{color:var(--dt-muted);line-height:1.7;font-size:12px}.manual-tags{display:flex;flex-wrap:wrap;gap:6px}.manual-tags button{font-family:monospace;font-size:11px;max-width:100%}
 </style>
 

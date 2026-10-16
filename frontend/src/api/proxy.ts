@@ -46,6 +46,7 @@ export interface RuleProxy {
 }
 
 export interface ProxyStatus {
+  container_mode?: boolean
   config: ProxyConfig
   running: boolean
   pid?: number
@@ -122,6 +123,7 @@ export interface ProxyTraffic {
 const base = '/api/proxy'
 
 export const proxyApi = {
+  validateSource: (source: ProxySource, signal?: AbortSignal) => request<{ ok: boolean; reason_code: string; reason: string; ref_id?: string; running?: boolean | null; profile_configured?: boolean | null }>(`${base}/validate_source`, { method: 'POST', body: JSON.stringify({ source }), signal }),
   status: () => request<ProxyStatus>(`${base}/status`),
   saveConfig: (data: Partial<ProxyConfig>) => request<ProxyConfig>(`${base}/config`, { method: 'POST', body: JSON.stringify(data) }),
   profiles: () => request<{ items: ProxyProfile[] }>(`${base}/profiles`),
@@ -133,7 +135,7 @@ export const proxyApi = {
   select: (group: string, name: string) => request<{ selected: boolean }>(`${base}/proxies/select`, { method: 'POST', body: JSON.stringify({ group, name }) }),
   autoSelect: (group = 'PROXY') => request<AutoSelectResult>(`${base}/proxies/auto_select`, { method: 'POST', body: JSON.stringify({ group }) }),
   logs: (lines = 200) => request<{ logs: string }>(`${base}/logs?lines=${lines}`),
-  exitIp: () => request<ExitIpResult>(`${base}/exit_ip`),
+  exitIp: (fresh = false) => request<ExitIpResult>(`${base}/exit_ip${fresh ? '?fresh=1' : ''}`),
   egressOptions: () => request<Record<string, { available: boolean; reason: string }>>(`${base}/egress_options`),
   traffic: () => request<ProxyTraffic>(`${base}/traffic`),
   resetTraffic: (scope?: string, key?: string) => request<ProxyTraffic>(`${base}/traffic/reset`, { method: 'POST', body: JSON.stringify({ scope, key }) }),

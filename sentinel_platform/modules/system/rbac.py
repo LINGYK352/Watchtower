@@ -10,6 +10,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # —— 权限点（key: 说明）——
 PERMISSIONS: Dict[str, str] = {
+    "collaboration:read": "查看自己的协同工作区及获批共享资料",
+    "collaboration:write": "创建/申请工作组、分享和恢复获批资料",
     "task:read": "查看任务/资产扫描结果",
     "task:write": "发起/删除/停止任务、批量导入、计划任务",
     "policy:read": "查看扫描策略",
@@ -38,18 +40,21 @@ BUILTIN_ROLES: Dict[str, Dict[str, Any]] = {
     "admin": {"title": "管理员", "permissions": ["*"], "builtin": True,
               "desc": "全部权限 + 用户管理,内置不可删改"},
     "operator": {"title": "操作员", "permissions": [
-        "task:read", "task:write", "policy:read", "policy:write",
+        "collaboration:read", "collaboration:write", "task:read", "task:write", "policy:read", "policy:write",
         "asset:read", "asset:write", "vuln:read", "vuln:write",
         "pentest:read", "pentest:write", "intel:read", "system:read", "system:update", "ai_extension:read"],
         "builtin": True, "desc": "任务/资产/漏洞/AI渗透读写,无用户管理/密钥/代理/AI配置写"},
     "viewer": {"title": "只读", "permissions": [
-        "task:read", "policy:read", "asset:read", "vuln:read",
+        "collaboration:read", "task:read", "policy:read", "asset:read", "vuln:read",
         "pentest:read", "intel:read", "system:read", "ai_extension:read"],
         "builtin": True, "desc": "所有查看权限,无任何写操作"},
 }
 
 # 路径前缀 → 所需权限（按序匹配，命中即用）。写操作未命中 → fail-closed 需 user:manage。
 PERM_RULES: List[Tuple[str, Tuple[str, ...], str]] = [
+    ("/api/collaboration", ("GET",), "collaboration:read"),
+    ("/api/collaboration", ("POST", "DELETE"), "collaboration:write"),
+    ("/api/control_sync", ("GET", "POST", "PUT", "DELETE"), "user:manage"),
     ("/api/task/stop", ("GET",), "task:write"),
     ("/api/task/resume", ("GET",), "task:write"),
     ("/api/ai_config/options", ("GET",), "task:write|policy:write|pentest:read"),
@@ -65,6 +70,8 @@ PERM_RULES: List[Tuple[str, Tuple[str, ...], str]] = [
     # /report_error 是报错上报（运营性质，任何已认证用户可上报）→ 归 system:read。
     ("/api/about/apply", ("POST",), "system:update"),
     ("/api/about/rollback", ("POST",), "system:update"),
+    ("/api/about/storage", ("POST",), "system:update"),
+    ("/api/about/storage", ("GET",), "system:read"),
     ("/api/about/report_error", ("POST",), "system:read"),
     ("/api/about/my_reports", ("GET",), "system:read"),
     ("/api/policy", ("POST", "PUT", "DELETE"), "policy:write"),

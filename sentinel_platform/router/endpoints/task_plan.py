@@ -83,6 +83,9 @@ class PolicyAdd(Resource):
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             return err(CODE_BAD_REQUEST, "请求体必须为 JSON 对象")
+        policy = body.get('policy') or {}
+        if policy.get('pentest_mode') == 'redteam' and policy.get('redteam_notice_acknowledged') is not True:
+            return err(CODE_BAD_REQUEST, '请确认红队模式用途 / Acknowledge the red-team notice')
         r = svc.add_policy(body.get("name", ""), body.get("policy") or {}, body.get("desc", ""))
         if not r.get("ok"):
             return err(CODE_BAD_REQUEST, r.get("error", "新建失败"))
@@ -102,6 +105,9 @@ class PolicyEdit(Resource):
         policy_id = (body.get("policy_id") or "").strip()
         if not policy_id:
             return err(CODE_BAD_REQUEST, "policy_id 必填")
+        policy = body.get('policy_data') or {}
+        if policy.get('pentest_mode') == 'redteam' and policy.get('redteam_notice_acknowledged') is not True:
+            return err(CODE_BAD_REQUEST, '请确认红队模式用途 / Acknowledge the red-team notice')
         r = svc.edit_policy(policy_id, body.get("policy_data") or {})
         if not r.get("ok"):
             msg = r.get("error", "编辑失败")
@@ -148,6 +154,12 @@ _sched_add = ns_schedule.model("ScheduleAdd", {
     "task_tag": _fields.String(required=True, description="task|risk_cruising"),
     "cron": _fields.String(description="cron(周期任务)"),
     "start_date": _fields.String(description="开始时间(定时任务)"),
+    "editable_target": _fields.Boolean(description="资产组辅助填充后目标可编辑；旧调用仍从组取权威快照"),
+    "target_scope_id": _fields.String(description="资产分组，创建时读取权威范围快照"),
+    "pentest_provider_id": _fields.String(description="首选AI，空=全局默认"),
+    "pentest_backup_provider_id": _fields.String(description="备用AI，空=不使用"),
+    "observer_enabled": _fields.Boolean(description="监管AI，默认不使用"),
+    "observer_provider_id": _fields.String(description="监管模型，启用时空=默认"),
 })
 _sched_ids = ns_schedule.model("ScheduleIds", {"_id": _fields.List(_fields.String, description="计划任务ID列表")})
 

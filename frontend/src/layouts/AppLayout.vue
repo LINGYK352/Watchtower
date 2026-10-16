@@ -1,20 +1,21 @@
 <template>
-  <a-layout class="app-shell">
+  <a-layout class="app-shell" :class="{'is-narrow':responsiveNarrow}">
+    <button v-if="responsiveNarrow && !collapsed" class="sider-backdrop" @click="collapsed=true" :aria-label="t('navigation.closeNavigation')" />
     <a-layout-sider class="app-sider" :width="224" :collapsed-width="64" v-model:collapsed="collapsed" collapsible :trigger="null">
-      <div class="brand" @click="router.push('/')">
+      <button type="button" class="brand" @click="router.push('/')" :aria-label="t('header.home')">
         <div class="brand-mark"><BrandLogo :size="26" /></div>
         <div v-if="!collapsed" class="brand-text">
           <strong>{{ APP_NAME }}</strong>
           <span>{{ APP_NAME_EN }}</span>
         </div>
-      </div>
+      </button>
       <div class="sider-menu">
-        <a-menu theme="dark" mode="inline" :selectedKeys="selectedKeys" :openKeys="openKeys" @openChange="onOpenChange" @click="onMenuClick">
+        <a-menu :theme="isDark ? 'dark' : 'light'" mode="inline" :selectedKeys="selectedKeys" :openKeys="openKeys" @openChange="onOpenChange" @click="onMenuClick">
           <a-sub-menu v-for="group in visibleGroups" :key="group.key">
-            <template #title><component :is="icons[group.icon]" /><span>{{ group.title }}</span></template>
-            <a-menu-item v-for="item in group.children" :key="item.key">
+            <template #title><component :is="icons[group.icon]" /><span :title="group.title">{{ group.title }}</span></template>
+            <a-menu-item v-for="item in group.children" :key="item.key" :title="item.title">
               <component :is="icons[item.icon]" />
-              <span>{{ item.title }}</span>
+              <span>{{ item.title }}</span><a-tooltip v-if="item.key==='collaboration' && teamNotifications.total>0" :title="t('teamKeys.pending',{count:teamNotifications.total})" :overlay-style="{position:'fixed',pointerEvents:'none'}"><span class="collaboration-bell" data-testid="collaboration-menu-bell" role="status" :aria-label="t('teamKeys.pending',{count:teamNotifications.total})"><BellOutlined aria-hidden="true" /><span>{{ teamNotifications.total>99?'99+':teamNotifications.total }}</span></span></a-tooltip><a-badge v-if="item.key==='collaboration' && teamNotifications.unread_total" :count="teamNotifications.unread_total" :title="t('teamWorkspace.unread',{count:teamNotifications.unread_total})" class="collaboration-unread" data-testid="collaboration-menu-unread" />
             </a-menu-item>
           </a-sub-menu>
         </a-menu>
@@ -23,14 +24,17 @@
     <a-layout>
       <a-layout-header class="app-header">
         <div class="header-left">
-          <MenuFoldOutlined v-if="!collapsed" class="trigger" @click="collapsed = true" />
-          <MenuUnfoldOutlined v-else class="trigger" @click="collapsed = false" />
+          <button type="button" class="navigation-toggle" @click="collapsed = !collapsed"
+            :aria-label="t(collapsed ? 'header.expandNavigation' : 'header.collapseNavigation')" :aria-expanded="!collapsed">
+            <MenuFoldOutlined v-if="!collapsed" class="trigger" />
+            <MenuUnfoldOutlined v-else class="trigger" />
+          </button>
           <div>
             <a-breadcrumb :items="breadcrumbItems" />
             <span class="page-title">{{ pageTitle }}</span>
           </div>
         </div>
-        <a-space :size="16">
+        <a-space class="header-controls" :size="12">
           <BrokerDegradeTag />
           <LanguageSwitch />
           <TimezoneTag />
@@ -48,10 +52,10 @@
           <a-tag color="blue">{{ serverVersion }}</a-tag>
           <a-button type="text" @click="router.push('/proxy')"><template #icon><GlobalOutlined /></template>{{ t('header.proxy') }}</a-button>
           <button class="theme-toggle" :class="{ dark: isDark }" @click="toggleTheme"
-            :title="isDark ? t('header.dayMode') : t('header.nightMode')" :aria-label="t('header.theme')">
+            :title="isDark ? t('header.dayMode') : t('header.nightMode')" :aria-label="t('header.theme')" :aria-pressed="isDark">
             <span class="tt-track">
-              <span class="tt-ico sun">☀</span>
-              <span class="tt-ico moon">🌙</span>
+              <svg class="tt-ico sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></svg>
+              <svg class="tt-ico moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.1A9 9 0 0 1 9.9 3.5 9 9 0 1 0 20.5 14.1Z" /></svg>
               <span class="tt-thumb"></span>
             </span>
           </button>
@@ -74,6 +78,7 @@
       <!-- 分发系统下发的通告：默认仅顶部通告条展示，popup 通告才弹窗 -->
       <AnnouncementBar />
       <a-layout-content class="app-content">
+        <PageGuide />
         <router-view />
       </a-layout-content>
     </a-layout>
@@ -86,8 +91,9 @@
       </a-form>
     </a-modal>
 
-    <!-- 首次登录强制免责声明（最高优先级，不同意不放行；法律确认先于一切） -->
+    <!-- 后台核验已有签署；仅确认未签署或条款过期时显示签署页面。 -->
     <DisclaimerModal />
+    <ControlSyncConfirm />
 
     <!-- 全局更新提示弹窗（检测到新版本弹出，可关闭，一键更新带进度条+自动刷新）-->
     <UpdateNotice @unauthorized="onUnauthorized" />
@@ -113,7 +119,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, provide } from 'vue'
+import PageGuide from '../components/PageGuide.vue'
+import { computed, onMounted, onUnmounted, reactive, ref, provide, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -158,6 +165,7 @@ import {
   SettingOutlined,
   TagsOutlined,
   TeamOutlined,
+  BellOutlined,
   ToolOutlined,
   UserOutlined,
   WifiOutlined
@@ -176,15 +184,18 @@ import ResourceAlertModal from '../components/ResourceAlertModal.vue'
 import LicenseExpiryModal from '../components/LicenseExpiryModal.vue'
 import SetupWizard from '../components/SetupWizard.vue'
 import DisclaimerModal from '../components/DisclaimerModal.vue'
+import ControlSyncConfirm from '../components/ControlSyncConfirm.vue'
 import DeskPet from '../components/DeskPet.vue'
 import AnnouncementBar from '../components/AnnouncementBar.vue'
 import TimezoneTag from '../components/TimezoneTag.vue'
 import BrokerDegradeTag from '../components/BrokerDegradeTag.vue'
 import LanguageSwitch from '../components/LanguageSwitch.vue'
 import { appLocale, t } from '../i18n'
+import { useGroupNotifications } from '../composables/useGroupNotifications'
 import { useTheme } from '../composables/useTheme'
 
 const { isDark, toggleTheme } = useTheme()
+const teamNotifications = useGroupNotifications(() => getPerms().includes('collaboration:read'))
 
 // 顶栏「当前版本」显示后端真实版本（version.txt），非编译进包的静态 APP_VERSION——
 // 跳板逐级更新时前端产物 brand 标签可能滞后/错配，运行时拉后端版本才准。
@@ -192,15 +203,38 @@ const { serverVersion } = useServerVersion()
 
 const router = useRouter()
 const route = useRoute()
-const collapsed = ref(false)
+const responsiveNarrow = ref(window.innerWidth < 768)
+const collapsed = ref(responsiveNarrow.value)
+let desktopCollapsed = false
+function resizeNavigation() {
+  const next = window.innerWidth < 768
+  if (next === responsiveNarrow.value) return
+  if (next) { desktopCollapsed = collapsed.value; collapsed.value = true }
+  else collapsed.value = desktopCollapsed
+  responsiveNarrow.value = next
+}
+function closeNarrowNavigation(event: KeyboardEvent) { if (event.key === 'Escape' && responsiveNarrow.value) collapsed.value = true }
+onMounted(() => { window.addEventListener('resize',resizeNavigation); window.addEventListener('keydown',closeNarrowNavigation) })
+onUnmounted(() => { window.removeEventListener('resize',resizeNavigation); window.removeEventListener('keydown',closeNarrowNavigation) })
 provide('watchtower:sidebar-control',{
   enterInteraction:()=>{
-    const previous=collapsed.value
+    const wasNarrow=responsiveNarrow.value,previous=collapsed.value
+    const previousDesktop=wasNarrow ? desktopCollapsed : previous
     collapsed.value=true
-    return ()=>{collapsed.value=previous}
+    return ()=>{
+      desktopCollapsed=previousDesktop
+      collapsed.value=responsiveNarrow.value ? (wasNarrow ? previous : true) : previousDesktop
+    }
   }
 })
-const openKeys = ref(menuGroups.map(group => group.key))
+// Inline expanded groups are not collapsed-menu popup keys. Passing the full
+// list while initially collapsed opens every flyout and blocks narrow pages.
+let inlineOpenKeys = menuGroups.map(group => group.key)
+const openKeys = ref<string[]>(collapsed.value ? [] : [...inlineOpenKeys])
+watch(collapsed, isCollapsed => {
+  if (isCollapsed) { inlineOpenKeys = [...openKeys.value]; openKeys.value = [] }
+  else openKeys.value = [...inlineOpenKeys]
+}, { flush: 'sync' })
 const username = computed(() => getUser() || t('common.administrator'))
 const licenseActivated = ref(false)
 const licenseExpired = ref(false)
@@ -311,11 +345,12 @@ const breadcrumbItems = computed(() => [{ title: activeItem.value?.groupTitle ||
 
 function onOpenChange(keys: string[]) {
   openKeys.value = keys
+  if (!collapsed.value) inlineOpenKeys = [...keys]
 }
 
 function onMenuClick({ key }: { key: string }) {
   const item = flatItems.value.find(menu => menu.key === key)
-  if (item) router.push(item.path)
+  if (item) { router.push(item.path); if(responsiveNarrow.value) collapsed.value=true }
 }
 function logout() {
   clearToken()
@@ -356,3 +391,7 @@ async function submitChangePass() {
   }
 }
 </script>
+
+<style scoped>
+.collaboration-bell{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;margin-left:7px;color:var(--dt-warning,#d99a32);font-size:11px;vertical-align:middle}.collaboration-bell .anticon{font-size:15px}
+</style>

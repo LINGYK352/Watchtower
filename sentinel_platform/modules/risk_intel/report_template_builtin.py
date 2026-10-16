@@ -42,7 +42,7 @@ def _prebuilt_dir() -> str:
 BUILTIN_SESSION_ID = "builtin_session_v1"
 BUILTIN_TASK_ID = "builtin_task_v1"
 BUILTIN_FINDING_ID = "builtin_finding_v1"   # 单漏洞级（在会话级基础上精简：单条漏洞、无清单表/统计图）
-BUILTIN_IDS = (BUILTIN_SESSION_ID, BUILTIN_TASK_ID, BUILTIN_FINDING_ID, "ncc_event_finding_v1")
+BUILTIN_IDS = (BUILTIN_SESSION_ID, BUILTIN_TASK_ID, BUILTIN_FINDING_ID)
 
 _BUILTIN_VERSION = 3   # 结构版本；调整内置模板结构时 +1，force 重播覆盖（v2：新增漏洞级 builtin_finding_v1；v3：证据截图位改 {%p for shot in item.shots%} 循环，生成时嵌入人工上传截图）
 
@@ -441,9 +441,12 @@ def seed_builtin_templates(force: bool = False) -> int:
             seeded += 1
         except Exception as exc:
             logger.warning("seed_builtin_templates %s failed: %s", tid, exc)
+    # This reference is user-supplied, not a system builtin. Preserve its ID,
+    # content, file paths and report references while retiring the builtin flag.
+    # Deleting the row loses the user's existing template on an old->new update.
     try:
-        from .report_template_ncc import seed
-        seeded += seed(force=force)
+        coll.update_one({'_id':'ncc_event_finding_v1','builtin':True,'ncc_version':{'$exists':True}},
+                        {'$set':{'builtin':False}})
     except Exception as exc:
-        logger.warning("seed NCC template failed: %s", exc)
+        logger.debug('retire NCC builtin flag deferred: %s',type(exc).__name__)
     return seeded

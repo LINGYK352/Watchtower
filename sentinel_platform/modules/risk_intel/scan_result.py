@@ -21,6 +21,7 @@ from typing import Any, Dict, List
 from sentinel_platform.core import get_repo, get_logger
 from sentinel_platform.core.query import one_clause
 from sentinel_platform.contracts import Collections
+from ._finding_live import touch_revision
 
 logger = get_logger()
 
@@ -113,7 +114,9 @@ def delete_by_ids(namespace: str, ids: List[str]) -> Dict[str, Any]:
     try:
         oids = [_to_oid(i) for i in ids]
         res = get_repo().collection(coll_name).delete_many({"_id": {"$in": oids}})
-        return {"deleted": getattr(res, "deleted_count", 0)}
+        deleted = getattr(res, "deleted_count", 0)
+        if deleted and coll_name in (Collections.VULN, Collections.NUCLEI_RESULT): touch_revision()
+        return {"deleted": deleted}
     except Exception as exc:
         logger.debug("scan_result delete %s failed: %s", namespace, exc)
         return {"error": str(exc)[:120], "deleted": 0}

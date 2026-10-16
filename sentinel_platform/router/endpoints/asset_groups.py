@@ -77,6 +77,17 @@ class ScopeList(Resource):
         return err(CODE_BAD_REQUEST, r["error"]) if r.get("error") else ok(r)
 
 
+@ns_scope.route("/<string:scope_id>/task_source")
+class ScopeTaskSource(Resource):
+    @ns_scope.doc(security="token", description="需权限 asset:read：分组任务草稿来源，不创建任务/会话")
+    def get(self, scope_id):
+        svc = _svc()
+        if not svc:
+            return err(CODE_ERROR, "资产分组服务未就绪")
+        result = svc.get_task_source(scope_id)
+        return err(CODE_BAD_REQUEST, result["error"]) if result.get("error") else ok(result)
+
+
 @ns_scope.route("/delete/")
 class ScopeDelete(Resource):
     @ns_scope.doc(security="token", description="需权限 asset:write：删除单条范围段(?scope&scope_id)")

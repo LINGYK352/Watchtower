@@ -1,0 +1,904 @@
+{
+  "dashboard_0": {
+    "title": "Page purpose",
+    "body": "View live task, asset, finding and resource summaries. Statistics do not start tasks."
+  },
+  "dashboard_1": {
+    "title": "Shortcuts",
+    "body": "Open the matching page from a summary card; Enter works too. Expand or collapse navigation and reopen this guide at any time."
+  },
+  "dashboard_2": {
+    "title": "Charts and resources",
+    "body": "Charts summarize existing data. Resource notices use available resources; assess concurrency with task state and resource checks."
+  },
+  "attackAlert_0": {
+    "title": "Page purpose",
+    "body": "Inspect attack alerts and their sources."
+  },
+  "attackAlert_1": {
+    "title": "Type, severity and source filters",
+    "body": "Type and severity filter automatically. Search a source IP with Enter or Query; clear conditions to broaden results."
+  },
+  "attackAlert_2": {
+    "title": "Alert records and provenance",
+    "body": "Inspect target, source, count, confidence and severity. Select a source IP for its records and use details to inspect evidence."
+  },
+  "attackAlert_3": {
+    "title": "Refresh and alert counters",
+    "body": "Refresh reloads alerts and counters. Details show collected request evidence; Trace looks up records for the source IP."
+  },
+  "tasks_0": {
+    "title": "Page purpose",
+    "body": "Manage scan task status and outputs."
+  },
+  "tasks_1": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "tasks_2": {
+    "title": "Create and execution actions",
+    "body": "New opens task configuration. Stop, Continue or Restart depend on state. Select tasks before bulk stop and check the confirmation before stopping or restarting."
+  },
+  "tasks_3": {
+    "title": "Details and deletion scope",
+    "body": "Details show results. The deletion dialog separately controls collected assets and stopping/deleting associated AI sessions. Task-only deletion preserves assets; discovered findings survive session removal."
+  },
+  "taskCreate_0": {
+    "title": "Page purpose",
+    "body": "Create a scan task for an authorized scope."
+  },
+  "taskCreate_1": {
+    "title": "Name, policy and target",
+    "body": "Name the task, select an existing policy and choose direct targets, an asset engine or an organization. Target inputs depend on type. Configure required data sources first."
+  },
+  "taskCreate_2": {
+    "title": "Scope and options",
+    "body": "Review targets, exclusions, scan options and resource hints. The chosen policy controls automatic AI testing; red team mode requires acknowledgment."
+  },
+  "taskCreate_3": {
+    "title": "Submit the task",
+    "body": "After submitting, check live status in the task list. Complete required fields and use the displayed format for multiple targets."
+  },
+  "policy_0": {
+    "title": "Page purpose",
+    "body": "Manage reusable task policies."
+  },
+  "policy_1": {
+    "title": "Create and edit",
+    "body": "New opens policy configuration. Edit per row to change an existing policy; check dependent schedules before deletion."
+  },
+  "policy_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "policy_3": {
+    "title": "Policies and row actions",
+    "body": "Search by name and query/reset. Edit or confirm deletion per row. This list offers no copy or bulk-selection action."
+  },
+  "taskSchedule_0": {
+    "title": "Page purpose",
+    "body": "Schedule task runs; inspect actual runs in the task list."
+  },
+  "taskSchedule_1": {
+    "title": "Basic settings",
+    "body": "Enter the name, policy, schedule and preferred/optional backup/supervisory models first. Next opens the target step."
+  },
+  "taskSchedule_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "taskSchedule_3": {
+    "title": "Schedule row actions",
+    "body": "Pause, recover or confirm deletion per schedule row. One-time and recurring schedules show their current state; pagination changes the view only."
+  },
+  "taskSchedule_4": {
+    "title": "Asset group and targets",
+    "body": "An optional asset group fills the editable target field. Enter targets directly or append and modify them. Previous returns to the model and scheduling settings."
+  },
+  "pentest_0": {
+    "title": "Sessions and creation source",
+    "body": "View system, manual and workgroup sessions. The source indicates how the session was created, separate from status, target, model and usage."
+  },
+  "pentest_1": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "pentest_2": {
+    "title": "New session and console",
+    "body": "Create through the console. Details shows summaries; Console opens interaction. A manual whiteboard without a target stays on standby."
+  },
+  "pentest_3": {
+    "title": "Records and bulk actions",
+    "body": "Open a title or Details to inspect a record. Bulk actions apply to selected rows; verify the objects in the confirmation. Refresh and pagination only update the view."
+  },
+  "pentest_4": {
+    "title": "Stop, resume and delete",
+    "body": "Stop takes precedence over late approval and unattended continuation. Review errors before resuming; deletion removes the confirmed session and space."
+  },
+  "pentestConsole_0": {
+    "title": "Page purpose",
+    "body": "Choose a session card to enter the console; automatic-session takeover needs one initial acknowledgment."
+  },
+  "pentestConsole_1": {
+    "title": "Filter, create and session cards",
+    "body": "Filter by name, state or dates, or open a session key. Creation selects target, model and mode; red-team mode requires acknowledgement. The first card metric is context space; the final storage-space metric is file usage in MB."
+  },
+  "pentestConsole_2": {
+    "title": "Commands and uploads",
+    "body": "Send instructions from the composer; upload shows progress and attaches files to this session. Stop running work as needed and take over an automatic session to interact. Input and uploads are disabled in unattended mode."
+  },
+  "pentestConsole_3": {
+    "title": "Full authorization and unattended mode",
+    "body": "Only two switches sit beside Upload. Full authorization uses skills alone; when off, suspected high-risk requests need review. Unattended mode inherits the current authorization setting: full authorization on means authorized operation; otherwise mode guards apply. Its switch and banner turn yellow; switching off cancels it."
+  },
+  "pentestConsole_4": {
+    "title": "Approvals, packets and history",
+    "body": "Pending reviews appear above input. Inspect the full packet and verdict, then allow or block; unresolved requests expire after 30 seconds. AI can do other work. Approval sends the immutable packet. Reapply from history; unknown outcomes are not automatically replayed."
+  },
+  "pentestConsole_5": {
+    "title": "Attack surface and session space",
+    "body": "The left panel lists ports, endpoints, leads and findings; open a finding for evidence. Session space browses scripts, downloads and images with preview/download, restricted to authorized session files."
+  },
+  "pentestConsole_6": {
+    "title": "Tools, AI browser and Burps",
+    "body": "Expand tool cards for arguments/results. The AI browser and yellow Burps panels are draggable. Burps provides streaming history, filters, encoding views, HTTP edit/replay and confirmed clearing, without deleting session messages."
+  },
+  "miniapp_0": {
+    "title": "Page purpose",
+    "body": "Unpack and audit authorized local miniapp packages."
+  },
+  "miniapp_1": {
+    "title": "Upload a folder and unpack",
+    "body": "Select a wx-prefixed AppID folder containing main/subpackage .wxapkg files. Check progress; Path Help lists copyable cache locations. Inspect the message if the unpacker is unavailable or fails."
+  },
+  "miniapp_2": {
+    "title": "History, file selection and launch",
+    "body": "Select history to inspect an unpacked miniapp, then select its package and open Launch. Each package creates one session. Browsing history does not run a task; deletion requires confirmation."
+  },
+  "appPentest_0": {
+    "title": "Page purpose",
+    "body": "Use Watchtower Link to route selected app traffic to the platform."
+  },
+  "appPentest_1": {
+    "title": "Phone and connection",
+    "body": "Install/update Link and select USB/ADB or wireless. USB requires Android permission; use a reachable peer address on Windows. A disconnected state means capture is not active."
+  },
+  "appPentest_2": {
+    "title": "Egress, certificate and capture",
+    "body": "Direct egress is default; platform egress is optional. Follow HTTPS certificate installation instructions. Pinning or missing trust can prevent plaintext capture. Without accessibility, manually operate app features."
+  },
+  "appPentest_3": {
+    "title": "Device traffic and AI sessions",
+    "body": "Add Device combines wired and wireless setup. Configure the connection, then Search to open the radar. Pairing method uses device reports; offline records do not count as online. Set egress and the target on the phone. Copy the native wireless gateway URL; Web wired access uses the downloaded helper."
+  },
+  "probeManage_0": {
+    "title": "Page purpose",
+    "body": "Manage available probes and deployment status."
+  },
+  "probeManage_1": {
+    "title": "Probe, agent and blue-team tabs",
+    "body": "Create a probe with name, reachable address, port and key; build/download/check per row. Agent creation selects bound probes, platform and connection settings. The blue-team tab currently displays a development notice."
+  },
+  "probeManage_2": {
+    "title": "Build artifacts and status",
+    "body": "Download becomes available after a row is built. Check/Status reads deployed connectivity. There is no bulk selection; a build artifact is not deployment confirmation."
+  },
+  "probeManage_3": {
+    "title": "Refresh and delete",
+    "body": "Refresh reads existing records. Confirm deletion per configuration row. Leaving this page does not uninstall deployed probes or agents."
+  },
+  "aiConfig_0": {
+    "title": "Page purpose",
+    "body": "Manage model connections, mode prompts and AI settings."
+  },
+  "aiConfig_1": {
+    "title": "Model connection and testing",
+    "body": "Add/edit provider type, display name, exact model, endpoint and credentials. Saving, activation and connectivity tests are separate; tests may make actual API calls."
+  },
+  "aiConfig_2": {
+    "title": "Edit and reset prompts",
+    "body": "All listed prompts are editable after acknowledging effects on future AI behavior. Reset restores current-version default text after confirmation and preserves model settings."
+  },
+  "aiConfig_3": {
+    "title": "Enable and scope",
+    "body": "Check each prompt’s scene and enabled state. Saved content is read by the corresponding mode or tool; unsaved editor text does not take effect."
+  },
+  "vulnCenter_0": {
+    "title": "Page purpose",
+    "body": "Inspect verified findings and unverified leads."
+  },
+  "vulnCenter_1": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "vulnCenter_2": {
+    "title": "Evidence and status",
+    "body": "Inspect endpoint, type, source session and evidence. The same endpoint and vulnerability are unique; different vulnerabilities remain separate. Leads require actual validation. Source categories are AI assessment, kernel scan and workgroup. Kernel combines PoC/Nuclei; Workgroup covers shared records restored locally."
+  },
+  "vulnCenter_3": {
+    "title": "Generate finding reports",
+    "body": "Choose a template for a finding, session or task. Defaults are the original built-in templates; custom templates are selectable. Preview/edit/export the result in Report editor."
+  },
+  "vulnCenter_4": {
+    "title": "Records and bulk actions",
+    "body": "Open a title or Details to inspect a record. Bulk actions apply to selected rows; verify the objects in the confirmation. Refresh and pagination only update the view."
+  },
+  "reportEdit_0": {
+    "title": "Page purpose",
+    "body": "Manage task, session and finding reports and custom templates."
+  },
+  "reportEdit_1": {
+    "title": "Choose the report level and source",
+    "body": "Every generation button opens a searchable, paginated source picker. Select one task, session or finding, then choose the template, title and optional AI completion. Internal IDs are not typed. Template-row generation uses the same flow; existing manual report edits remain protected."
+  },
+  "reportEdit_2": {
+    "title": "Generate, preview and edit",
+    "body": "Choose a template to generate a report and preview existing reports. Save edited content before exporting. AI-assisted organization may use the configured model."
+  },
+  "reportEdit_3": {
+    "title": "Manual marking and AI learning",
+    "body": "Create a report template, upload Word, then choose manual marking or AI learning. Manual marking edits the original document with natural language and tags; learning can call a model. Both require review. Existing text templates remain editable."
+  },
+  "poc_0": {
+    "title": "Page purpose",
+    "body": "Manage verification scripts and templates."
+  },
+  "poc_1": {
+    "title": "Import and sync",
+    "body": "Import a script or a ZIP batch. Download the template to check entry/argument requirements. Confirm built-in sync. Importing alone does not establish script safety or successful verification."
+  },
+  "poc_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "poc_3": {
+    "title": "Records and bulk actions",
+    "body": "Open a title or Details to inspect a record. Bulk actions apply to selected rows; verify the objects in the confirmation. Refresh and pagination only update the view."
+  },
+  "poc_4": {
+    "title": "Delete and clear",
+    "body": "Deletion affects selected items; clearing affects the whole list and needs confirmation. Run verification through authorized tasks."
+  },
+  "vulnIntel_0": {
+    "title": "Page purpose",
+    "body": "Inspect central and local vulnerability intelligence."
+  },
+  "vulnIntel_1": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "vulnIntel_2": {
+    "title": "Identifiers and publishers",
+    "body": "Keep CVE where available; otherwise use internal WTI-year/month-sequence identifiers. Linked titles open the publisher. No source means no fabricated link."
+  },
+  "vulnIntel_3": {
+    "title": "Pull, validate and notify",
+    "body": "Pull intelligence and inspect PoC/execution availability. High-risk notifications are grouped by collection run. Intelligence does not prove a target is vulnerable."
+  },
+  "attackChain_0": {
+    "title": "Sessions and attack chains",
+    "body": "Locate records by session, target and organization. Targets branch to independent findings; explicit parent steps or findings create continuations. Intranet entry points are labelled separately."
+  },
+  "attackChain_1": {
+    "title": "Session and target filters",
+    "body": "Enter a source session ID, target text, organization or state and search. Reset clears filters. Target text is treated literally, not as a regular expression; source columns and node details support traceability."
+  },
+  "attackChain_2": {
+    "title": "Records and bulk actions",
+    "body": "Open a title or Details to inspect a record. Bulk actions apply to selected rows; verify the objects in the confirmation. Refresh and pagination only update the view."
+  },
+  "attackChain_3": {
+    "title": "Branch graph and source details",
+    "body": "Open a graph preview to pan, zoom and inspect targets, sessions and references in a movable dialog. Independent findings branch from targets; chronology alone does not imply causation. The console reuses this same graph component."
+  },
+  "intel_0": {
+    "title": "Page purpose",
+    "body": "Browse asset instances, system knowledge, code audits, reports and organizations."
+  },
+  "intel_1": {
+    "title": "Categories and objects",
+    "body": "Switch knowledge categories and query the current one. Counts across categories are not one shared result."
+  },
+  "intel_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "intel_3": {
+    "title": "Records and bulk actions",
+    "body": "Open a title or Details to inspect a record. Bulk actions apply to selected rows; verify the objects in the confirmation. Refresh and pagination only update the view."
+  },
+  "intel_4": {
+    "title": "Report and organization links",
+    "body": "Inspect report text/findings. Organization view summarizes systems, subdomains, intelligence and chains; links depend on source data."
+  },
+  "unitView_0": {
+    "title": "Page purpose",
+    "body": "Inspect assets, findings, reports and chains by organization."
+  },
+  "unitView_1": {
+    "title": "Unit search and sorting",
+    "body": "Typing a unit name filters immediately. Sort by assessment time or finding count; clear the name to show all units."
+  },
+  "unitView_2": {
+    "title": "Detail categories",
+    "body": "Select an organization and switch findings, reports, chains, subdomains and intelligence. Open records for details."
+  },
+  "unitView_3": {
+    "title": "Unit selection and related cleanup",
+    "body": "Open details from a unit card. Select cards or Select All on Page for bulk deletion. Check units and related-data scope in the confirmation; data deletion cannot undo actions executed on a target."
+  },
+  "search_0": {
+    "title": "Local asset search",
+    "body": "Search assets already collected by this instance. Source discovery and new scans are configured in New Task; these filters read existing results."
+  },
+  "search_1": {
+    "title": "Eight asset collections and details",
+    "body": "Choose Sites, Domains, IPs, URLs, Certificates, Services, File Leaks or WIH. Details show the raw record; sites also provide screenshots and tag management."
+  },
+  "search_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "search_3": {
+    "title": "Export, select and delete",
+    "body": "CSV export follows the current collection and filters. Select All can include all matching results across pages. Confirm deletion after checking the selected count and filter scope."
+  },
+  "assetGroups_0": {
+    "title": "Page purpose",
+    "body": "Organize reusable asset groups."
+  },
+  "assetGroups_1": {
+    "title": "Create a group and its scope",
+    "body": "Enter name, scope, exclusions and Domain/IP type. Open row details to manage members. This list has no group-edit action."
+  },
+  "assetGroups_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "assetGroups_3": {
+    "title": "Group row actions",
+    "body": "Open details per row to inspect members. Confirmed deletion applies to that group. Copy scope and exclusions directly."
+  },
+  "assetGroupDetail_0": {
+    "title": "Page purpose",
+    "body": "Inspect group domains, IPs, sites and WIH."
+  },
+  "assetGroupDetail_1": {
+    "title": "Categories and members",
+    "body": "Switch asset categories and query members. Add/remove/export applies to the current category."
+  },
+  "assetGroupDetail_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "assetGroupDetail_3": {
+    "title": "Records and bulk actions",
+    "body": "Open a title or Details to inspect a record. Bulk actions apply to selected rows; verify the objects in the confirmation. Refresh and pagination only update the view."
+  },
+  "assetMonitor_0": {
+    "title": "Page purpose",
+    "body": "Monitor changes to existing assets."
+  },
+  "assetMonitor_1": {
+    "title": "Domain, site and WIH monitoring",
+    "body": "Choose a monitor type and existing asset group; domain monitoring also requires domains. Empty names are generated automatically. Set the interval in hours, with a minimum of six."
+  },
+  "assetMonitor_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "assetMonitor_3": {
+    "title": "Monitor records and row actions",
+    "body": "Inspect interval, state, run count and next execution time. Confirm Stop, Recover or Delete per row. This table has no bulk selection or policy selector."
+  },
+  "assetMonitor_4": {
+    "title": "Monitor results and tasks",
+    "body": "Stop/Recover controls subsequent monitoring. Inspect collected results in asset groups and manage executing jobs in the task list."
+  },
+  "githubTasks_0": {
+    "title": "Page purpose",
+    "body": "Manage code search tasks and their results."
+  },
+  "githubTasks_1": {
+    "title": "Create a code-search task",
+    "body": "Submit a name and GitHub search keywords. Configure source credentials in API Keys. Searching consumes GitHub API quota."
+  },
+  "githubTasks_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "githubTasks_3": {
+    "title": "Results, stop and delete",
+    "body": "Open results per row. Confirm Stop for running tasks or Delete for a record. There is no bulk selection or scan-policy selector."
+  },
+  "githubMonitor_0": {
+    "title": "Page purpose",
+    "body": "Manage code monitoring schedules and their results."
+  },
+  "githubMonitor_1": {
+    "title": "Create or edit code monitoring",
+    "body": "Enter monitor name, GitHub keywords and Cron. Edit a row to change an existing monitor and check the current time zone."
+  },
+  "githubMonitor_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "githubMonitor_3": {
+    "title": "Results and monitoring state",
+    "body": "View results, edit and confirm Stop/Recover or Delete per row. There is no bulk selection. Stopping future monitoring does not clear historical search results."
+  },
+  "userManage_0": {
+    "title": "Page purpose",
+    "body": "Administrators manage this instance’s users, roles and permissions."
+  },
+  "userManage_1": {
+    "title": "Users and roles",
+    "body": "Switch users/roles and use row actions to create, edit, disable or reset passwords. Control Keys, peer memberships and user accounts are separate credentials."
+  },
+  "userManage_2": {
+    "title": "Permissions and save",
+    "body": "Select required read/write permissions and save. Check active work and account usage before deletion/disable."
+  },
+  "userManage_3": {
+    "title": "User and role row actions",
+    "body": "Edit, disable/enable or confirm deletion per user. An empty password keeps it unchanged. Edit/delete custom roles; inspect permissions for built-in roles. There is no bulk selection."
+  },
+  "proxy_0": {
+    "title": "Page purpose",
+    "body": "Configure instance proxy egress and nodes."
+  },
+  "proxy_1": {
+    "title": "Subscriptions and kernel nodes",
+    "body": "Expand the kernel proxy, import a subscription URL or upload YAML and activate a profile. Select nodes manually or use automatic selection. Save port and DNS settings separately."
+  },
+  "proxy_2": {
+    "title": "Direct mode, sources and egress",
+    "body": "Unconfigured systems default to direct. Smart may be unbound, custom, kernel or pool; custom requires a selected entry. Explicit kernel selection/save performs a fresh check. Failure explains why and changes only the draft to direct; saved settings remain unchanged until Save."
+  },
+  "proxy_3": {
+    "title": "Public proxy pool and bulk actions",
+    "body": "Expand the public pool, configure crawl queries and save. Refresh, Crawl and Verify are separate actions. Pool-table selection enables bulk verify, enable/disable or confirmed delete; check availability first."
+  },
+  "networkCheck_0": {
+    "title": "Page purpose",
+    "body": "Check DNS, connectivity, proxy and network quality."
+  },
+  "networkCheck_1": {
+    "title": "Health check and individual tests",
+    "body": "Run Health Check to sample link, egress, DNS, dependencies and proxy. Use the individual Ping/resolution controls below for a target and count. Wait for results while the check runs."
+  },
+  "networkCheck_2": {
+    "title": "Results and suggestions",
+    "body": "Expand failures for causes/timing. Scores represent a sample; fix issues and recheck rather than treating them as all-day reliability proof."
+  },
+  "apiKeys_0": {
+    "title": "Page purpose",
+    "body": "Configure asset-source, notification and other API credentials. The platform ID is the activation JWT uid and is read-only. The push threshold appears before Webhook fields, and messages include a W-linux/W-win source."
+  },
+  "apiKeys_1": {
+    "title": "Categories and credentials",
+    "body": "Fill required service fields using password inputs for secrets. Leave unused sources blank and never share these as group invitations."
+  },
+  "apiKeys_2": {
+    "title": "Enable, save and refresh",
+    "body": "After changing source switches or fields, select Save All. Refresh prompts about unsaved edits. Get opens the source website; it is not a connection test."
+  },
+  "logs_0": {
+    "title": "Page purpose",
+    "body": "Inspect runtime logs and component errors."
+  },
+  "logs_1": {
+    "title": "Filters and full details",
+    "body": "Query/reset severity, process, module or keyword. Open a row detail drawer for full logs and exception traces. Refresh reads counters and records."
+  },
+  "logs_2": {
+    "title": "Selection, clear and retention",
+    "body": "Select rows and confirm deletion of selected logs. Clear applies to all logs. Retention sets days per category; preserve evidence needed for diagnosis."
+  },
+  "accessLog_0": {
+    "title": "Page purpose",
+    "body": "Inspect access and business-operation audits."
+  },
+  "accessLog_1": {
+    "title": "All access and writes",
+    "body": "Switch all access or writes, and narrow by user, endpoint, status or date."
+  },
+  "accessLog_2": {
+    "title": "Filter and reset",
+    "body": "Enter filters, then use Query or Search. Reset clears filters without deleting records. Scroll within the table to see more columns."
+  },
+  "accessLog_3": {
+    "title": "Access records and retention",
+    "body": "Page through time, user, path, status, IP and elapsed time. Refresh or set retention at the top right. This table does not offer bulk deletion."
+  },
+  "guardLog_0": {
+    "title": "Page purpose",
+    "body": "Traffic log records platform-observable session traffic, including allowed requests."
+  },
+  "guardLog_1": {
+    "title": "Session ID and filters",
+    "body": "Filter by full session ID with method, action, address and time. Permissions limit visible sessions."
+  },
+  "guardLog_2": {
+    "title": "Request, response and encoding",
+    "body": "Click a traffic row for request/response interaction, with UTF-8, GBK, Hex or Base64 views. Blocked requests show Blocked. Captured packets up to 1 MiB combined are retained and scrollable. Over-budget/window captures are marked; TLS tunnels still have metadata and Burps is independent."
+  },
+  "guardLog_3": {
+    "title": "Capacity, retention and cleanup",
+    "body": "Configure capacity and the default 30-day retention. Age/capacity pruning removes old records. Filters do not limit cleanup; retain needed evidence before changing settings."
+  },
+  "controlSync_0": {
+    "title": "Page purpose",
+    "body": "MCP control and data sync are separate; their credentials are not interchangeable."
+  },
+  "controlSync_1": {
+    "title": "Create and manage control Keys",
+    "body": "On the Control Key tab, Create from the Key card’s right-hand button, with name, finite expiry and allowed operations. Administrators only. Revoke disables immediately; confirm deletion. Plaintext Keys are not recovered."
+  },
+  "controlSync_2": {
+    "title": "HTTP and MCP access",
+    "body": "On the Control Key tab, Give another AI the HTTP guide URL and Key, or use the dedicated endpoint in an MCP client. Replace example IPs with a caller-reachable address."
+  },
+  "controlSync_3": {
+    "title": "Receiver pairing links",
+    "body": "Enter a reachable IP or domain. Windows adds the receiver port automatically; explicit ports are accepted. Incomplete fields show a prompt. Node mode requires an endpoint, fingerprint and credential. Choose limited validity and categories before generating a link; no migration starts yet."
+  },
+  "controlSync_4": {
+    "title": "Paste, connect and confirm",
+    "body": "The initiator pastes the link to fill editable address/Key, then connects. Both sides confirm in dialogs. The initiator polls; reverse connectivity is not required. Reuse history targets and revoke/delete connections."
+  },
+  "controlSync_5": {
+    "title": "One record per sync operation",
+    "body": "Click a record summary for its progress, stage, categories and results. Completed, failed, rejected or expired records can be removed; active or pending operations cannot. Imported business data and protocol retry receipts remain."
+  },
+  "collaboration_0": {
+    "title": "Page purpose",
+    "body": "Cross-Web/Windows workgroups provide a shared room and private two-member rooms."
+  },
+  "collaboration_1": {
+    "title": "Create and invite",
+    "body": "Create from the list’s right-hand button with a reachable host address. Invitations default to no expiry, with optional expiry, member cap and approval. Share the credential-bearing link only with intended members."
+  },
+  "collaboration_2": {
+    "title": "Join and approval",
+    "body": "Paste into Join to fill editable address/Key. Connect explicitly and wait while this client polls. The host approves/rejects/removes from Members. Permanent invitations do not remove membership expiry."
+  },
+  "collaboration_3": {
+    "title": "Shared, direct and messages",
+    "body": "The shared room is visible to active members; direct rooms only to both participants. Drafts are per room and messages show source clients. Load older messages upward."
+  },
+  "collaboration_4": {
+    "title": "Findings, reports and handoff",
+    "body": "Share existing findings, reports or complete sessions to the current room. Preview received packages. Restoring selects a local model and creates a standby session without starting the original."
+  },
+  "collaboration_5": {
+    "title": "Rotate, close and delete",
+    "body": "Rotating invalidates old invitation Keys while existing members keep their own credentials. Deleting a hosted group closes new access; deleting a joined link removes the local connection and preserves shared evidence."
+  },
+  "systemExtension_0": {
+    "title": "Page purpose",
+    "body": "Manage AI tools, kernel tools and private/cloud extensions."
+  },
+  "systemExtension_1": {
+    "title": "Type and name filters",
+    "body": "Filter AI/kernel tools independently by function or name. Reset only clears filters. Cards show entry, parameters and availability."
+  },
+  "systemExtension_2": {
+    "title": "Tool documentation",
+    "body": "Click a tool card to read its standard documentation. Short descriptions open in a centered modal and long descriptions use a drawer. Enable, check and remove are separate actions."
+  },
+  "systemExtension_3": {
+    "title": "Cloud verification and isolation",
+    "body": "Cloud requires a code sent to your registered email, up to five submissions/day and 300 MiB/package. Pending and approved packages remain isolated. Upload does not publish/enable; local stays private."
+  },
+  "systemExtension_4": {
+    "title": "Store, enablement and logs",
+    "body": "The store offers compatible packages. Read documentation before install/enable. Cards provide details, update checks and deletion. Use runtime logs for failures."
+  },
+  "aiTools_0": {
+    "title": "Page purpose",
+    "body": "Inspect callable AI tools and parameter contracts."
+  },
+  "aiTools_1": {
+    "title": "Capabilities and arguments",
+    "body": "Expand tools for docs, arguments and availability. Calling also depends on tool configuration, session mode and permissions."
+  },
+  "manual_0": {
+    "title": "Page purpose",
+    "body": "Read the user manual and FAQ."
+  },
+  "manual_1": {
+    "title": "Sections and documentation",
+    "body": "Use sections for installation, configuration, tasks, console and extensions. Page guides explain operation; the manual holds fuller contracts."
+  },
+  "activation_0": {
+    "title": "Page purpose",
+    "body": "Inspect activation state/expiry and manage this instance’s license. The platform ID is the activation JWT uid and is read-only. The push threshold appears before Webhook fields, and messages include a W-linux/W-win source."
+  },
+  "activation_1": {
+    "title": "Credential and platform number",
+    "body": "The read-only platform number below the credential comes from the current JWT uid. Open Activate or Renew to paste a credential in its dialog. Keep credentials out of reports."
+  },
+  "activation_2": {
+    "title": "Status and source",
+    "body": "Inspect authoritative active/expired/revoked state. Obtain renewed credentials from the source service, then refresh and verify dates."
+  },
+  "updateCheck_0": {
+    "title": "Page purpose",
+    "body": "Inspect and apply adjacent signed platform updates."
+  },
+  "updateCheck_1": {
+    "title": "Check and version order",
+    "body": "Check latest and read changes. Current version is not artificially sorted first. Web/Windows use separate channels; upgrade and rollback are adjacent."
+  },
+  "updateCheck_2": {
+    "title": "Update, progress and resume",
+    "body": "Finish relevant work, then start. Watch download, verification, apply and restart. Resume interrupted chains without deleting locks/cache; the native Windows app may reopen."
+  },
+  "updateCheck_3": {
+    "title": "Rollback and same-version repair",
+    "body": "Rollback follows adjacent prepared versions above the minimum. Same-version repair performs full checks. The 175 minimum remains; test builds are not formal releases."
+  },
+  "changelog_0": {
+    "title": "Local changelog",
+    "body": "History is read from files delivered with the installed version, without fetching remote history. System updates open by default; switch to patch updates for fixes to existing features."
+  },
+  "changelog_1": {
+    "title": "System and patch records",
+    "body": "Feature additions/removals belong to system versions; existing-feature fixes belong to patches. Patch serials stay hidden in the main version label. Test iterations are development builds, not formal releases."
+  },
+  "developer_0": {
+    "title": "Page purpose",
+    "body": "Inspect project development and participation."
+  },
+  "developer_1": {
+    "title": "Project and participation",
+    "body": "Use available website, GitHub or contribution links. External links leave this instance. Do not post credentials or customer data publicly."
+  },
+  "open": "Page operation guide",
+  "title": "Operation guide",
+  "close": "Close guide",
+  "previous": "Previous",
+  "next": "Next",
+  "finish": "Finish",
+  "contents": "All operations on this page",
+  "keyboard": "← → Navigate · Esc Close",
+  "unavailable": "This operation is inside the relevant tab, detail or dialog, or needs data/permission. The guide does not click, submit or start work for you.",
+  "mascot": "Whale guide points out the controls",
+  "taskDetail_0": {
+    "title": "Task details",
+    "body": "This page summarizes one task, its result counts and enabled options."
+  },
+  "taskDetail_1": {
+    "title": "Identity, state and targets",
+    "body": "Copy the task ID or full target; check start/end time and duration. Source queries appear when available."
+  },
+  "taskDetail_2": {
+    "title": "Open task results",
+    "body": "Select View below a domain, IP, site, URL or WIH count. Asset search opens filtered by this task ID. Zero indicates no results of that type."
+  },
+  "taskDetail_3": {
+    "title": "Enabled task options",
+    "body": "This section displays the enabled options saved with the task. Manage task execution in the task list; configure future scans in policies or task creation."
+  },
+  "taskDetail_4": {
+    "title": "Return to tasks",
+    "body": "Return to the list to view or manage tasks. Leaving this page does not stop execution."
+  },
+  "fingerprint_0": {
+    "title": "Fingerprint entry",
+    "body": "This page explains where fingerprint capabilities live. Asset-instance fingerprints and system knowledge are available in Intelligence."
+  },
+  "fingerprint_1": {
+    "title": "Open Intelligence",
+    "body": "Select the Intelligence button and choose asset instances or system knowledge to inspect collected fingerprints."
+  },
+  "pentestDetail_0": {
+    "title": "Session details",
+    "body": "Inspect session information, results, tool logs and dialogue. Manual standby is distinct from failures requiring attention."
+  },
+  "pentestDetail_1": {
+    "title": "Identity and console",
+    "body": "Copy the session ID or open its console beside the session key. Check the model, mode, target, source task and latest error."
+  },
+  "pentestDetail_2": {
+    "title": "Refresh and state actions",
+    "body": "Refresh reads current information. Eligible automatic sessions offer Start or Resume; continue manual sessions in the console. Back leaves this page."
+  },
+  "pentestDetail_3": {
+    "title": "Result narrative",
+    "body": "Read the result narrative when present. If it is empty, inspect status and history; an empty result is not verification."
+  },
+  "pentestDetail_4": {
+    "title": "Tools and dialogue",
+    "body": "Expand tool logs for arguments and results. Dialogue records load from the server on demand. Expanding panels does not send AI instructions."
+  },
+  "pentestLive_0": {
+    "title": "Live observation",
+    "body": "This page observes a session without sending instructions. Stream connection and execution state are separate; observation ending does not imply task failure."
+  },
+  "pentestLive_1": {
+    "title": "Session and connection state",
+    "body": "Manual standby, running, unattended mode and errors have distinct labels and colors. Reopen after observation closes to read the latest snapshot."
+  },
+  "pentestLive_2": {
+    "title": "Counters and surface",
+    "body": "Counters show rounds, tokens, tools and findings. The surface refresh reads existing context without starting a scan."
+  },
+  "pentestLive_3": {
+    "title": "Inspect tool results",
+    "body": "Expand a tool header for its arguments and result. Thought text arrives with the observation stream. Open details to enter the interactive console using the session key."
+  },
+  "pentestLive_4": {
+    "title": "Details and back",
+    "body": "Open details or return to the session list at the top right. These links navigate without stopping execution."
+  },
+  "policyEdit_0": {
+    "title": "Policy configuration",
+    "body": "Configure reusable collection, scan and AI defaults. Changes affect future tasks after saving."
+  },
+  "policyEdit_1": {
+    "title": "Collection mode and sources",
+    "body": "Single-target and multiple-source modes show different inputs. Multiple-source collection requires configured sources."
+  },
+  "policyEdit_2": {
+    "title": "DNS, ports and sites",
+    "body": "Configure DNS dictionaries/resolvers, ports, service detection, site collection and validation by section. Expand optional dictionaries; empty values use defaults."
+  },
+  "policyEdit_3": {
+    "title": "Automatic AI assessment",
+    "body": "The yellow option remains noticeable. Enabling it reveals mode, deduplication and scope settings; choose a model when creating a task."
+  },
+  "policyEdit_4": {
+    "title": "Mode and red-team acknowledgement",
+    "body": "Enable automatic AI before selecting a mode. Red-team selection requires acknowledgement; cancelling preserves the previous mode."
+  },
+  "policyEdit_5": {
+    "title": "Scope drift and unrestricted",
+    "body": "Choose no, light, moderate or unrestricted scope drift in the automatic AI section. Unrestricted broadens exploration for the task."
+  },
+  "policyEdit_6": {
+    "title": "Validation and password-check plugins",
+    "body": "Search and move required plugins into the enabled list. Available entries come from installed kernel tools."
+  },
+  "policyEdit_7": {
+    "title": "Save, back and dependencies",
+    "body": "Saving checks required configuration and stores the policy. Leaving with unsaved changes prompts before discarding."
+  },
+  "attackAlert_4": {
+    "title": "Ban and unban",
+    "body": "Confirm Ban per alert. The ban list shows expiry and Unban. Adding an IP to the allowlist also removes its ban; check the source first."
+  },
+  "attackAlert_5": {
+    "title": "Allowlist management",
+    "body": "Enter an IP to add it or confirm removal per row. Refresh only reads the list. This setting affects the platform’s own alert protection."
+  },
+  "tasks_4": {
+    "title": "Asset synchronization and reports",
+    "body": "Synchronize in a task row selects an asset group for collected results. Report selects a task template. Inspect messages for empty results or unavailable templates."
+  },
+  "tasks_5": {
+    "title": "Clean orphaned assets",
+    "body": "Check counts and provenance before confirming cleanup of assets left by deleted tasks. Cleanup cannot proceed when task records cannot be read safely."
+  },
+  "taskCreate_4": {
+    "title": "Primary/backup model and context",
+    "body": "AI-enabled policies reveal primary/backup model and per-session context settings. Backup must use the same protocol. Native, global-default or explicit budgets apply to this task."
+  },
+  "taskCreate_5": {
+    "title": "Egress and observer",
+    "body": "AI options select primary/fallback egress. An optional observer uses its chosen model and adds model calls. Unconfigured egress choices are unavailable."
+  },
+  "taskCreate_6": {
+    "title": "Exclusions and temporary intelligence",
+    "body": "The no-assessment list skips automatic AI dispatch. Temporary intelligence can target a unit, host or the whole task; check its content and scope before submission."
+  },
+  "taskCreate_7": {
+    "title": "CSV batch and priority",
+    "body": "Download the CSV template, fill it and upload to create tasks sharing the policy. Set single-task priority in the form. Check submission results in the task list."
+  },
+  "networkCheck_3": {
+    "title": "Custom and built-in DNS",
+    "body": "After adding, editing or removing custom DNS, select Save Custom. The collapsible built-in DNS list is read-only and is not changed by this save."
+  },
+  "apiKeys_3": {
+    "title": "Notifications and intelligence push",
+    "body": "Notification sources can set severity and intelligence push. Save them with other fields using Save All. Newly added high-severity intelligence is grouped by collection batch."
+  },
+  "logs_3": {
+    "title": "Reports and developer replies",
+    "body": "Select logs and open Upload to Cloud. Review the attached ownership/version/egress information and description before submitting. My Reports shows this account’s submissions and replies."
+  },
+  "aiConfig_4": {
+    "title": "Default model and global settings",
+    "body": "Save the default model, timeout, source directory and concurrency limit. Zero concurrency uses resource recommendations; sessions with locked models keep their choices."
+  },
+  "aiConfig_5": {
+    "title": "Token totals and expansion",
+    "body": "Collapsed by default: calls, total tokens, input/output and failed calls stay visible. Expand for model and stage breakdowns. Refresh reads statistics without calling a model; global parameters keep their layout."
+  },
+  "aiConfig_6": {
+    "title": "Explicit model SKILL bindings",
+    "body": "Add a binding, choose a uniquely named configured model and required built-in stages, upload the bundle and select its entry. Both model name and stage must match. Guard bindings require risk confirmation. Legacy unscoped bindings need stages; built-in tool and safety constraints remain."
+  },
+  "proxy_4": {
+    "title": "Custom proxies",
+    "body": "Expand Custom Proxies to add/edit connection settings. Enable, test or confirm deletion per row. Select model ingress proxies in AI Configuration."
+  },
+  "proxy_5": {
+    "title": "Health and traffic counters",
+    "body": "Inspect kernel health, current egress and traffic totals. View counters by subscription/node. Reset requires confirmation and does not delete proxy configuration."
+  },
+  "proxy_6": {
+    "title": "Logs and unsaved changes",
+    "body": "Expand and refresh logs. Mode, kernel and pool settings have separate saves; saving one does not mark the others saved. Refresh preserves drafts. Leaving lets you keep or discard unsaved settings and subscription/YAML input."
+  },
+  "assetGroups_4": {
+    "title": "Create a pentest task",
+    "body": "Open Create pentest task from a group row, review its scope and choose a policy with automatic AI testing after scanning. Cancel creates nothing; only final submission starts task orchestration, without directly creating a console session."
+  },
+  "assetGroupDetail_4": {
+    "title": "Group task entry",
+    "body": "The right-side button opens the task draft for this group. Entire ranges overlapping exclusions are visibly omitted. Asset read and task write permissions are required; a scope changed since preview must be reviewed again."
+  },
+  "collaborationWorkspace_0": {
+    "title": "Independent workspace",
+    "body": "Only the current workspace is shown here. Back returns to the workgroup list. Operations remain scoped to this group."
+  },
+  "collaborationWorkspace_1": {
+    "title": "Shared and direct rooms",
+    "body": "The shared room is visible to approved members. A direct room is private to its two participants. Downloading a message does not mark it read."
+  },
+  "collaborationWorkspace_2": {
+    "title": "Members and applications",
+    "body": "Members and join/rename applications are separate. Only the host approves membership, removes members and approves names. Co-hosts maintain service."
+  },
+  "collaborationWorkspace_3": {
+    "title": "Workspace names and IDs",
+    "body": "Each member has a unique eight-character ID and workspace name. Members request renames; the host can rename directly. Encryption identity does not change."
+  },
+  "collaborationWorkspace_4": {
+    "title": "Share materials",
+    "body": "Share findings, reports or a complete inactive session package. Preview before restoring; restoration does not auto-execute. Individual files must not exceed 20 MiB."
+  },
+  "collaborationWorkspace_5": {
+    "title": "Maintenance nodes and cached delivery",
+    "body": "The host downloads the generic program, adds workspace nodes and views five-second health samples in Maintenance nodes. Cache and delivery separately selects the node and realtime/hosted policy. Members receive no administration credential."
+  },
+  "collaborationWorkspace_6": {
+    "title": "Back and unread state",
+    "body": "Workgroup and sidebar badges show incoming messages outside the workspace. Viewing the relevant room and scrolling to the latest messages marks it read."
+  },
+  "collaborationWorkspace_7": {
+    "title": "Management, service and route",
+    "body": "The administrative host controls approvals and settings. A member must opt in and receive approval before its prepared co-host can serve public data. See the reachable service and last verified path here. With no reachable host or co-host, live service is offline and local pending data stays intact."
+  },
+  "controlSync_6": {
+    "title": "Isolated node routing",
+    "body": "Enter the node URL, TLS fingerprint and administration credential. The invitation excludes administration access. Each pairing has a separate realm. Paste the complete invitation on the initiator to select this route; interruptions retain the original plan and verified chunks. The generic node starts without an IP argument, on7443 by default. The connecting platform enters its reachable address and verifies its fingerprint."
+  },
+  "miniapp_3": {
+    "title": "Interaction and models",
+    "body": "Standard is the default intensity. Unattended runs automatically; human-led waits for your messages. The preferred model starts from the global default; backup is off and offers other models of the same protocol. Review these options before launching."
+  },
+  "taskSchedule_5": {
+    "title": "Group targets and AI models",
+    "body": "Enter targets or choose an asset group. Submission saves its authoritative target snapshot with exclusions respected. Preferred uses the default; backup and supervision start disabled. Supervision may use an independent model. AI options apply only when the policy enables automatic AI."
+  },
+  "reportEdit_4": {
+    "title": "New report template",
+    "body": "Choose manual annotation or AI learning in New report template. Both require a base Word file. Annotate paragraphs and table cells directly while retaining layout and images. Both require review and confirmation. Existing text templates remain editable."
+  },
+  "apiKeys_4": {
+    "title": "Notification threshold and source",
+    "body": "Above Webhook in the alert card, set the threshold and view the read-only platform number. Notifications identify their source with W-linux/W-win and that number. Save all after editing the threshold."
+  },
+  "attackAlert_6": {
+    "title": "Automatic collection status",
+    "body": "The banner describes automatic log collection support. Native Windows and non-Docker environments do not report a running collector. Docker read failures or expired leases remain visible. Refresh reads shared status and existing alerts."
+  },
+  "collaboration_8": {
+    "title": "Workspace attachments",
+    "body": "Select files below the input, remove pending files if needed, then Send with or without text. Files use the current group/direct recipients, encrypted outbox and node cache. Older participants must update. Downloads recheck access and files are never executed by the platform."
+  }
+}

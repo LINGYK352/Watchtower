@@ -203,13 +203,13 @@ function dismissKeys() {
   margin-bottom: 8px;
 }
 .setup-desc {
-  color: rgba(0, 0, 0, 0.55);
+  color: var(--dt-muted);
   font-size: 14px;
   margin-bottom: 16px;
-  line-height: 1.6;
+  line-height: 1.75;
 }
 .setup-exp {
-  color: #fa8c16;
+  color: var(--dt-warning);
   font-size: 12px;
 }
 .setup-link {
@@ -238,6 +238,6 @@ function dismissKeys() {
   gap: 10px;
 }
 .setup-btn-later {
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--dt-text);
 }
 </style>

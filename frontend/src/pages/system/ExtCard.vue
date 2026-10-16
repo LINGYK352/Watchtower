@@ -1,5 +1,5 @@
 <template>
-  <div class="ext-card">
+  <div class="ext-card" role="button" tabindex="0" :aria-label="ext.name || ext.extension_id" @click="$emit('detail', ext)" @keydown.enter.self="$emit('detail', ext)" @keydown.space.self.prevent="$emit('detail', ext)">
     <div class="c-head">
       <code class="c-name">{{ ext.name || ext.extension_id }}</code>
       <a-tag :color="ext.available ? 'green' : 'red'" size="small">{{ ext.available ? translate('ui.m_e1ba8151b252') : ext.unavailable_reason || translate('ui.m_460b3574e4bd') }}</a-tag>
@@ -16,7 +16,7 @@
       <span class="c-params-label">{{ translate('ui.m_9634fb0832be') }}</span>
       <span v-for="p in params" :key="p.name" class="param">{{ p.name }}<i v-if="p.required">*</i></span>
     </div>
-    <div class="c-actions">
+    <div class="c-actions" @click.stop @keydown.stop>
       <a-space size="small">
         <a @click="$emit('detail', ext)">{{ translate('ui.m_979a332955c8') }}</a>
         <a @click="$emit('check', ext)">{{ translate('ui.m_071089398bfd') }}</a>
@@ -54,10 +54,11 @@ const params = computed<ExtParam[]>(() => {
 })
 </script>
 <style scoped>
-.ext-card { border: 1px solid var(--dt-border, #f0f0f0); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; background: var(--dt-card-bg, #fff); }
+.ext-card { border: 1px solid var(--dt-border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--dt-card);cursor:pointer;transition:transform .16s,border-color .16s,box-shadow .16s }
+.ext-card:hover{transform:translateY(-2px);border-color:var(--dt-primary);box-shadow:var(--dt-shadow-hover)}.ext-card:focus-visible{outline:2px solid var(--dt-primary);outline-offset:3px}@media(prefers-reduced-motion:reduce){.ext-card{transition:none}.ext-card:hover{transform:none}}
 .c-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .c-name { font-weight: 600; color: #1677ff; font-size: 13px; word-break: break-all; }
-.c-cat { display: flex; align-items: center; gap: 8px; }
+.c-cat { display: flex; flex-wrap:wrap;align-items: center; gap: 8px; }
 .c-sum { font-size: 12px; line-height: 1.6; color: var(--dt-text, #333); min-height: 32px; }
 /* BUG-016 + 复发修复(2026-08-20)：参数多(http_request 11参数)或单个参数名过长时，
    旧版 .param{white-space:nowrap}+overflow:hidden 会把长参数名裁切掉(文字看着"溢出/缺字")。

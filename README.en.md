@@ -1,41 +1,13 @@
 # Watchtower
 
-> **v1.21.176 · Web + Windows** · Development began **June 3, 2026** · Original code **GPL-3.0-only**.
+Current Web and Windows release: **v1.21.177**. Development began on June3,2026. Original code is licensed under GPL-3.0-only.
 
-[中文](README.md) · [Website and installation](https://watchtowers.info/) · [Release176](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.176)
+[Website and downloads](https://watchtowers.info/) · [Releases](https://github.com/LINGYK352/Watchtower/releases) · [中文](README.md)
 
-| Product | Designed for | Installation and updates |
-| --- | --- | --- |
-| Web | Long tasks, stable servers, centralized deployment and cross-platform remote access | Linux x64 / Docker; install the175 image base, activate and sequentially update to176 |
-| Windows | Immediate local work, a native window and desktop access | New users use the complete176 EXE with folder browsing; existing175 installations hotupdate without reinstalling |
+177 provides complete installation bases for both products. Existing175/176 installations can follow signed adjacent updates while keeping accounts, settings, tasks, sessions and evidence. The rollback floor is177. Earlier Web installations require the data-preserving repair installer. Finish critical work before updating; the first update-controller migration coordinates backend processes.
 
-176 restores native text selection, Ctrl+C, context-menu Copy and zoom, adds installer folder browsing, and adds console uploads with real progress, cancellation and retry. System/installed-version/product notices are clearly scoped and queued. Disk headroom and memory budgets determine capacity, with improved layouts across window sizes and display scales.
+This release includes isolated collaborative workspaces, member/cohost identities, a generic Linux relay with encrypted cache, migration and attachments; model-name/stage SKILL bindings, primary/fallback models and scheduled tasks; original Word template marking/learning and report source selection; branching session/attack-chain graphs, HTTP/HTTPS and WebSocket history/replay; responsive day/night UI, a detailed menu-leaf manual and local system/patch changelogs.
 
-Console uploads are limited to16MiB per file; send instructions after saving. Uploading does not execute files or call a model. Native Windows11 was tested; Windows10 still needs physical testing. Linux-specific tools retain platform limits. No unverified Android prototype is included.
+Feature and patch releases are separate. Subsequent changes from this batch are grouped into177B-1, whose serial stays hidden in the main version label. Early local Windows startup diagnostics are included; unfinished items such as optional startup-log uploads are not claimed as delivered. Windows10, phone hardware and every real model/target combination have not been physically verified.
 
-Signed common/platform ZIPs and inverse plans are prepared offline. Upgrades and rollback are adjacent; user settings, accounts, tasks, evidence, browser profiles and extensions are retained. Rollback below175 is disabled. Ordinary code updates keep the175 Web image base.
-
-[Windows source](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [Delivery contract](docs/update-delivery.md) · [License](LICENSE) · [Security](SECURITY.md)
-<!-- watchtower-ui-gallery:start -->
-## Night interface previews
-
-Synthetic sample data from the development UI (177-44). The official release remains **v1.21.176**; these previews do not publish a new product version.
-
-![Watchtower AI console: session context, tool results and verification evidence.](assets/screenshots/preview44/console-night.png)
-
-AI console: session context, tool results and verification evidence.
-
-<details>
-<summary>Dashboard and findings</summary>
-
-![Watchtower Dashboard: assets, tasks, network checks and resource trends.](assets/screenshots/preview44/dashboard-night.png)
-
-Dashboard: assets, tasks, network checks and resource trends.
-
-![Watchtower Findings: verified results, leads and their status.](assets/screenshots/preview44/findings-night.png)
-
-Findings: verified results, leads and their status.
-
-</details>
-<!-- watchtower-ui-gallery:end -->
-
+Use the website and in-product manual for installation and operation. Third-party components retain their own licenses. Operational registries, real credentials/configuration and user data are excluded.

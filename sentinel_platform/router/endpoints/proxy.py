@@ -55,6 +55,19 @@ class ProxyStatus(Resource):
         return ok(svc.status())
 
 
+@ns.route("/validate_source")
+class ProxyValidateSource(Resource):
+    @ns.doc(security="token", description="需权限 proxy:write；只校验既有源，不修改配置，不接收任意探测地址")
+    def post(self):
+        svc = _svc()
+        if not svc:
+            return err(CODE_ERROR, "代理服务未就绪")
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return err(CODE_BAD_REQUEST, "请求体必须为JSON对象")
+        return ok(svc.validate_source(data.get("source")))
+
+
 @ns.route("/config")
 class ProxyConfig(Resource):
     @ns.doc(security="token", description="需权限 proxy:read")
@@ -89,10 +102,17 @@ class ProxyExitIp(Resource):
         if not svc:
             return err(CODE_ERROR, "代理服务未就绪")
         fresh = request.args.get("fresh", "") in ("1", "true", "True")
-        try:
-            return ok(svc.detect_exit_ip(use_cache=not fresh))
-        except TypeError:
-            return ok(svc.detect_exit_ip())   # 兼容旧签名（未更新的实现）
+        def probe():
+            try:
+                return svc.detect_exit_ip(use_cache=not fresh)
+            except TypeError:
+                return svc.detect_exit_ip()  # 旧接口兼容仍在同一有界任务中。
+        from sentinel_platform.core.bounded_call import run
+        result, reason = run('exit-ip', probe, 12 if fresh else 7, capacity=1)
+        if result is not None:
+            return ok(result)
+        return ok({'direct_ip': '', 'proxy_ip': '', 'proxied': False, 'cached': False,
+                   'probe_pending': True, 'error': '出口探测未完成 / Exit-IP probe incomplete: '+reason})
 
 
 @ns.route("/egress_options")

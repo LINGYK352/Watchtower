@@ -2,6 +2,7 @@
 import json,re
 from urllib.parse import urlsplit
 from . import _finding_quality as quality
+from sentinel_platform.core.evidence_source import reference_only
 
 SENSITIVE=re.compile(r'(?i)(?:password(?:hash)?|passwd|private[_-]?key|access[_-]?token|身份证(?:号)?)\s*[\"\x27:=\s]+(?!<redacted>|null|none|\*{3,})[^\s\",}]{6,}')
 SQL_ERROR=re.compile(r'(?i)SQL syntax.*?(?:MySQL|MariaDB)|ORA-\d{4,}|PostgreSQL.*ERROR|SQLSTATE\[[0-9A-Z]+\]')
@@ -16,6 +17,7 @@ def assess(finding,logs):
             if isinstance(args,str):args=json.loads(args)
             if isinstance(result,str):result=json.loads(result)
         except (TypeError,ValueError):continue
+        if reference_only(entry.get('name') or entry.get('tool'), result):continue
         if not isinstance(args,dict) or not isinstance(result,dict) or any(result.get(key) for key in ('error','blocked','partial','truncated')):continue
         if quality.endpoint(str(args.get('url') or args.get('target') or ''))!=target:continue
         if wanted and str(args.get('method') or 'GET').upper()!=wanted:continue

@@ -3,7 +3,7 @@
     <template #extra>
       <a-space>
         <a-button type="primary" @click="router.push('/tasks/create')">{{ translate('ui.m_6bee2372805a') }}</a-button>
-        <a-button @click="openOrphan" :loading="orphanScanning">{{ translate('ui.m_4f0fb5d29a3d') }}</a-button>
+        <a-button @click="openOrphan" data-guide="task-orphans" :loading="orphanScanning">{{ translate('ui.m_4f0fb5d29a3d') }}</a-button>
       </a-space>
     </template>
     <SearchBar :model="query" @search="load" @reset="reset">
@@ -76,7 +76,7 @@
           <template v-else-if="column.key === 'action'">
             <a-space size="small">
               <a-button type="link" size="small" @click="router.push(`/tasks/${record._id}`)">{{ translate('ui.m_979a332955c8') }}</a-button>
-              <a-button type="link" size="small" @click="openSync(record)">{{ translate('ui.m_dcfe516d1114') }}</a-button>
+              <a-button type="link" size="small" @click="openSync(record)" data-guide="task-sync">{{ translate('ui.m_dcfe516d1114') }}</a-button>
               <a-button type="link" size="small" @click="openReport(record)">{{ translate('ui.m_1e8ddd10bafe') }}</a-button>
               <ConfirmAction :title="translate('ui.m_12603abe3b26')" @confirm="stop(String(record._id))">{{ translate('ui.m_ca4d973c0b00') }}</ConfirmAction>
               <a-button v-if="['stop','error','proxy_paused','preempted'].includes(record.status)" type="link" size="small" @click="resume(String(record._id))">{{ translate('ui.m_7c9691192f1b') }}</a-button>

@@ -1,0 +1,988 @@
+{
+  "dashboard": [
+    {
+      "key": "dashboard_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "dashboard_1",
+      "selector": ".dashboard | .ant-row | .ant-card"
+    },
+    {
+      "key": "dashboard_2",
+      "selector": ".ant-card | canvas"
+    }
+  ],
+  "attackAlert": [
+    {
+      "key": "attackAlert_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "attackAlert_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "attackAlert_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "attackAlert_3",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "attackAlert_4",
+      "selector": "[data-guide=alert-bans]"
+    },
+    {
+      "key": "attackAlert_5",
+      "selector": "[data-guide=alert-whitelist]"
+    },
+    {
+      "key": "attackAlert_6",
+      "selector": "[data-testid=attack-monitor-status] | .page-heading"
+    }
+  ],
+  "tasks": [
+    {
+      "key": "tasks_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "tasks_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "tasks_2",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "tasks_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "tasks_4",
+      "selector": "[data-guide=task-sync]"
+    },
+    {
+      "key": "tasks_5",
+      "selector": "[data-guide=task-orphans]"
+    }
+  ],
+  "taskCreate": [
+    {
+      "key": "taskCreate_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "taskCreate_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "taskCreate_2",
+      "selector": ".ant-form"
+    },
+    {
+      "key": "taskCreate_3",
+      "selector": ".ant-btn-primary"
+    },
+    {
+      "key": "taskCreate_4",
+      "selector": "[data-guide=task-ai-model] | .ant-form"
+    },
+    {
+      "key": "taskCreate_5",
+      "selector": "[data-guide=task-ai-egress] | .ant-form"
+    },
+    {
+      "key": "taskCreate_6",
+      "selector": "[data-guide=task-intel] | .ant-form"
+    },
+    {
+      "key": "taskCreate_7",
+      "selector": "[data-guide=task-batch]"
+    }
+  ],
+  "taskDetail": [
+    {
+      "key": "taskDetail_0",
+      "selector": ".page-heading"
+    },
+    {
+      "key": "taskDetail_1",
+      "selector": "[data-guide=task-identity]"
+    },
+    {
+      "key": "taskDetail_2",
+      "selector": "[data-guide=task-results]"
+    },
+    {
+      "key": "taskDetail_3",
+      "selector": "[data-guide=task-options]"
+    },
+    {
+      "key": "taskDetail_4",
+      "selector": ".page-extra"
+    }
+  ],
+  "policy": [
+    {
+      "key": "policy_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "policy_1",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "policy_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "policy_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "policyEdit": [
+    {
+      "key": "policyEdit_0",
+      "selector": ".page-heading"
+    },
+    {
+      "key": "policyEdit_1",
+      "selector": "[data-guide=policy-collect]"
+    },
+    {
+      "key": "policyEdit_2",
+      "selector": ".ant-form"
+    },
+    {
+      "key": "policyEdit_3",
+      "selector": "[data-guide=policy-auto-ai]"
+    },
+    {
+      "key": "policyEdit_4",
+      "selector": "[data-guide=policy-mode] | [data-guide=policy-auto-ai]"
+    },
+    {
+      "key": "policyEdit_5",
+      "selector": "[data-guide=policy-drift] | [data-guide=policy-auto-ai]"
+    },
+    {
+      "key": "policyEdit_6",
+      "selector": ".ant-transfer"
+    },
+    {
+      "key": "policyEdit_7",
+      "selector": "[data-guide=policy-save]"
+    }
+  ],
+  "taskSchedule": [
+    {
+      "key": "taskSchedule_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "taskSchedule_1",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "taskSchedule_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "taskSchedule_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "taskSchedule_4",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "taskSchedule_5",
+      "selector": ".page-extra | .ant-btn-primary"
+    }
+  ],
+  "pentest": [
+    {
+      "key": "pentest_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "pentest_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "pentest_2",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "pentest_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "pentest_4",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "pentestConsole": [
+    {
+      "key": "pentestConsole_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "pentestConsole_1",
+      "selector": ".cc-filters | .lh-actions | .cc-cards"
+    },
+    {
+      "key": "pentestConsole_2",
+      "selector": ".composer"
+    },
+    {
+      "key": "pentestConsole_3",
+      "selector": ".comp-bar | [data-testid=\"full-authorization\"]"
+    },
+    {
+      "key": "pentestConsole_4",
+      "selector": "[data-testid=\"review-card\"] | .composer"
+    },
+    {
+      "key": "pentestConsole_5",
+      "selector": ".space-head | .cc-flank.left"
+    },
+    {
+      "key": "pentestConsole_6",
+      "selector": ".burps-button | .cc-flank.right | .cc-telemetry"
+    }
+  ],
+  "pentestDetail": [
+    {
+      "key": "pentestDetail_0",
+      "selector": ".page-heading"
+    },
+    {
+      "key": "pentestDetail_1",
+      "selector": "[data-guide=session-identity]"
+    },
+    {
+      "key": "pentestDetail_2",
+      "selector": ".page-extra"
+    },
+    {
+      "key": "pentestDetail_3",
+      "selector": "[data-guide=session-conclusion] | [data-guide=session-identity]"
+    },
+    {
+      "key": "pentestDetail_4",
+      "selector": "[data-guide=session-tools] | [data-guide=session-dialogue]"
+    }
+  ],
+  "pentestLive": [
+    {
+      "key": "pentestLive_0",
+      "selector": ".page-heading"
+    },
+    {
+      "key": "pentestLive_1",
+      "selector": ".live-top"
+    },
+    {
+      "key": "pentestLive_2",
+      "selector": ".dashboard"
+    },
+    {
+      "key": "pentestLive_3",
+      "selector": ".panel-flow"
+    },
+    {
+      "key": "pentestLive_4",
+      "selector": ".page-extra"
+    }
+  ],
+  "miniapp": [
+    {
+      "key": "miniapp_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "miniapp_1",
+      "selector": ".ma-side"
+    },
+    {
+      "key": "miniapp_2",
+      "selector": ".ma-wrap"
+    },
+    {
+      "key": "miniapp_3",
+      "selector": "[data-testid=\"miniapp-interaction\"] | .ma-launch-bar | .ma-body"
+    }
+  ],
+  "appPentest": [
+    {
+      "key": "appPentest_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "appPentest_1",
+      "selector": ".ap-side"
+    },
+    {
+      "key": "appPentest_2",
+      "selector": ".ap-wrap"
+    },
+    {
+      "key": "appPentest_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "probeManage": [
+    {
+      "key": "probeManage_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "probeManage_1",
+      "selector": ".ant-tabs-nav | .room-nav"
+    },
+    {
+      "key": "probeManage_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "probeManage_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "aiConfig": [
+    {
+      "key": "aiConfig_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "aiConfig_1",
+      "selector": ".provider-table"
+    },
+    {
+      "key": "aiConfig_2",
+      "selector": "[data-testid=\"prompt-edit\"] | [data-testid=\"prompt-reset\"]"
+    },
+    {
+      "key": "aiConfig_3",
+      "selector": ".prompt-table"
+    },
+    {
+      "key": "aiConfig_4",
+      "selector": "[data-guide=ai-global]"
+    },
+    {
+      "key": "aiConfig_5",
+      "selector": "[data-guide=ai-usage]"
+    },
+    {
+      "key": "aiConfig_6",
+      "selector": "[data-testid=\"model-skills-card\"]"
+    }
+  ],
+  "vulnCenter": [
+    {
+      "key": "vulnCenter_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "vulnCenter_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "vulnCenter_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "vulnCenter_3",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "vulnCenter_4",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "reportEdit": [
+    {
+      "key": "reportEdit_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "reportEdit_1",
+      "selector": ".ant-tabs-nav | .room-nav"
+    },
+    {
+      "key": "reportEdit_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "reportEdit_3",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "reportEdit_4",
+      "selector": ".template-toolbar | .ant-tabs-nav"
+    }
+  ],
+  "poc": [
+    {
+      "key": "poc_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "poc_1",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "poc_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "poc_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "poc_4",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    }
+  ],
+  "vulnIntel": [
+    {
+      "key": "vulnIntel_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "vulnIntel_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "vulnIntel_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "vulnIntel_3",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    }
+  ],
+  "attackChain": [
+    {
+      "key": "attackChain_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "attackChain_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "attackChain_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "attackChain_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "intel": [
+    {
+      "key": "intel_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "intel_1",
+      "selector": ".ant-tabs-nav | .room-nav"
+    },
+    {
+      "key": "intel_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "intel_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "intel_4",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "unitView": [
+    {
+      "key": "unitView_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "unitView_1",
+      "selector": ".ant-input-search"
+    },
+    {
+      "key": "unitView_2",
+      "selector": ".ant-tabs-nav | .room-nav"
+    },
+    {
+      "key": "unitView_3",
+      "selector": ".unit-card | .ant-empty"
+    }
+  ],
+  "search": [
+    {
+      "key": "search_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "search_1",
+      "selector": ".ant-tabs-nav | .room-nav"
+    },
+    {
+      "key": "search_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "search_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "assetGroups": [
+    {
+      "key": "assetGroups_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "assetGroups_1",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "assetGroups_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "assetGroups_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "assetGroups_4",
+      "selector": "[data-testid=group-create-task]"
+    }
+  ],
+  "assetGroupDetail": [
+    {
+      "key": "assetGroupDetail_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "assetGroupDetail_1",
+      "selector": ".ant-tabs-nav | .room-nav"
+    },
+    {
+      "key": "assetGroupDetail_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "assetGroupDetail_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "assetGroupDetail_4",
+      "selector": "[data-testid=group-create-task]"
+    }
+  ],
+  "assetMonitor": [
+    {
+      "key": "assetMonitor_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "assetMonitor_1",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "assetMonitor_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "assetMonitor_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "assetMonitor_4",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "fingerprint": [
+    {
+      "key": "fingerprint_0",
+      "selector": ".page-heading"
+    },
+    {
+      "key": "fingerprint_1",
+      "selector": ".ant-result-extra"
+    }
+  ],
+  "githubTasks": [
+    {
+      "key": "githubTasks_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "githubTasks_1",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "githubTasks_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "githubTasks_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "githubMonitor": [
+    {
+      "key": "githubMonitor_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "githubMonitor_1",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "githubMonitor_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "githubMonitor_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "userManage": [
+    {
+      "key": "userManage_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "userManage_1",
+      "selector": ".ant-tabs-nav | .room-nav"
+    },
+    {
+      "key": "userManage_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "userManage_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "proxy": [
+    {
+      "key": "proxy_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "proxy_1",
+      "selector": ".src-collapse"
+    },
+    {
+      "key": "proxy_2",
+      "selector": ".netmode-card"
+    },
+    {
+      "key": "proxy_3",
+      "selector": "[data-guide=proxy-pool]"
+    },
+    {
+      "key": "proxy_4",
+      "selector": "[data-guide=proxy-custom]"
+    },
+    {
+      "key": "proxy_5",
+      "selector": ".status-card"
+    },
+    {
+      "key": "proxy_6",
+      "selector": "[data-guide=proxy-logs]"
+    }
+  ],
+  "networkCheck": [
+    {
+      "key": "networkCheck_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "networkCheck_1",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "networkCheck_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "networkCheck_3",
+      "selector": ".dns-block"
+    }
+  ],
+  "apiKeys": [
+    {
+      "key": "apiKeys_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "apiKeys_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "apiKeys_2",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "apiKeys_3",
+      "selector": "[data-guide=key-notification] | .key-item"
+    },
+    {
+      "key": "apiKeys_4",
+      "selector": "[data-testid=notification-settings] | .page-card"
+    }
+  ],
+  "logs": [
+    {
+      "key": "logs_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "logs_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "logs_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "logs_3",
+      "selector": "[data-guide=log-report]"
+    }
+  ],
+  "accessLog": [
+    {
+      "key": "accessLog_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "accessLog_1",
+      "selector": ".ant-tabs-nav | .room-nav"
+    },
+    {
+      "key": "accessLog_2",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "accessLog_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "guardLog": [
+    {
+      "key": "guardLog_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "guardLog_1",
+      "selector": ".ant-form | .search-bar | .cc-filters | .tool-filters"
+    },
+    {
+      "key": "guardLog_2",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "guardLog_3",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    }
+  ],
+  "controlSync": [
+    {
+      "key": "controlSync_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "controlSync_1",
+      "selector": "[data-testid=\"control-keys-card\"] | .ant-tabs-nav"
+    },
+    {
+      "key": "controlSync_2",
+      "selector": "[data-testid=\"control-operation-guide\"] | .ant-tabs-nav"
+    },
+    {
+      "key": "controlSync_3",
+      "selector": "[data-testid=\"sync-route-mode\"] | .ant-tabs-nav"
+    },
+    {
+      "key": "controlSync_6",
+      "selector": "[data-testid=\"sync-node-settings\"] | [data-testid=\"sync-route-mode\"] | .ant-tabs-nav"
+    },
+    {
+      "key": "controlSync_4",
+      "selector": "[data-testid=\"sync-invitation-link\"] | .ant-tabs-nav"
+    },
+    {
+      "key": "controlSync_5",
+      "selector": ".sync-history-row | .ant-tabs-nav"
+    }
+  ],
+  "collaboration": [
+    {
+      "key": "collaboration_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "collaboration_1",
+      "selector": "[data-testid=\"team-groups-card\"]"
+    },
+    {
+      "key": "collaboration_2",
+      "selector": "[data-testid=\"open-group-join\"] | [data-testid=\"open-group-members\"]"
+    },
+    {
+      "key": "collaboration_3",
+      "selector": "[data-testid=\"room-navigation\"] | [data-testid=\"team-groups-card\"]"
+    },
+    {
+      "key": "collaboration_4",
+      "selector": "[data-testid=\"open-share-package\"] | [data-testid=\"team-guides\"]"
+    },
+    {
+      "key": "collaboration_5",
+      "selector": "[data-testid=\"delete-group\"] | [data-testid=\"team-groups-card\"]"
+    },
+    {
+      "key": "collaboration_8",
+      "selector": "[data-testid=\"upload-workspace-file\"] | .room-composer | .workspace-caption"
+    }
+  ],
+  "systemExtension": [
+    {
+      "key": "systemExtension_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "systemExtension_1",
+      "selector": "[data-testid=\"ai-tool-filters\"] | .ant-tabs-nav"
+    },
+    {
+      "key": "systemExtension_2",
+      "selector": "[data-testid=\"open-extension-upload\"]"
+    },
+    {
+      "key": "systemExtension_3",
+      "selector": ".ant-tabs-nav"
+    },
+    {
+      "key": "systemExtension_4",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "aiTools": [
+    {
+      "key": "aiTools_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "aiTools_1",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "manual": [
+    {
+      "key": "manual_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "manual_1",
+      "selector": ".ant-tabs-nav | .ant-collapse | .ant-card | article"
+    }
+  ],
+  "activation": [
+    {
+      "key": "activation_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "activation_1",
+      "selector": ".act-desc | .act-hero"
+    },
+    {
+      "key": "activation_2",
+      "selector": ".page-card .ant-btn-primary | .page-card"
+    }
+  ],
+  "updateCheck": [
+    {
+      "key": "updateCheck_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "updateCheck_1",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    },
+    {
+      "key": "updateCheck_2",
+      "selector": ".page-extra | .ant-card-extra | .lh-actions | .toolbar | .ant-btn-primary"
+    },
+    {
+      "key": "updateCheck_3",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "changelog": [
+    {
+      "key": "changelog_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "changelog_1",
+      "selector": ".ant-timeline | .ant-table-wrapper | .ant-card"
+    }
+  ],
+  "developer": [
+    {
+      "key": "developer_0",
+      "selector": ".page-heading | h1 | .cc-listhead | .cc-telemetry"
+    },
+    {
+      "key": "developer_1",
+      "selector": ".ant-table-wrapper | .cc-cards | .ant-empty | .page-card | .ant-card"
+    }
+  ],
+  "collaborationWorkspace": [
+    {
+      "key": "collaborationWorkspace_0",
+      "selector": "[data-testid=\"group-workspace\"] .ant-card-head"
+    },
+    {
+      "key": "collaborationWorkspace_7",
+      "selector": "[data-testid=\"workspace-service-status\"]"
+    },
+    {
+      "key": "collaborationWorkspace_1",
+      "selector": "[data-testid=\"room-navigation\"]"
+    },
+    {
+      "key": "collaborationWorkspace_2",
+      "selector": "[data-testid=\"open-group-members\"]"
+    },
+    {
+      "key": "collaborationWorkspace_3",
+      "selector": "[data-testid=\"open-group-members\"]"
+    },
+    {
+      "key": "collaborationWorkspace_4",
+      "selector": "[data-testid=\"open-share-package\"]"
+    },
+    {
+      "key": "collaborationWorkspace_5",
+      "selector": "[data-testid=\"open-node-settings\"] | [data-testid=\"open-cache-settings\"]"
+    },
+    {
+      "key": "collaborationWorkspace_6",
+      "selector": "[data-testid=\"workspace-back\"]"
+    }
+  ]
+}

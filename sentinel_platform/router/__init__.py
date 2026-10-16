@@ -59,6 +59,8 @@ def _mount_namespaces(api: Any) -> None:
         ("sentinel_platform.router.endpoints.asset_groups", "ns_asset_site"),    # /api/asset_site/*（含 tag）
         ("sentinel_platform.router.endpoints.asset_groups", "ns_asset_wih"),     # /api/asset_wih/*
         ("sentinel_platform.router.endpoints.workspace", "ns"),      # /api/console/*（态势总览设备监控）
+        ("sentinel_platform.router.endpoints.collaboration", "ns"),
+        ("sentinel_platform.router.endpoints.control_sync", "ns"),   # /api/control_sync/*（控制同步）
         ("sentinel_platform.router.endpoints.task_plan", "ns"),      # /api/policy/*（策略配置）
         ("sentinel_platform.router.endpoints.task_plan", "ns_schedule"),  # /api/task_schedule/*（计划任务）
         ("sentinel_platform.router.endpoints.task_list", "ns"),      # /api/task/*（任务列表与生命周期,Claude-Opus[tasklist]）
@@ -69,6 +71,7 @@ def _mount_namespaces(api: Any) -> None:
         ("sentinel_platform.router.endpoints.ai_tools", "ns"),       # /api/pentest/tools（AI 最终有效工具目录）
         ("sentinel_platform.router.endpoints.ai_extension", "ns"),   # /api/pentest/extensions/*（扩展管理/商店）
         ("sentinel_platform.router.endpoints.session", "ns"),        # /api/pentest/session*（AI 渗透会话,Claude-Opus[session]）
+        ("sentinel_platform.router.endpoints.burps", "ns"),
         ("sentinel_platform.router.endpoints.attack_chain", "ns"),   # /api/intel/chain/*（攻击链情报,Claude-Opus[chain]）
         ("sentinel_platform.router.endpoints.asset_monitor", "ns"),  # /api/scheduler/*（资产监控周期任务）
         ("sentinel_platform.router.endpoints.about", "ns"),          # /api/about/*（更新检测）
@@ -111,6 +114,15 @@ def create_app() -> Any:
     _mount_namespaces(api)
     api.init_app(app)            # 挂载后再 init，确保 Namespace 都进 swagger
     install_gateway(app)         # 网关最后装（before_request）
+    from .endpoints.control_sync import transport_routes
+    app.register_blueprint(transport_routes)
+    from .endpoints.collaboration import peer_routes
+    app.register_blueprint(peer_routes)
+    from sentinel_platform.contracts import get_registry
+    control_sync = get_registry().get("control_sync_service")
+    if control_sync:
+        control_sync.listener.attach(app)
+        control_sync.pairing.node_routes.start()
     from pathlib import Path
     from .endpoints.meta import _BOOT_UPDATE_VERSION
     from sentinel_platform.modules.about._update_chain import runtime_ready

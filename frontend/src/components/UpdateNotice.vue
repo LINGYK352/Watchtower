@@ -1,19 +1,19 @@
 <template>
-  <a-button v-if="!showModal && (progress.chain_active || progress.resumable || networkLost)" class="update-status-pill" @click="showModal = true">{{ translate('ui.update_status') }} · {{ progress.hop_version || progress.target_version || '' }}</a-button>
+  <a-button v-if="!showModal && (progress.chain_active || progress.resumable || networkLost)" class="update-status-pill" @click="showModal = true">{{ translate('ui.update_status') }} · {{ displayVersion(progress.hop_version || progress.target_version || '') }}</a-button>
   <a-modal :open="showModal" :closable="true" :maskClosable="false" :footer="null" centered width="500px" @cancel="dismiss">
     <div class="update-wrap">
       <div class="update-header">
-        <h2>{{ translate('ui.m_ac217e4d1ca4') }}</h2>
-        <a-tag color="blue" class="update-ver">{{ latestVersion }}</a-tag>
+        <h2>{{ translate(isPatchVersion(latestVersion)?'patchUpdates.available':'ui.m_ac217e4d1ca4') }}</h2>
+        <a-tag color="blue" class="update-ver">{{ displayVersion(latestVersion) }}</a-tag>
       </div>
       <a-tag color="green" class="update-badge">{{ translate(requiresRestart ? 'ui.native_update_note' : 'ui.m_432bb30c280d') }}</a-tag>
 
       <div class="update-changelog" v-if="changelogs.length">
         <div class="changelog-title">
-          {{ translate('ui.m_00d640b1490e') }} {{ latestVersion }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
+          {{ translate('ui.m_00d640b1490e') }} {{ displayVersion(latestVersion) }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
         </div>
         <div class="changelog-item" v-for="item in changelogs" :key="item.ver">
-          <span class="changelog-ver">{{ item.ver }}</span>
+          <span class="changelog-ver">{{ displayVersion(item.ver) }}</span>
           <span class="changelog-text">{{ item.summary }}</span>
         </div>
       </div>
@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import { versionKey, displayVersion, isPatchVersion } from '../config/releaseVersion'
 import { t as translate } from '../i18n'
 
 import { ref, onMounted, onUnmounted, computed } from 'vue'
@@ -85,11 +86,7 @@ const emit = defineEmits<{ (e: 'unauthorized'): void }>()
 // 版本号数值比较（与后端 update_check._cmp 同逻辑）：剥 v 前缀，逐段按数值比。
 // 修复字符串比较 bug：'v1.21.65' > 'v1.21.131' 字符串比会误判为 true（'6'>'1'），
 // 导致旧版被当成新版误弹/混进更新内容（看似反向更新）。
-function _parseVer(v: string): number[] {
-  return String(v || '').trim().replace(/^v/i, '').split(/[.\-_]/).map(s => {
-    const m = /^\d+/.exec(s); return m ? parseInt(m[0], 10) : 0
-  })
-}
+function _parseVer(v:string):number[]{return versionKey(v)}
 function _cmpVer(a: string, b: string): number {
   const ta = _parseVer(a), tb = _parseVer(b)
   const n = Math.max(ta.length, tb.length)

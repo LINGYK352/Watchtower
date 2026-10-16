@@ -16,12 +16,12 @@ orchestration**）；submit_by_unit 的单位→资产反查是 orchestration wo
 """
 from __future__ import annotations
 
-from flask import request
+from flask import request, g
 from flask_restx import Namespace, Resource
 
 from sentinel_platform.core import get_logger
 from sentinel_platform.contracts import get_registry
-from ..envelope import ok, err, CODE_BAD_REQUEST, CODE_ERROR
+from ..envelope import ok, err, CODE_BAD_REQUEST, CODE_ERROR, CODE_FORBIDDEN
 from ..openapi import register_envelope_models
 
 logger = get_logger()
@@ -66,7 +66,7 @@ _SOURCE_DEFS = [
     {"id": "fofa", "name": "FOFA", "key_id": "fofa",
      "placeholder": 'FOFA 语法，如 domain="example.com" && port="443"（domain= 是精确主域匹配）'},
     {"id": "hunter", "name": "鹰图 Hunter", "key_id": "hunter",
-     "placeholder": '鹰图语法，如 domain="gov.cn"（domain= 是模糊匹配，命中全部 *.gov.cn）'},
+     "placeholder": '鹰图语法，如 domain="example.com"（domain= 是模糊匹配）'},
 ]
 
 
@@ -127,11 +127,33 @@ class TaskByPolicy(Resource):
         if not svc:
             return err(CODE_ERROR, "任务下发服务未就绪")
         body = request.get_json(silent=True) or {}
+        source = _source_from(body)
+        target = body.get("target", "")
+        whitelist = body.get("pentest_whitelist", "")
+        group_id = body.get("asset_scope_id", "")
+        if group_id:
+            # Task write alone must not grant access to a hidden asset group.
+            from ..gateway import check_rbac
+            caller = getattr(g, "current_user", None)
+            if caller is not None and not check_rbac(caller, "/api/asset_scope/", "GET")[0]:
+                return err(CODE_FORBIDDEN, "分组任务需要资产读取权限")
+            groups = get_registry().get("asset_group_service")
+            if not groups:
+                return err(CODE_ERROR, "资产分组服务未就绪")
+            group = groups.get_task_source(group_id)
+            if group.get("error"):
+                return err(CODE_BAD_REQUEST, group["error"])
+            if not isinstance(target, str) or target.strip() != group["scope"].strip():
+                return err(CODE_BAD_REQUEST, "资产分组范围已变化或与预览不符，请刷新核对后重新提交")
+            target = group["scope"]
+            source.update(category="asset_group", src_id=group["scope_id"])
+            whitelist = "\n".join(str(v) for v in (group["black_scope"], whitelist) if v)
         r = svc.create_by_policy(
+            require_auto_pentest=bool(group_id),
             name=body.get("name", ""), policy_id=body.get("policy_id", ""),
-            target=body.get("target", ""), task_tag=body.get("task_tag", "task"),
-            priority=body.get("priority", 2), source=_source_from(body),
-            pentest_whitelist=body.get("pentest_whitelist", ""),
+            target=target, task_tag="task" if group_id else body.get("task_tag", "task"),
+            priority=body.get("priority", 2), source=source,
+            pentest_whitelist=whitelist,
             mission_intel=body.get("mission_intel", ""),
             pentest_provider_id=body.get("pentest_provider_id", ""),
             pentest_backup_provider_id=body.get("pentest_backup_provider_id", ""),

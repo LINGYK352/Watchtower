@@ -22,6 +22,9 @@ bson.ObjectId 惰性 import（对齐 core/db 惰性 pymongo），无 bson 回退
 from __future__ import annotations
 
 import re
+import secrets
+import hashlib,json
+from pymongo.errors import DuplicateKeyError
 import time
 from typing import Any, Dict, List, Optional
 
@@ -212,7 +215,7 @@ class AttackChainServiceImpl:
 
     def record_step(self, unit: str, title: str, action: str, result: str = "", target: str = "",
                     vuln_type: str = "", severity: str = "", finding_ref: str = "", clue_ref: str = "",
-                    session_id: str = "", source_site: str = "", tool_log: Optional[List] = None) -> Dict[str, Any]:
+                    session_id: str = "", source_site: str = "", tool_log: Optional[List] = None, parent_seq=None, parent_finding_ref: str = "", intranet_breakthrough=False, _attempt=0) -> Dict[str, Any]:
         """记一条攻击链环节。同 unit+title 已存在则追加环节（跨会话延续），否则新建链。
         P6 证据约束：声明了 target 的环节，tool_log 里须有对该 target 的实打记录，否则拒（治"猜的链"）。
         幂等：同链内 (action,target) 相同不重复追加。返回 {chain_id,title,step_count,action} 或 {error}。"""
@@ -226,9 +229,18 @@ class AttackChainServiceImpl:
             return {"error": ("该环节 target={} 在本会话工具调用记录中无实打证据。攻击链每一环必须是"
                               "**你实际操作验证过的**（http_request/collect_js/run_nuclei 等真打过该目标），"
                               "不能凭情报库/CVE/推测记链。").format(target[:80])}
+        if _attempt>=8:return {'error':'链正在并发更新，请重试 / Concurrent chain update; retry'}
+        if isinstance(parent_seq,bool):return {'error':'父环节不能为布尔值 / Invalid parent step'}
+        if parent_seq is not None:
+            try:parent_seq=int(parent_seq)
+            except (TypeError,ValueError):return {'error':'parent_seq必须为已记录环节序号 / Parent must be an existing step number'}
+            if parent_seq<1:return {'error':'parent_seq必须大于0 / Parent step must be positive'}
+        if not isinstance(intranet_breakthrough,(bool,str)) or intranet_breakthrough not in (True,False,'true','false'):return {'error':'内网突破标记无效 / Invalid intranet entry flag'}
+        intranet_breakthrough=intranet_breakthrough is True or intranet_breakthrough=='true'
         now = time.strftime("%Y-%m-%d %H:%M:%S")
         now_epoch = int(time.time())
         new_step = {
+            "step_id":secrets.token_hex(16),"parent_seq":parent_seq,"parent_finding_ref":str(parent_finding_ref or "")[:100],"intranet_breakthrough":intranet_breakthrough,
             "action": action[:500], "result": (result or "")[:500], "target": target[:300],
             "vuln_type": (vuln_type or "")[:60], "severity": _norm_sev(severity),
             "finding_ref": finding_ref or "", "clue_ref": clue_ref or "",
@@ -236,13 +248,16 @@ class AttackChainServiceImpl:
         }
         try:
             coll = _coll()
+            coll.create_index('chain_key',unique=True,partialFilterExpression={'chain_key':{'$type':'string'}})
+            chain_key=hashlib.sha256(json.dumps([unit,title],ensure_ascii=False).encode()).hexdigest()
             existed = coll.find_one({"unit": unit, "title": title})
             if existed:
-                steps = existed.get("steps", []) or []
+                steps = list(existed.get("steps", []) or []);previous=list(steps)
                 for s in steps:
                     if s.get("action") == new_step["action"] and s.get("target") == new_step["target"]:
                         return {"chain_id": str(existed["_id"]), "title": title,
                                 "step_count": len(steps), "action": "skipped(dup)"}
+                if parent_seq is not None and not any(step.get('seq')==parent_seq for step in steps):return {'error':'父环节不存在 / Parent step not found'}
                 new_step["seq"] = len(steps) + 1
                 steps.append(new_step)
                 sessions = set(existed.get("sessions", []) or [])
@@ -257,14 +272,17 @@ class AttackChainServiceImpl:
                 }
                 if combo_note:
                     upd["combo_note"] = combo_note
-                coll.update_one({"_id": existed["_id"]}, {"$set": upd})
+                saved=coll.update_one({"_id":existed['_id'],'steps':previous},{'$set':upd})
+                if not saved.matched_count:
+                    return self.record_step(unit,title,action,result,target,vuln_type,severity,finding_ref,clue_ref,session_id,source_site,tool_log,parent_seq,parent_finding_ref,intranet_breakthrough,_attempt+1)
                 existed.update(steps=steps, max_severity=new_max, title=title)
                 _propagate_chain_severity(existed)
                 return {"chain_id": str(existed["_id"]), "title": title,
                         "step_count": len(steps), "action": "appended"}
+            if parent_seq is not None:return {'error':'新链不能引用不存在的父环节 / New chain has no parent step'}
             new_step["seq"] = 1
             doc = {
-                "unit": unit, "title": title, "steps": [new_step],
+                "chain_key":chain_key,"unit": unit, "title": title, "steps": [new_step],
                 "max_severity": new_step["severity"], "step_count": 1, "status": "building",
                 "sessions": [session_id] if session_id else [], "cross_session": False,
                 "save_date": now, "update_date": now, "update_epoch": now_epoch,
@@ -273,6 +291,8 @@ class AttackChainServiceImpl:
             doc["_id"] = getattr(res, "inserted_id", "")
             _propagate_chain_severity(doc)
             return {"chain_id": str(doc["_id"]), "title": title, "step_count": 1, "action": "created"}
+        except DuplicateKeyError:
+            return self.record_step(unit,title,action,result,target,vuln_type,severity,finding_ref,clue_ref,session_id,source_site,tool_log,parent_seq,parent_finding_ref,intranet_breakthrough,_attempt+1)
         except Exception as exc:
             logger.debug("attack_chain: record_step failed: %s", exc)
             return {"error": str(exc)}
@@ -308,7 +328,7 @@ class AttackChainServiceImpl:
         return {"unit": unit, "chains": out, "count": len(out)}
 
     def list_chains(self, unit: str = "", status: str = "", page: int = 1, size: int = 20,
-                    min_severity: str = "high") -> Dict[str, Any]:
+                    min_severity: str = "high", session_id: str = "", target: str = "") -> Dict[str, Any]:
         """攻击链列表（前端用，过滤 + 分页）。size 缺省 20 仅默认，客户端传多大都透传不砍（禁硬限制）。
         危害门槛（问题15）：默认只列整链 max_severity >= high 的链（低危链不进列表/统计，仍持久化）。
         传 min_severity="" 显示全部（如需看低危链）。用 $in 具体等级集合过滤（DB 侧，兼容内存替身 _match）。"""
@@ -322,6 +342,8 @@ class AttackChainServiceImpl:
             q["unit"] = unit
         if status:
             q["status"] = status
+        if session_id:q['$or']=[{'sessions':session_id},{'steps.session_id':session_id}]
+        if target:q['steps.target']={'$regex':re.escape(str(target)[:300]),'$options':'i'}
         _floor = SEVERITY_RANK.get((min_severity or "").strip().lower(), -1)
         try:
             coll = _coll()

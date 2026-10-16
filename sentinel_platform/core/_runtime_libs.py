@@ -35,9 +35,15 @@ def install() -> bool:
     幂等：多次调用/多进程各自 import 只加一次。异常吞掉（依赖热更是补强，失败不阻断启动）。"""
     try:
         d = _runtime_libs_dir()
-        if os.path.isdir(d) and d not in sys.path:
-            sys.path.append(d)          # 末尾：镜像已装优先，此处仅兜底补缺
-            return True
+        root = os.path.dirname(d)
+        abi = ('windows' if os.name == 'nt' else 'linux') + '-py' + str(sys.version_info.major) + str(sys.version_info.minor)
+        candidates = [d, os.path.join(root, 'dicts', 'burps', 'runtime', abi), os.path.join(root, 'dicts', 'burps', 'runtime', 'common')]
+        added = False
+        for directory in candidates:
+            if os.path.isdir(directory) and directory not in sys.path:
+                sys.path.append(directory)  # Existing installed packages retain precedence.
+                added = True
+        return added
     except Exception:
         pass
     return False

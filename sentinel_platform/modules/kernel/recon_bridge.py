@@ -257,11 +257,22 @@ class ReconBridge:
         return [asdict(x) for x in items]
 
     # —— JS/HTML 信息挖掘（native webinfohunter）——
+    def analyze_js(self, text: str, source_url: str, document_url: str = "") -> Dict[str, Any]:
+        from .recon.js_dependencies import discover
+        return discover(text, source_url, document_url=document_url or None)
+
     def collect_js(self, site: Any, **kwargs: Any) -> List[Dict[str, Any]]:
         tool = self._reg.pick(ROLE_WEBINFO)
         if not tool:
             return []
         return [asdict(x) for x in tool.hunt(_as_list(site))]
+
+    def collect_js_report(self, site: str) -> Dict[str, Any]:
+        tool = self._reg.pick(ROLE_WEBINFO)
+        if not tool or not hasattr(tool,'capture_site'):
+            return {'records':[], 'report':{'complete_site_coverage':False,'incomplete_reasons':['collector_unavailable']}}
+        records, report = tool.capture_site(site)
+        return {'records':[asdict(item) for item in records], 'report':report}
 
     # —— 主机存活探测（native ICMP + TCP 降级）——
     def icmp_ping(self, target: Any, **kwargs: Any) -> List[Dict[str, Any]]:
@@ -775,6 +786,18 @@ def _resource_concurrency() -> tuple:
     return budget["io_concurrency"], budget["scan_parallelism"]
 
 
+
+def _notify_finding_change():
+    # Across module categories, use the registered FINDING facade, not leaf imports.
+    try:
+        from sentinel_platform.contracts import get_registry, ROLE
+        service = get_registry().get(ROLE.FINDING)
+        if service and hasattr(service, 'touch_revision'):
+            service.touch_revision()
+    except Exception:
+        pass  # The UI's bounded reconciliation covers a missed notification.
+
+
 def _persist_records(task_id: str, records: Dict[str, List[Dict[str, Any]]]) -> Dict[str, int]:
     """把 pipeline 产出的 records 落库（key=集合名）。补 task_id/save_date，按自然键 upsert。
     治「pipeline 只算不落库、成果全丢」。任何集合失败不影响其他（各自 try），返回 {集合:写入数}。"""
@@ -790,6 +813,7 @@ def _persist_records(task_id: str, records: Dict[str, List[Dict[str, Any]]]) -> 
         if not rows:
             continue
         n = 0
+        changed = False
         try:
             coll = repo.collection(coll_name)
             keys = _NATURAL_KEY.get(coll_name)
@@ -808,11 +832,16 @@ def _persist_records(task_id: str, records: Dict[str, List[Dict[str, Any]]]) -> 
                     coll.update_one(q, {"$set": doc}, upsert=True)
                 elif keys and all(doc.get(k) not in (None, "") for k in keys):
                     q = {k: doc[k] for k in keys}
-                    coll.update_one(q, {"$set": doc}, upsert=True)
+                    result = coll.update_one(q, {"$set": doc}, upsert=True)
+                    changed = changed or bool(getattr(result, 'modified_count', 0) or getattr(result, 'upserted_id', None))
                 else:
                     coll.insert_one(doc)
+                    changed = True
                 n += 1
             written[coll_name] = n
         except Exception as e:
             logger.warning("persist records[%s] error: %s", coll_name, e)
+        finally:
+            if changed and coll_name in ('vuln', 'nuclei_result'):
+                _notify_finding_change()
     return written

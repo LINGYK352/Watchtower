@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-// 全局主题：dark（赛博作战室风，默认，与会话台一致）/ light（浅色科技风）。
+// 全局主题：dark（低眩光蓝灰，默认）/ light（浅色工作界面）。
 // 单例 ref 跨组件共享；持久化 localStorage 'theme'；通过 <html data-theme> 驱动 CSS 变量，
 // 同时供 App.vue 的 a-config-provider 切 Ant darkAlgorithm。
 // 默认夜间：未存过 theme → dark；仅当用户显式切到 light（localStorage==='light'）才浅色。

@@ -4,12 +4,18 @@
       <a-space>
         <span class="feed-meta">{{ translate('ui.m_71b5575e5eea') }}{{ cloudSource?.last_fetch || status.last_fetch || translate('ui.m_439e864e8324') }}</span>
         <a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button>
-        <a-tooltip :title="translate('ui.m_b28d8e83811b')">
-          <a-button type="primary" ghost :loading="running" @click="runFeed">{{ translate('ui.m_36e7a43a1c67') }}</a-button>
+        <!-- A body-mounted tooltip is measured before alignment. Keep this plain
+             hint out of document scroll geometry and pointer hit-testing. -->
+        <a-tooltip :title="translate('ui.m_b28d8e83811b')"
+          :overlay-style="{ position: 'fixed', pointerEvents: 'none' }" overlay-class-name="intel-sync-tooltip">
+          <a-button type="primary" ghost :loading="running" @click="runFeed" data-testid="intel-sync-now">{{ translate('ui.m_36e7a43a1c67') }}</a-button>
         </a-tooltip>
       </a-space>
     </template>
 
+    <a-alert v-if="status.notifications && (status.notifications.failed || status.notifications.pending || status.notifications.retry)" class="page-alert" :type="status.notifications.failed ? 'warning' : 'info'" show-icon :message="translate('intel.pushStatus', { pending: status.notifications.pending + status.notifications.retry, failed: status.notifications.failed })">
+      <template #action><a-button v-if="status.notifications.failed" size="small" @click="retryPush">{{ translate('intel.retryPush') }}</a-button></template>
+    </a-alert>
     <!-- 情报来源：云端主来源(突出) + 本地可执行源 -->
     <a-card size="small" class="page-card src-health" :bordered="false">
       <div class="src-health-head">
@@ -63,12 +69,12 @@
 
     <!-- 概览卡 -->
     <a-row :gutter="16" class="stat-row">
-      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_e4246b7d0651')" :value="stat.total" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_350a4c722f51')" :value="stat.in_kev" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_2639efc862c1')" :value="stat.executable" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_73eb0e14e307')" :value="stat.by_severity.critical || 0" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_4aa71c570566')" :value="stat.by_severity.high || 0" :value-style="{ color: '#fa541c' }" /></a-card></a-col>
-      <a-col :span="4"><a-card size="small"><a-statistic :title="translate('ui.m_36a7c77b623b')" :value="stat.by_severity.medium || 0" :value-style="{ color: '#faad14' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card size="small"><a-statistic :title="translate('ui.m_e4246b7d0651')" :value="stat.total" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card size="small"><a-statistic :title="translate('ui.m_350a4c722f51')" :value="stat.in_kev" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card size="small"><a-statistic :title="translate('ui.m_2639efc862c1')" :value="stat.executable" :value-style="{ color: '#3f8600' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card size="small"><a-statistic :title="translate('ui.m_73eb0e14e307')" :value="stat.by_severity.critical || 0" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card size="small"><a-statistic :title="translate('ui.m_4aa71c570566')" :value="stat.by_severity.high || 0" :value-style="{ color: '#fa541c' }" /></a-card></a-col>
+      <a-col :xs="12" :md="4"><a-card size="small"><a-statistic :title="translate('ui.m_36a7c77b623b')" :value="stat.by_severity.medium || 0" :value-style="{ color: '#faad14' }" /></a-card></a-col>
     </a-row>
 
     <!-- 按组件查(AI 同款) -->
@@ -95,21 +101,26 @@
       :page="query.page" :size="query.size" :total="total" row-key="_id" @change="onPage">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'cve'">
-          <span v-if="record.cve_id">{{ record.cve_id }}</span>
-          <span v-else class="muted">{{ translate('ui.m_c7443bfcb656') }}</span>
+          <span>{{ record.identifier || record.cve_id || translate('intel.numberPending') }}</span>
+        </template>
+        <template v-else-if="column.key === 'title'">
+          <a v-if="publisherUrl(record)" :href="publisherUrl(record)" target="_blank" rel="noopener noreferrer" class="intel-title-link" :title="translate('intel.openPublisher')" data-testid="intel-publisher-title">{{ record.title }}</a>
+          <span v-else>{{ record.title }}</span>
         </template>
         <template v-else-if="column.key === 'severity'">
-          <a-tag :color="sevColor(record.severity)">{{ record.severity }}</a-tag>
+          <a-tag :color="sevColor(record.severity)">{{ severityLabel(record.severity) }}</a-tag>
         </template>
         <template v-else-if="column.key === 'flags'">
           <a-tag v-if="record.in_kev" color="red">{{ translate('ui.m_8f5c138a5a03') }}</a-tag>
           <a-tag v-if="record.executable" color="green">{{ translate('ui.m_68abf2b6a4fa') }}{{ record.exec_kind }}</a-tag>
+          <a-tag v-if="!record.in_kev&&!record.executable">{{ translate('revision17.unmarked') }}</a-tag>
         </template>
         <template v-else-if="column.key === 'products'">
           <div class="prod-cell">
-            <a-tag v-for="p in record.products.slice(0, 3)" :key="p" class="prod-tag">{{ p }}</a-tag>
-            <a-tooltip v-if="record.products.length > 3" :title="record.products.join(', ')">
-              <a-tag>+{{ record.products.length - 3 }}</a-tag>
+            <a-tag v-if="!record.products?.length">{{ translate('revision17.unmarked') }}</a-tag>
+            <a-tag v-for="p in (record.products||[]).slice(0, 3)" :key="p" class="prod-tag">{{ p }}</a-tag>
+            <a-tooltip v-if="(record.products||[]).length > 3" :title="record.products.join(', ')">
+              <a-tag>+{{ (record.products||[]).length - 3 }}</a-tag>
             </a-tooltip>
           </div>
         </template>
@@ -133,6 +144,7 @@
 
 <script setup lang="ts">
 import { t as translate } from '../../i18n'
+import { severityLabel } from '../../utils/severity'
 
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
@@ -164,6 +176,7 @@ function healthText(h: string) {
 
 const comp = ref('')
 const queryResult = ref<VulnIntelItem[]>([])
+async function retryPush() { await vulnIntelApi.retryNotifications(); await loadAll() }
 const queryDone = ref(false)
 
 const kevOnly = ref(false)
@@ -171,7 +184,7 @@ const execOnly = ref(false)
 const sortByExposure = ref(true)   // 默认按最新曝光时间排序（用户要求最新曝光在前）
 const query = reactive({ keyword: '', severity: undefined as string | undefined, source: undefined as string | undefined, page: 1, size: 20 })
 
-const sevOptions = ['critical', 'high', 'medium', 'low'].map(v => ({ value: v, label: v }))
+const sevOptions = computed(() => ['critical', 'high', 'medium', 'low', 'info', 'unknown'].map(v => ({ value: v, label: severityLabel(v) })))
 function sevColor(s: string) { return SEVERITY_COLOR[s] || 'default' }
 // 时间只保留到天(YYYY-MM-DD),去掉时分秒
 function toDay(v: unknown) {
@@ -179,9 +192,16 @@ function toDay(v: unknown) {
   return s ? s.slice(0, 10) : '—'
 }
 
+function publisherUrl(record:VulnIntelItem){
+  for(const value of [record.source_url,...(record.source_urls || [])]){
+    if(!value)continue
+    try{const url=new URL(value);if(['http:','https:'].includes(url.protocol) && url.hostname)return url.href}catch{/**/}
+  }
+  return ''
+}
 const columns = [
-  { title: 'CVE', key: 'cve', width: 150 },
-  { get title() { return translate('ui.m_c3405f8c7d9d') }, dataIndex: 'title', ellipsis: true, width: 280 },
+  { get title() { return translate('intel.identifier') }, key: 'cve', width: 185 },
+  { get title() { return translate('ui.m_c3405f8c7d9d') }, dataIndex: 'title', key:'title', ellipsis: true, width: 280 },
   { get title() { return translate('ui.m_337717173807') }, key: 'severity', width: 90 },
   { get title() { return translate('ui.m_269635727321') }, key: 'flags', width: 140 },
   { get title() { return translate('ui.m_783d638053ea') }, key: 'products', width: 220 },
@@ -231,7 +251,7 @@ function onReset() { query.keyword = ''; query.severity = undefined; query.sourc
 function onPage(page: number, size: number) { query.page = page; query.size = size; loadList() }
 
 async function doQuery() {
-  if (!comp.value) return
+  if (!comp.value.trim()) { message.warning(translate('intel.queryRequired')); return }
   try {
     const r = await vulnIntelApi.query(comp.value)
     queryResult.value = r.vulns; queryDone.value = true
@@ -309,4 +329,3 @@ onMounted(loadAll)
 .prod-cell { display: flex; flex-wrap: nowrap; overflow: hidden; }
 .prod-tag { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
-

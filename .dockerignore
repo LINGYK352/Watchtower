@@ -43,3 +43,28 @@ proxy_runtime/
 .hotupdate_backup/
 *.log
 *.tmp
+
+
+# 本机三目录工作区及开发辅助资料，禁止误拷贝后入源码/镜像
+工程资料/
+Web端/
+Win端/
+validation/
+vm_test/
+.update_stage_local/
+任务记录/
+private-backup/
+
+# .git也可能是指针文件，不能只排除目录
+.git
+
+# English local workspace directories; never ship engineering data
+Watchtower-engineering/
+Watchtower-web/
+Watchtower-windows/
+cloud/
+task-records/
+source-validation/
+
+# Independent distribution/registration service and its private data
+Watchtower-distribution/

@@ -1,42 +1,40 @@
 :root {
-  /* —— 品牌色:青→蓝渐变(科技专业风核心) —— */
-  --dt-primary: #1677ff;
-  --dt-primary-hover: #4096ff;
-  --dt-cyan: #06b6d4;
-  --dt-gradient: linear-gradient(135deg, #06b6d4 0%, #1677ff 100%);
-  --dt-gradient-soft: linear-gradient(135deg, rgba(6,182,212,.12) 0%, rgba(22,119,255,.12) 100%);
-  --dt-success: #15803d;
-  --dt-success-soft: #f0fdf4;
-  --dt-success-border: #bbf7d0;
-  --dt-danger: #dc2626;
-  --dt-danger-soft: #fef2f2;
-  --dt-warning: #9a6700;
-
-  /* —— 中性背景/文字 —— */
-  --dt-bg: #f6f8fc;
-  --dt-card: #ffffff;
-  --dt-text: #0f1f33;
-  --dt-muted: #64748b;
-  --dt-border: #e8edf4;
-  --dt-border-strong: #d4ddea;
-
-  /* —— 深色侧栏:深蓝渐变 —— */
-  --dt-sider: #0a1628;
-  --dt-sider-grad: linear-gradient(180deg, #0d1b30 0%, #07101e 100%);
-
-  /* —— 浅色填充（chip/hover 等次级背景）—— */
-  --dt-fill: #fafafa;
-
-  /* —— 圆角:统一现代 16px 体系 —— */
-  --dt-radius: 16px;
-  --dt-radius-sm: 10px;
-  --dt-radius-lg: 20px;
-
-  /* —— 多层精致阴影 —— */
-  --dt-shadow-sm: 0 1px 3px rgba(15,23,42,.04), 0 1px 2px rgba(15,23,42,.06);
-  --dt-shadow: 0 2px 8px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.04);
-  --dt-shadow-hover: 0 8px 24px rgba(15,23,42,.1), 0 2px 8px rgba(15,23,42,.06);
-  --dt-shadow-primary: 0 2px 6px rgba(15,23,42,.12);
+  color-scheme: light;
+  --dt-scroll-track:#f1f4f8; --dt-scroll-thumb:#64748b; --dt-scroll-hover:#475569;
+  /* 177-59 data-dense: solid surfaces, compact data and explicit semantic colors. */
+  --dt-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --dt-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --dt-mode-src: #497769;
+  --dt-primary: #1677ff; --dt-primary-hover: #4096ff;
+  --dt-action: #1677ff; --dt-action-hover: #4096ff;
+  --dt-cyan: #087ea4; --dt-link: #1677ff;
+  --dt-gradient: linear-gradient(#2563eb, #2563eb);
+  --dt-gradient-soft: linear-gradient(#edf3ff, #edf3ff);
+  --dt-accent-soft: #edf3ff;
+  --dt-success: #13743c; --dt-success-soft: #edf9f1; --dt-success-border: #aad7bb;
+  --dt-danger: #b83245; --dt-danger-soft: #fff0f1;
+  --dt-warning: #805400; --dt-warning-soft: #fff6df;
+  --dt-bg: #f6f8fc; --dt-card: #ffffff; --dt-fill: #fafafa; --dt-hover: #fafafa;
+  --dt-text: #0f1f33; --dt-muted: #64748b;
+  --dt-border: #e8edf4; --dt-border-strong: #d4ddea; --dt-control-border: #d9d9d9;
+  --dt-sider: #f9fafc; --dt-sider-grad: linear-gradient(#f9fafc, #f9fafc);
+  --dt-nav-text: #526174; --dt-nav-selected: #1d4ed8; --dt-nav-selection: #eaf1ff;
+  --dt-radius: 6px; --dt-radius-sm: 4px; --dt-radius-lg: 10px;
+  --dt-shadow-sm: 0 1px 3px #0f172a08; --dt-shadow: 0 1px 4px #0f172a06; --dt-shadow-hover: 0 4px 14px #0f172a0d;
+  --dt-shadow-primary: none;
+  --dt-code-bg: #f1f4f8; --dt-chat-bg: #f7f9fc;
 }
-
 .comp-files{display:flex;flex-wrap:wrap;gap:4px;padding:6px 10px}.comp-upload{background:transparent;border:1px solid var(--dt-border);color:var(--dt-text);padding:4px 10px;border-radius:6px;cursor:pointer}.comp-upload:disabled{opacity:.45;cursor:default}.upload-file-progress{padding:10px 0;border-bottom:1px solid var(--dt-border);overflow-wrap:anywhere}.ann-critical{background:var(--dt-danger-bg,#3b2027);color:var(--dt-danger,#ff7875)}
+
+/* 177-117 daylight: distinct canvas, navigation, content and control surfaces. */
+html[data-theme="light"] {
+ --dt-primary:#3865c9;--dt-primary-hover:#2b54b0;--dt-action:#3865c9;--dt-action-hover:#2b54b0;--dt-link:#2e5cbb;
+ --dt-bg:#eaf0f8;--dt-card:#fcfdff;--dt-fill:#f0f4fb;--dt-hover:#eaf1fd;
+ --dt-text:#20324d;--dt-muted:#5e708c;--dt-border:#dbe4f1;--dt-border-strong:#b8cae3;--dt-control-border:#ccd8ea;
+ --dt-sider:#f0f4fc;--dt-sider-grad:linear-gradient(180deg,#e9f0fc,#f2f5fb 45%);
+ --dt-nav-text:#526580;--dt-nav-selected:#244eaa;--dt-nav-selection:#dce7fb;
+ --dt-accent-soft:#e5edfd;--dt-gradient-soft:linear-gradient(125deg,#e2ecff,#edf2fb);
+ --dt-radius:10px;--dt-radius-sm:6px;--dt-radius-lg:12px;
+ --dt-shadow-sm:0 2px 6px #233c6810;--dt-shadow:0 3px 14px #233c680b;--dt-shadow-hover:0 8px 22px #233c6815;
+ --dt-code-bg:#edf2fa;--dt-chat-bg:#f0f4fb;--dt-scroll-track:#e8eef8;--dt-scroll-thumb:#879bb8;--dt-scroll-hover:#587295;
+}

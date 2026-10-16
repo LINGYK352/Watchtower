@@ -52,6 +52,8 @@ _list_parser = ns.parser()
 _list_parser.add_argument("allow", type=str, location="args", help="放行过滤 1/true=放行 0/false=拦截")
 _list_parser.add_argument("mode", type=str, location="args", help="模式 src/redteam/conservative")
 _list_parser.add_argument("level", type=str, location="args", help="判定档 safe/danger/ambiguous/ai_safe/ai_danger")
+_list_parser.add_argument("session_id", type=str, location="args", help="会话ID精确查询")
+_list_parser.add_argument('metadata_only',type=str,location='args',help='列表不携带报文，点击后按记录读取')
 _list_parser.add_argument("page", type=int, location="args", help="页码, 默认1")
 _list_parser.add_argument("size", type=int, location="args", help="每页条数, 默认30（无硬上限，传多大返多少）")
 
@@ -73,8 +75,26 @@ class GuardLogList(Resource):
             size = int(a.get("size") or 30)
         except (TypeError, ValueError):
             page, size = 1, 30
+        from flask import g
+        current=getattr(g,'current_user',None)
+        filters={"session_id":a["session_id"]} if a.get("session_id") else {}
+        if current and current.get('role')!='admin' and 'pentest:view_all' not in (current.get('permissions') or []):filters['owner']=current.get('username') or '__no_owner__'
         return ok(svc.list_logs(allow=_tri_bool(a.get("allow")), mode=a.get("mode") or "",
-                                level=a.get("level") or "", page=page, size=size))
+                                level=a.get("level") or "", page=page, size=size,metadata_only=a.get('metadata_only')=='1', **filters))
+
+
+@ns.route('/<string:identity>/')
+class TrafficInteraction(Resource):
+    @ns.doc(security='token',description='需权限system:read，按会话归属读取流量交互')
+    def get(self,identity):
+        from flask import g
+        current=getattr(g,'current_user',None) or {}
+        owner=None if current.get('role')=='admin' or 'pentest:view_all' in (current.get('permissions') or []) else current.get('username') or '__no_owner__'
+        svc=_svc()
+        if not svc:return err(CODE_ERROR,'流量日志服务未就绪')
+        row=svc.read_log(identity,owner=owner)
+        if not row:return err(404,'流量记录不存在、已清理或无权读取 / Traffic unavailable or forbidden')
+        return ok(row)
 
 
 @ns.route("/stat/")
@@ -100,4 +120,13 @@ class GuardLogSize(Resource):
         body = request.get_json(silent=True) or {}
         if "size_mb" not in body:
             return err(CODE_BAD_REQUEST, "size_mb 必填")
-        return ok({"size_mb": svc.set_size_mb(body.get("size_mb"))})
+        if 'retention_days' in body:
+            try:
+                days=body['retention_days']
+                if isinstance(days,bool) or float(days)!=int(days) or int(days)<1:raise ValueError()
+            except (ValueError,TypeError,OverflowError):return err(CODE_BAD_REQUEST,'保留天数必须为正整数')
+        result={'size_mb':svc.set_size_mb(body.get('size_mb'))}
+        if 'retention_days' in body:
+            try:result['retention_days']=svc.set_retention_days(body['retention_days'])
+            except (ValueError,TypeError,OverflowError):return err(CODE_BAD_REQUEST,'保留天数必须为正整数')
+        return ok(result)

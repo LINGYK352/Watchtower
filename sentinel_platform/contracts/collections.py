@@ -45,6 +45,8 @@ class Collections:
     AI_EXTENSION = "ai_extension"
     AI_EXTENSION_LOG = "ai_extension_log"
     PENTEST_SESSION = "intel_pentest_session"
+    PENTEST_REQUEST_APPROVAL = "intel_pentest_request_approval"
+    TRAFFIC_LOG = "traffic_log"
     PENTEST_WHITELIST = "pentest_whitelist"
     TASK_DEDUP = "task_dedup"              # 任务级派发去重表（每任务独立，(source_task_id,dedup_key) 唯一，
                                           # 持久增量去重替代临时 seen；跨任务隔离防误去重，删任务连带清）
@@ -100,5 +102,9 @@ class Collections:
     APP_DEVICE = "app_device"      # 光纤/设备注册（device_id/在线心跳/握手态/能力清单，共用平台 platform_key）
     APP_CMD = "app_cmd"            # 光纤命令队列（含结果内联：op/args/status pending→dispatched→done/result）
     APP_TRAFFIC = "app_traffic"    # App 抓包 flow（P2 抓包层用，capped/TTL 防膨胀）
+    APP_CAPTURE = "app_capture"    # Link指定App采集会话；出口/连接方式/令牌哈希/TTL，共享状态
+    BURPS_HISTORY = "burps_history"  # Session-owned HTTP/WS byte snapshots and HaE annotations.
+    BURPS_JOBS = "burps_jobs"        # Shared replay state and WebSocket command queue.
+    BURPS_LEASES = "burps_leases"    # Atomic cross-worker socket budget.
     # 工具资源管理（L3 令牌层：浏览器等有限资源的会话级占用）
     TOOL_RESOURCES = "tool_resources"

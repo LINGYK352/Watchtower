@@ -118,15 +118,22 @@ class Launch(Resource):
         if not svc or not hasattr(svc, "launch_pentest"):
             return _bad_service()
         b = request.get_json(silent=True) or {}
+        if not isinstance(b,dict):return err(CODE_BAD_REQUEST,'JSON对象必填 / JSON object required')
         # wxids(数组，勾选的包)；兼容旧字段 wxid(单个)
         wxids = b.get("wxids")
         if not wxids and b.get("wxid"):
             wxids = [b.get("wxid")]
-        mode = (b.get("mode") or "src").strip()
-        provider_id = (b.get("provider_id") or "").strip()
+        mode=b.get('mode','src');provider_id=b.get('provider_id','')
+        backup_provider_id=b.get('backup_provider_id','');interaction_mode=b.get('interaction_mode','autonomous')
+        mode='src' if mode is None else mode;provider_id='' if provider_id is None else provider_id
+        backup_provider_id='' if backup_provider_id is None else backup_provider_id
+        interaction_mode='autonomous' if interaction_mode is None else interaction_mode
+        if any(not isinstance(value,str) for value in (mode,provider_id,backup_provider_id,interaction_mode)):
+            return err(CODE_BAD_REQUEST,'模式或模型参数格式无效 / Invalid mode or model parameters')
         if not isinstance(wxids, list) or not wxids:
             return err(CODE_BAD_REQUEST, "wxids(数组) 必填")
-        r = svc.launch_pentest(wxids, mode=mode, provider_id=provider_id, owner=_username())
+        r = svc.launch_pentest(wxids, mode=mode, provider_id=provider_id,backup_provider_id=backup_provider_id,
+                              interaction_mode=interaction_mode, owner=_username())
         return ok(r) if r.get("ok") else err(CODE_BAD_REQUEST, r.get("error", "发起失败"))
 
 

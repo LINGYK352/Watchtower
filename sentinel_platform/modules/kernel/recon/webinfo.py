@@ -74,42 +74,112 @@ class WebInfoHunter:
 
     # —— 单站点挖掘 ——
     def hunt_site(self, site: str) -> List[WihRec]:
-        html = self._fetch(site)
-        out: List[WihRec] = []
-        seen: Set[str] = set()
+        return self.capture_site(site)[0]
+
+    def capture_site(self, site: str):
+        from .js_dependencies import discover
+        import hashlib, time
+        out, seen, fetched, queue = [], set(), set(), [site]
+        metadata = {'source_url': site, 'capture_status': '', 'incomplete_reason': '', 'content_sha256': ''}
+        deadline = time.monotonic() + max(15, self.timeout * 4)
+        total_bytes = 0
+        report = {'site':site,'files':[],'incomplete_reasons':[],
+                  'static_requests':0,'browser_used':False,'complete_site_coverage':False}
 
         def _add(rtype: str, content: str):
-            key = rtype + "|" + content
+            key = rtype + '|' + content
             if content and key not in seen:
                 seen.add(key)
-                out.append(WihRec(record_type=rtype, content=content, site=site))
+                out.append(WihRec(record_type=rtype, content=content, site=site, **metadata))
 
-        # 静态轨 + PhantomJS 动态资源/XHR 轨；浏览器缺失时诚实退回静态轨。
-        texts = [html] if html else []
-        js_urls = set(_RE_JS.findall(html or ""))
+        def process():
+            nonlocal total_bytes
+            while queue and len(fetched) < 128 and total_bytes < 32 * 1024 * 1024 and time.monotonic() < deadline:
+                url = queue.pop(0)
+                if url in fetched: continue
+                fetched.add(url)
+                document = self._fetch_document(url)
+                report['static_requests'] += 1
+                report['files'].append({k:v for k,v in document.items() if k!='text'})
+                total_bytes += document['bytes']
+                metadata.update({'source_url': url, 'capture_status': document['state'],
+                                 'incomplete_reason': document['reason'], 'content_sha256': document['sha256']})
+                if url != site: _add('js', url)
+                if not document['text'] or not 200 <= document['status'] < 300: continue
+                discovery = discover(document['text'], document.get('url') or url, document_url=site)
+                if discovery['incomplete_reasons']:
+                    report['incomplete_reasons'].extend(discovery['incomplete_reasons'])
+                    metadata['incomplete_reason'] = '; '.join(filter(None,[metadata['incomplete_reason'], ','.join(discovery['incomplete_reasons'])]))
+                self._extract(document['text'], _add)
+                for candidate in discovery['references']:
+                    child = candidate['url']
+                    if child in fetched or child in queue: continue
+                    # Automatic reconstruction stays on the source origin. External
+                    # candidates are retained for an explicit authorized follow-up.
+                    a, b = urlparse(url), urlparse(child)
+                    if (a.scheme,a.netloc) == (b.scheme,b.netloc): queue.append(child)
+                    else:
+                        saved = dict(metadata)
+                        metadata.update({'capture_status':'candidate','incomplete_reason':'external_origin_requires_followup'})
+                        _add('js',child); metadata.update(saved)
+
+        process()
+        # Preserve existing runtime/XHR coverage. This is supplemental observation,
+        # not a guarantee of modern JS compatibility or complete SPA coverage.
         try:
             from .native.resources import DynamicResources
-            dynamic = DynamicResources(timeout=int(max(1, self.timeout))).capture(site)
-            if dynamic.get("dom"):
-                texts.append(dynamic["dom"])
-            for url in dynamic.get("js") or []:
-                js_urls.add(url)
-                _add("js", url)
-            for url in dynamic.get("apis") or []:
-                _add("api", url)
-        except Exception:
-            pass
-        for js_ref in js_urls:
-            js_url = js_ref if str(js_ref).startswith(("http://", "https://")) else urljoin(site, js_ref)
-            if js_url.lower().endswith(_STATIC_EXT[:-1]):
-                continue
-            _add("js", js_url)
-            body = self._fetch(js_url)
-            if body:
-                texts.append(body)
-        if texts:
-            self._extract("\n".join(texts), _add)
-        return out
+            adapter = DynamicResources(timeout=int(max(1,self.timeout)))
+            report['runtime_adapter_available'] = adapter.available()
+            dynamic = adapter.capture(site)
+            report['browser_used'] = dynamic.get('ok') is True
+            if dynamic.get('degraded') or not dynamic.get('ok'): report['incomplete_reasons'].append('runtime_adapter_unavailable_or_incomplete')
+            metadata.update({'source_url':site,'capture_status':'runtime_observed',
+                             'incomplete_reason':'runtime_observation_is_partial','content_sha256':''})
+            if dynamic.get('dom'): self._extract(dynamic['dom'],_add)
+            for url in dynamic.get('apis') or []: _add('api',url)
+            for url in dynamic.get('js') or []:
+                if url not in fetched and url not in queue: queue.append(url)
+            process()
+        except Exception: pass
+        if queue:
+            report['incomplete_reasons'].append('collection_budget_reached')
+            metadata.update({'source_url':site,'capture_status':'candidate',
+                             'incomplete_reason':'collection_budget_reached','content_sha256':''})
+            for url in queue[:4096]: _add('js',url)
+        report['incomplete_reasons']=sorted(set(report['incomplete_reasons']))
+        return out, report
+
+    def _fetch_document(self, url: str):
+        import hashlib
+        result = {'text':'','status':0,'state':'failed','reason':'','bytes':0,'sha256':'','url':url}
+        try:
+            class SameOriginRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg, headers, newurl):
+                    a,b=urlparse(req.full_url),urlparse(newurl)
+                    if (a.scheme,a.netloc)!=(b.scheme,b.netloc): raise ValueError('external_origin_redirect_not_analyzed')
+                    return super().redirect_request(req,fp,code,msg,headers,newurl)
+            request = urllib.request.Request(url,headers={'User-Agent':_UA})
+            opener=urllib.request.build_opener(urllib.request.HTTPSHandler(context=self._ctx),SameOriginRedirect())
+            with opener.open(request,timeout=self.timeout) as response:
+                data = response.read(self.max_bytes + 1)
+                clipped = len(data) > self.max_bytes
+                data = data[:self.max_bytes]
+                status = response.getcode()
+                result.update({'status':status,'url':response.geturl(),'bytes':len(data),
+                               'sha256':hashlib.sha256(data).hexdigest(),
+                               'state':'truncated' if clipped else 'fetched',
+                               'reason':'file_byte_budget_reached' if clipped else ''})
+                body = data.decode(response.headers.get_content_charset() or 'utf-8',errors='replace')
+                if url != response.geturl() and urlparse(url).netloc != urlparse(response.geturl()).netloc:
+                    result.update({'state':'redirected','reason':'external_origin_redirect_not_analyzed'});return result
+                if re.search(r'\.(?:m?js|cjs)(?:[?]|$)',url,re.I) and re.match(r'\s*<(?:!doctype|html)\b',body,re.I):
+                    result.update({'state':'not_javascript','reason':'javascript_url_returned_html'});return result
+                result['text']=body
+        except urllib.error.HTTPError as exc:
+            result.update({'status':exc.code,'reason':'HTTP '+str(exc.code)})
+        except Exception as exc:
+            result['reason']=type(exc).__name__
+        return result
 
     def _extract(self, blob: str, add) -> None:
         # 接口/端点(LinkFinder)：group(1)=完整匹配段(可能带 ?query)。过静态/噪音，留业务接口。

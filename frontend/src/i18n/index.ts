@@ -2,6 +2,8 @@ import { computed, watch } from 'vue'
 import { createI18n } from 'vue-i18n'
 import zhCN from '../locales/zh-CN.json'
 import enUS from '../locales/en-US.json'
+import guidesZh from '../locales/guides/zh-CN.json'
+import guidesEn from '../locales/guides/en-US.json'
 import antZhCN from 'ant-design-vue/es/locale/zh_CN'
 import antEnUS from 'ant-design-vue/es/locale/en_US'
 
@@ -22,7 +24,7 @@ export const i18n = createI18n({ legacy: false, globalInjection: true, locale: s
       const value = context.named(name)
       return value === undefined ? original : String(value)
     })
-  }, messages: { 'zh-CN': zhCN, 'en-US': enUS } })
+  }, messages: { 'zh-CN': {...zhCN,guides:guidesZh}, 'en-US': {...enUS,guides:guidesEn} } })
 export const appLocale = i18n.global.locale
 export const componentLocale = computed(() => appLocale.value === 'en-US' ? antEnUS : antZhCN)
 export function setLocale(value: AppLocale) {
@@ -38,3 +40,11 @@ export function t(key: string, parameters?: Record<string, unknown>) {
   return named ? i18n.global.t(key, named) : i18n.global.t(key)
 }
 export function hasMessage(key: string) { return i18n.global.te(key) }
+// Utilities may throw message keys, while the API returns human-readable errors.
+// Translate registered keys only; preserve API details without missing-key noise.
+export function localizedError(error: unknown): string {
+  const message = error instanceof Error ? error.message
+    : error && typeof error === 'object' && 'message' in error ? String(error.message)
+    : String(error ?? '')
+  return hasMessage(message) ? t(message) : message
+}

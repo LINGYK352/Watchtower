@@ -84,6 +84,16 @@ class VulnFeedStatus(Resource):
         return ok(svc.feed_status())
 
 
+@ns.route("/vuln_feed/notification/retry/")
+class VulnNotificationRetry(Resource):
+    @ns.doc(security="token", description="需权限 vuln:write")
+    def post(self):
+        svc = _svc()
+        if not svc:
+            return err(CODE_ERROR, "漏洞情报服务未就绪")
+        return ok(svc.retry_notifications())
+
+
 @ns.route("/vuln_feed/list/")
 class VulnFeedList(Resource):
     @ns.doc(security="token", description="需权限 vuln:read")
@@ -242,6 +252,17 @@ class PentestFindingUnified(Resource):
             page, size = int(a.get("page") or 1), int(a.get("size") or 20)
         except (TypeError, ValueError):
             page, size = 1, 20
+        watch_raw = request.args.get('watch')
+        watch = None
+        if watch_raw is not None:
+            try:
+                import json
+                watch = json.loads(watch_raw)
+                if not isinstance(watch, dict) or any(src not in ('ai', 'poc', 'nuclei') or not isinstance(ids, list)
+                        or any(not isinstance(item, str) for item in ids) for src, ids in watch.items()):
+                    raise ValueError('Invalid watch')
+            except (ValueError, TypeError):
+                return err(CODE_BAD_REQUEST, 'Invalid finding watch IDs')
         data = svc.list_unified_findings(
             unit=a.get("unit") or None, severity=a.get("severity") or None,
             # 默认最低等级 low（隐藏 info 噪声）——服务端强制默认，老前端/API 无需传即生效；
@@ -252,7 +273,7 @@ class PentestFindingUnified(Resource):
             date_from=a.get("date_from") or None, date_to=a.get("date_to") or None,
             # dedup 默认 True（漏洞去重，隐藏重复）；显式传 "0"/"false" = 全部漏洞（含重复条目）
             dedup=_tri_bool(a.get("dedup")) is not False,
-            page=page, size=size)
+            page=page, size=size, **({'watch': watch} if watch is not None else {}))
         return ok(data)
 
 

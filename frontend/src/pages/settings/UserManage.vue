@@ -1,16 +1,17 @@
 <template>
-  <PageContainer :title="translate('ui.m_fbf413d429bd')" kicker="User & Role" :description="translate('ui.m_d7fc78e962f3')">
+  <PageContainer class="user-management" :title="translate('ui.m_fbf413d429bd')" kicker="User & Role" :description="translate('ui.m_d7fc78e962f3')">
     <a-tabs v-model:activeKey="tab">
       <!-- 用户 -->
-      <a-tab-pane key="users" tab="用户">
+      <a-tab-pane key="users" :tab="translate('navigation.userTab')">
         <div class="bar">
           <a-button @click="loadUsers">{{ translate('ui.m_aee887434131') }}</a-button>
           <a-button type="primary" @click="openAddUser">{{ translate('ui.m_3ae9a33489d7') }}</a-button>
         </div>
         <a-table :columns="userCols" :data-source="users" :loading="loadingUsers" :pagination="false" row-key="username" size="middle" bordered>
           <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'role'">
-              <a-tag :color="record.is_manager ? 'red' : 'blue'">{{ roleTitle(record.role) }}</a-tag>
+            <template v-if="column.key === 'username' || column.key === 'create_date'"><span class="record-id">{{ record[column.dataIndex] }}</span></template>
+            <template v-else-if="column.key === 'role'">
+              <a-tag class="role-tag" :color="record.is_manager ? 'blue' : undefined">{{ roleTitle(record.role) }}</a-tag>
             </template>
             <template v-else-if="column.key === 'disabled'">
               <a-tag :color="record.disabled ? 'default' : 'green'">{{ record.disabled ? translate('ui.m_bc5a87a757a5') : translate('ui.m_f4f0ead1116b') }}</a-tag>
@@ -29,7 +30,7 @@
       </a-tab-pane>
 
       <!-- 角色 -->
-      <a-tab-pane key="roles" tab="角色">
+      <a-tab-pane key="roles" :tab="translate('navigation.roleTab')">
         <div class="bar">
           <a-button @click="loadRoles">{{ translate('ui.m_aee887434131') }}</a-button>
           <a-button type="primary" @click="openAddRole">{{ translate('ui.m_7642dfca45b3') }}</a-button>
