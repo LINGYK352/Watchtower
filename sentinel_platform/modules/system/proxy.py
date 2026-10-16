@@ -98,8 +98,10 @@ def _validate_source_bound(source: Optional[Dict[str, Any]], label: str) -> str:
       - pool：公共代理池必须有「启用且可用(delay≥0)」的代理——池空/全失效=选了个空源，此时保存等于配了个永远出不去的出口。
       - subscription：内核代理必须已导入并激活订阅(active_profile_id 非空)——无订阅=没内容可走。
     区别于「配了但此刻连不通」（如节点超时）——那类由 smart 自动降级 / global 保存后探测提示，不在此拦。"""
-    if not isinstance(source, dict):
-        return ""
+    if not isinstance(source, dict) or source.get("type") not in ("custom", "subscription", "pool"):
+        return "请选择有效代理源"
+    if source.get("ref_id") is not None and not isinstance(source.get("ref_id"), str):
+        return "代理源ID必须为字符串"
     t = source.get("type", "")
     if t == "custom":
         if not source.get("ref_id"):
@@ -136,7 +138,7 @@ def _validate_sources(update: Dict[str, Any]) -> str:
         if err:
             return err
     smart = update.get("smart_source")
-    if _source_configured(smart):   # 智能源真被绑定了才校验；默认订阅空占位=直连，放行
+    if (isinstance(smart, dict) and smart.get("type") == "custom") or _source_configured(smart):   # 智能源真被绑定了才校验；默认订阅空占位=直连，放行
         err = _validate_source_bound(smart, "智能代理")
         if err:
             return err
@@ -184,14 +186,27 @@ def save_config(data: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": "{} 必须为整数".format(key)}
     if "mode" in update and update["mode"] not in _ALLOWED_MODES:
         return {"error": "mode 必须为 rule/global/direct"}
+    for key in ("global_source", "smart_source"):
+        if key in update and (not isinstance(update[key], dict) or update[key].get("type") not in ("custom", "subscription", "pool")):
+            return {"error": "代理源格式无效"}
+    for key in ("global_mode_enabled", "enabled"):
+        if key in update and not isinstance(update[key], bool):
+            return {"error": key + " 必须为布尔值"}
     # 代理源结构性校验（只查源是否为空，不探可达性——守内网无出口不误判的设计边界）。
     # 只在提交里带了源字段时校验（改端口/DoH 等不带源的保存不受影响）。
     if "global_source" in update or "smart_source" in update or "global_mode_enabled" in update:
-        src_err = _validate_sources(update)
+        candidate = dict(get_config())
+        candidate.update(update)
+        src_err = _validate_sources(candidate)
         if src_err:
             return {"error": src_err}
         # 需求1：结构性校验通过后，对「启用代理（强制走代理）」的保存真探一次可达性，节点全挂则拦下。
-        reach_err = _reachability_check_on_save(update)
+        smart = candidate.get("smart_source") or {}
+        if _source_configured(smart) and smart.get("type") == "subscription":
+            checked = validate_source_bounded(smart, candidate)
+            if not checked.get("ok"):
+                return {"error": checked.get("reason", "内核代理校验失败"), "reason_code": checked.get("reason_code")}
+        reach_err = _reachability_check_on_save(candidate)
         if reach_err:
             return {"error": reach_err}
     update["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -202,6 +217,48 @@ def save_config(data: Dict[str, Any]) -> Dict[str, Any]:
         logger.debug("proxy save_config failed: %s", exc)
         return {"error": "保存失败: {}".format(exc)}
     return get_config()
+
+
+def validate_source(source, config=None):
+    from . import _mihomo
+    cfg = dict(config) if config is not None else get_config()
+    if not isinstance(source, dict) or source.get('type') not in ('subscription', 'custom', 'pool'):
+        return {'ok': False, 'reason_code': 'invalid', 'reason': '请选择有效代理源'}
+    bound_error = _validate_source_bound(source, '代理')
+    result = {'ok': False, 'reason_code': 'unconfigured', 'reason': bound_error,
+              'running': None, 'profile_configured': bool(cfg.get('active_profile_id'))}
+    if bound_error:
+        return result
+    kernel = source['type'] == 'subscription'
+    if kernel:
+        try:
+            result['running'] = bool(_mihomo.is_running())
+            result['ref_id'] = str(cfg.get('active_profile_id', ''))
+        except Exception:
+            result['running'] = False
+        if not result['running'] or not cfg.get('enabled'):
+            result.update(reason_code='kernel_stopped', reason='内核代理未运行或未启用')
+            return result
+        url = 'http://{}:{}'.format(_mihomo_host(), cfg.get('http_port', 17890))
+    else:
+        url = _source_url(source)
+    if not url:
+        result.update(reason_code='unconfigured', reason='没有可用代理出口')
+        return result
+    if not _proxy_reachable(url):
+        result.update(reason_code='probe_failed', reason='代理连通性校验未通过')
+        return result
+    result.update(ok=True, reason_code='', reason='')
+    return result
+
+
+def validate_source_bounded(source, config=None):
+    from sentinel_platform.core.bounded_call import run
+    result, reason = run('proxy-source-check', lambda: validate_source(source, config), 9, capacity=1)
+    if result is not None:
+        return result
+    return {'ok': False, 'reason_code': 'probe_timeout', 'reason': '代理校验繁忙或超时，请稍后重试',
+            'running': None, 'profile_configured': None}
 
 
 def _mihomo_host() -> str:
@@ -347,7 +404,9 @@ def _source_configured(source: Optional[Dict[str, Any]]) -> bool:
     if not isinstance(source, dict):
         return False
     t = source.get("type", "")
-    if not t:
+    if t not in ("custom", "subscription", "pool"):
+        return False
+    if source.get("ref_id") is not None and not isinstance(source.get("ref_id"), str):
         return False
     if t == "subscription" and not source.get("ref_id"):
         return False   # 订阅默认占位 = 未配置 = 直连（对齐前端 smartConfigured）
@@ -422,7 +481,8 @@ def resolve_egress(mode: str, rule_id: str = "", source: str = "") -> Tuple[str,
             logger.debug("resolve_egress rule degraded: %s", exc)
         return "", False
     # smart：智能源优先，可回退（allow_fallback=True）；调用方探不通时按叠加降级回退全局/直连
-    return _source_url(cfg.get("smart_source")), True
+    smart = cfg.get("smart_source")
+    return (_source_url(smart) if _source_configured(smart) else ""), True
 
 
 def resolve_egress_url(mode: str, rule_id: str = "") -> str:
@@ -831,6 +891,7 @@ def status() -> Dict[str, Any]:
         logger.debug("proxy status mihomo probe degraded: %s", exc)
     return {
         "config": cfg, "running": running, "pid": pid,
+        "container_mode": bool(_mihomo._is_container_mode()),
         "proxy_url": runtime_proxy_url(),
         "current_node": _safe_current_node() if running else "",
         "last_health_ok": cfg.get("last_health_ok"),
@@ -850,6 +911,8 @@ def _safe_current_node() -> str:
 
 class ProxyServiceImpl:
     """PROXY 实现。满足 contracts.ProxyService（结构化子类型，无需继承）。"""
+
+    def validate_source(self, source): return validate_source_bounded(source)
 
     def resolve_egress(self, mode: str, rule_id: str = "", source: str = "") -> Tuple[str, bool]:
         """出口决策（2026-08 4模式重构）。返回 (proxy_url, allow_fallback)。

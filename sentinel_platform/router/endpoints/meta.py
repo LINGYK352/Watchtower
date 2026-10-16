@@ -144,10 +144,12 @@ class ActivationInfo(Resource):
         import time as _time
         import math
         key = _read_activation_key_fresh()
+        from sentinel_platform.modules.system.activation import platform_identity
+        identity=platform_identity(key)
 
         if not _is_jwt(key):
             return ok({"activated": False, "expired": False, "revoked": False, "key_masked": "",
-                       "activated_at": "", "expires_at": "", "remaining_days": 0, "auth_days": 0, "username": ""})
+                       "activated_at": "", "expires_at": "", "remaining_days": 0, "auth_days": 0, "username": "", **identity})
 
         payload = _decode_jwt_payload(key)
         exp = payload.get("exp", 0)
@@ -182,6 +184,7 @@ class ActivationInfo(Resource):
             "remaining_days": remaining_days,
             "auth_days": payload.get("auth_days", 0),
             "username": payload.get("name", ""),
+            **identity,
         })
 
 
@@ -211,7 +214,9 @@ class Activation(Resource):
         source_url = (cfg.section("UPDATE", "SOURCE_URL", default="") or _DEFAULT_SOURCE_URL).rstrip("/")
         import requests
         try:
-            resp = requests.post(f"{source_url}/activate", json={"token": reg_token}, timeout=15)
+            from sentinel_platform.core.activation_client import metadata
+            client_metadata, client_headers = metadata('win')
+            resp = requests.post(f"{source_url}/activate", json={"token": reg_token, **client_metadata}, headers=client_headers, timeout=15)
             result = resp.json()
         except Exception as e:
             return err(CODE_ERROR, f"无法连接分发服务器: {e}")
@@ -380,6 +385,13 @@ class DisclaimerState(Resource):
         """记录同意（登录后调）：写磁盘标记，携带条款版本。"""
         from flask import request as _rq
         from sentinel_platform.modules.system import disclaimer
-        body = _rq.get_json(silent=True) or {}
-        version = str(body.get("version") or "").strip()
-        return ok(disclaimer.accept(version))
+        body = _rq.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get("version"), str):
+            return err(400, "Invalid legal version / 条款版本无效")
+        try:
+            status = disclaimer.accept(body["version"].strip())
+        except ValueError:
+            return err(400, "Legal version mismatch; refresh the page / 条款版本不匹配，请刷新页面")
+        if not status.get("persisted"):
+            return err(503, "Assent could not be saved; check configuration storage / 签署记录未保存，请检查配置目录权限或磁盘空间")
+        return ok(status)

@@ -25,6 +25,7 @@ export interface AttackAlert {
 }
 
 export interface AttackStats {
+  monitor?: {available: boolean; state: 'unavailable'|'stopped'|'starting'|'running'|'error'; reason: string; last_success?: number}
   total_attacks: number
   today_attacks: number
   by_type: Record<string, number>

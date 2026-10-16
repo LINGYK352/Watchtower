@@ -17,9 +17,10 @@
                 <component :is="catIcon(cat.name)" class="tool-ic" />
                 <code class="tool-name">{{ t.name }}</code>
                 <a-tag :color="t.available ? 'green' : 'default'">{{ t.available ? translate('ui.m_d59e47070f7f') : translate('ui.m_af33de3507b4') }}</a-tag>
-                <span class="tool-sum">{{ t.summary }}</span>
+                <a-tag v-if="t.reference_only" data-testid="wih-reference-badge">{{ translate('wihReference.label') }}</a-tag>
+                <span class="tool-sum">{{ t.name==='run_wih' ? translate('wihReference.summary') : t.summary }}</span>
               </template>
-              <div class="tool-full">{{ t.description }}</div>
+              <div class="tool-full">{{ t.name==='run_wih' ? translate('wihReference.description') : t.description }}</div>
               <a-alert v-if="!t.available && t.degraded_reason" type="warning" :message="t.degraded_reason" show-icon class="tool-alert" />
               <div v-if="t.params.length" class="tool-params">
                 {{ translate('ui.m_885be94c286d') }}{{ t.params.map(p => p.name + (p.required ? '*' : '')).join('、') }}
@@ -46,7 +47,7 @@ import { pentestApi } from '../../api/pentest'
 
 interface ToolParam { name: string; desc: string; required: boolean }
 interface ToolItem { name: string; category: string; summary: string; description: string; params: ToolParam[];
-  implemented?: boolean; available?: boolean; degraded_reason?: string }
+  implemented?: boolean; available?: boolean; degraded_reason?: string; reference_only?: boolean }
 
 const loading = ref(false)
 const list = ref<ToolItem[]>([])

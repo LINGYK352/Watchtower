@@ -141,11 +141,24 @@ def list_schedules(args: Dict[str, Any] = None) -> Dict[str, Any]:
 def add_schedule(payload: Dict[str, Any]) -> Dict[str, Any]:
     """新建计划任务。校验类型/tag/cron + 解析 policy_name + 算 next_run。返回 {_id,...} 或 {error}。"""
     p = payload or {}
+    if not isinstance(p,dict):return {'error':'JSON对象必填'}
+    for field in ('name','target','policy_id','schedule_type','task_tag','cron','start_date','target_scope_id','pentest_provider_id','pentest_backup_provider_id','observer_provider_id'):
+        if p.get(field) is not None and not isinstance(p[field],str):return {'error':'参数格式无效: '+field}
+    if 'observer_enabled' in p and not isinstance(p['observer_enabled'],bool):return {'error':'监管AI启用状态必须是布尔值'}
+    if 'editable_target' in p and not isinstance(p['editable_target'],bool):return {'error':'目标编辑状态必须是布尔值'}
     name = (p.get("name") or "").strip()
     target = (p.get("target") or "").strip()
     schedule_type = (p.get("schedule_type") or "").strip().lower()
     task_tag = (p.get("task_tag") or "").strip()
     policy_id = (p.get("policy_id") or "").strip()
+    group=None;scope_id=(p.get('target_scope_id') or '').strip()
+    if scope_id:
+        from sentinel_platform.contracts import get_registry
+        service=get_registry().get('asset_group_service')
+        if not service or not hasattr(service,'get_task_source'):return {'error':'资产分组服务未就绪'}
+        group=service.get_task_source(scope_id)
+        if group.get('error'):return {'error':group['error']}
+        if not p.get('editable_target') or not target:target=group.get('scope') or ''
     if not name or not target:
         return {"error": "名称与目标必填"}
     if schedule_type not in VALID_SCHEDULE_TYPES:
@@ -163,6 +176,13 @@ def add_schedule(payload: Dict[str, Any]) -> Dict[str, Any]:
         "cron": "", "start_date": p.get("start_date", ""),
         "save_date": datetime.datetime.now(),
     }
+    doc.update(pentest_provider_id=(p.get('pentest_provider_id') or '').strip(),
+               pentest_backup_provider_id=(p.get('pentest_backup_provider_id') or '').strip(),
+               observer_enabled=p.get('observer_enabled') is True,
+               observer_provider_id=(p.get('observer_provider_id') or '').strip() if p.get('observer_enabled') is True else '',
+               ai_models_explicit=True)
+    if group:doc.update(target_scope_id=scope_id,target_scope_name=group.get('name',''))
+    if p.get('editable_target'):doc['editable_target']=True
 
     if schedule_type == "future_scan":
         sd = (p.get("start_date") or "").strip()
@@ -278,8 +298,13 @@ def run_one(job: Dict[str, Any]) -> Dict[str, Any]:
     try:
         name = job.get("name", "") or "计划-{}".format(target)
         tag = job.get("task_tag", "task") or "task"
+        models={}
+        if job.get('ai_models_explicit'):
+            models={field:job.get(field,'' if field!='observer_enabled' else False) for field in
+                    ('pentest_provider_id','pentest_backup_provider_id','observer_enabled','observer_provider_id')}
+            models['override_ai_models']=True
         r = svc.create_by_policy(name, policy_id, target, task_tag=tag,
-                                 source={"type": "schedule", "schedule_id": str(jid)})
+                                 source={"type": "schedule", "schedule_id": str(jid),**({'scope_id':job['target_scope_id']} if job.get('target_scope_id') else {})},**models)
         logger.info("task_schedule %s 触发扫描: %s → %s", jid, target, r.get("created", r))
         return {"job_id": str(jid), "schedule_type": stype, "dispatched": True,
                 "created": r.get("created", 0)}

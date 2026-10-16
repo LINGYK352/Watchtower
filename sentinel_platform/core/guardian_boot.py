@@ -18,7 +18,7 @@ def valid():
         return data if all(hashlib.sha256((ENGINE/name).read_bytes()).hexdigest()==digest for name,digest in data['files'].items()) else False
     except Exception:return False
 
-ALIASES={'sentinel_platform.core.'+name:'core/'+name+'.py' for name in ('update_bundle','update_commit','update_platform','update_policy','persistent_guardian','docker_engine','guardian_loader')}
+ALIASES={'sentinel_platform.core.'+name:'core/'+name+'.py' for name in ('update_bundle','update_commit','update_platform','update_policy','persistent_guardian','docker_engine')}
 ALIASES.update({'sentinel_platform.modules.about.'+name:'about/'+name+'.py' for name in ('_updater','_update_chain')})
 
 class RouterLoader:
@@ -79,7 +79,6 @@ if _verified_manifest:
     os.environ['SENTINEL_GUARDIAN_ROOT']=str(ROOT)
     os.environ['SENTINEL_PERSISTENT_GUARDIAN']='1'
     os.environ['SENTINEL_GUARDIAN_GENERATION']=pointer
-    os.environ['SENTINEL_GUARDIAN_REVISION']=str(_verified_manifest.get('engine_revision',1))
     sys.meta_path.insert(0,Finder())
     # Recover or wait out a commit BEFORE old business modules can be imported.
     from sentinel_platform.core import update_commit

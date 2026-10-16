@@ -62,7 +62,7 @@ export const taskApi = {
   syncScope: (target: string) => request<ListResult<RowRecord>>(`${base}/sync_scope/${toQueryString({ target })}`),
   /** 按策略下发任务 */
   policy: (payload: {
-    name: string; task_tag: 'task' | 'risk_cruising'; policy_id: string; target?: string; result_set_id?: string;
+    name: string; asset_scope_id?: string; task_tag: 'task' | 'risk_cruising'; policy_id: string; target?: string; result_set_id?: string;
     priority?: number;
     pentest_whitelist?: string;
     mission_intel?: string;

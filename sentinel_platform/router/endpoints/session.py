@@ -133,10 +133,12 @@ class SessionList(Resource):
         if not site:
             return err(CODE_BAD_REQUEST, "site 必填")
         source = {k.split(".", 1)[1]: v for k, v in b.items() if k.startswith("source.")}
+        if b.get('mode') == 'redteam' and b.get('redteam_notice_acknowledged') is not True:
+            return err(CODE_BAD_REQUEST, '请确认红队模式用途 / Acknowledge the red-team notice')
         r = svc.create_session(site, asset_key=b.get("asset_key", ""), scene=b.get("scene", "pentest_exec"),
                                prompt=b.get("prompt"), mode=b.get("mode", "src"), source=source or None,
                                auto_start=bool(b.get("auto_start", False)), owner=_current_username(),
-                               asset_type=b.get("asset_type", "web"))
+                               asset_type=b.get("asset_type", "web"), full_authorization=False)
         return err(CODE_BAD_REQUEST, r["error"]) if r.get("error") else ok(r)
 
 
@@ -233,7 +235,10 @@ def _sse(event: str, data) -> str:
 
 
 def _stream_meta(sess: dict) -> dict:
-    return {"status": sess.get("status", ""), "round": sess.get("round", 0),
+    from sentinel_platform.modules.ai_pentest._session_status import session_status
+    return {**session_status(sess), "status": sess.get("status", ""), "round": sess.get("round", 0),
+            "provider_name": sess.get("provider_name", ""),
+            "model": sess.get("model", ""),
             "total_tokens": sess.get("total_tokens", 0),
             "window_tokens": sess.get("window_tokens", 0), "token_budget": sess.get("token_budget", 0),
             "tool_count": len(sess.get("tool_log") or []),
@@ -375,7 +380,10 @@ def _console_event_stream(session_id: str, svc):
                 tool_sent = len(tool_log)
             # meta：console_running（非 status，因 console 恒 paused_manual）+ 轮次/token +
             # stream/stream_phase（气泡流式：LLM 生成中 partial 文本 + 阶段 thinking/text，供前端气泡实时渲染）
-            meta = {"console_running": bool(sess.get("console_running", False)),
+            from sentinel_platform.modules.ai_pentest._session_status import session_status
+            meta = {**session_status(sess), "console_running": bool(sess.get("console_running", False)),
+                    "provider_name": sess.get("provider_name", ""),
+                    "model": sess.get("model", ""),
                     "console_revision": int(sess.get("console_revision", 0) or 0),
                     "console_error": sess.get("console_error", "") or "",
                     "round": sess.get("round", 0), "total_tokens": sess.get("total_tokens", 0),
@@ -545,6 +553,8 @@ class ConsoleNew(Resource):
         if not (svc and hasattr(svc, "console_create_session")):
             return err(CODE_ERROR, "渗透会话服务未就绪")
         body = request.get_json(silent=True) or {}
+        if body.get('mode') == 'redteam' and body.get('redteam_notice_acknowledged') is not True:
+            return err(CODE_BAD_REQUEST, '请选择红队模式后确认用途提示 / Acknowledge the red team notice')
         r = svc.console_create_session(
             site=(body.get("site") or "").strip(),
             name=(body.get("name") or "").strip(),
@@ -580,6 +590,19 @@ class ConsoleTopology(Resource):
         if not (svc and hasattr(svc, "console_topology")):
             return err(CODE_ERROR, "渗透会话服务未就绪")
         r = svc.console_topology(resume_key, caller=_current_username(), can_view_all=_can_view_all())
+        if isinstance(r, dict) and r.get("error"):
+            return err(CODE_FORBIDDEN, r["error"]) if r.get("forbidden") else err(CODE_NOT_FOUND, r["error"])
+        return ok(r)
+
+@ns.route("/session/console/<string:resume_key>/attack-chain")
+class ConsoleAttackChain(Resource):
+    @ns.doc(security="token", description="需权限 pentest:read（内网拓扑：从会话内网工具产出聚合）")
+    def get(self, resume_key):
+        """AI 控制台内网拓扑图数据（入口/已控落点/内网主机/网段/凭据线索）"""
+        svc = _svc()
+        if not (svc and hasattr(svc, "console_attack_chain")):
+            return err(CODE_ERROR, "渗透会话服务未就绪")
+        r = svc.console_attack_chain(resume_key, caller=_current_username(), can_view_all=_can_view_all())
         if isinstance(r, dict) and r.get("error"):
             return err(CODE_FORBIDDEN, r["error"]) if r.get("forbidden") else err(CODE_NOT_FOUND, r["error"])
         return ok(r)
@@ -722,13 +745,95 @@ class SessionSurface(Resource):
         return ok(result)
 
 
+def _approval_call(session_id, name, *args):
+    service = _svc()
+    if not service or not hasattr(service, name):
+        return err(CODE_ERROR, '请求审批服务未就绪 / Request review unavailable')
+    forbidden = _session_access_error(service, session_id)
+    if forbidden:
+        return forbidden
+    try:
+        return ok(getattr(service, name)(session_id, *args, caller=_current_username(), can_view_all=_can_view_all()))
+    except ValueError as exc:
+        return err(CODE_BAD_REQUEST, str(exc))
+
+
+@ns.route('/session/<string:session_id>/authorization')
+class SessionAuthorization(Resource):
+    def post(self, session_id):
+        body=request.get_json(silent=True) or {}
+        return _approval_call(session_id,'set_full_authorization',body.get('enabled'),body.get('acknowledged',False))
+
+
+@ns.route('/session/<string:session_id>/space')
+class SessionSpace(Resource):
+    def get(self,session_id):
+        return _approval_call(session_id,'session_space',request.args.get('root',''),request.args.get('path',''))
+
+
+@ns.route('/session/<string:session_id>/space/preview')
+class SessionSpacePreview(Resource):
+    def get(self,session_id):
+        return _approval_call(session_id,'session_space_preview',request.args.get('root',''),request.args.get('path',''))
+
+
+@ns.route('/session/<string:session_id>/space/download')
+class SessionSpaceDownload(Resource):
+    def get(self,session_id):
+        from flask import send_file
+        service=_svc()
+        if not service:return err(CODE_ERROR,'会话服务未就绪')
+        forbidden=_session_access_error(service,session_id)
+        if forbidden:return forbidden
+        try:
+            download=service.session_space_download(session_id,request.args.get('root',''),request.args.get('path',''),caller=_current_username(),can_view_all=_can_view_all())
+            response=send_file(download['file'],mimetype='application/octet-stream',as_attachment=True,download_name=download['name'])
+            response.headers['Content-Length']=str(download['bytes'])
+            response.call_on_close(download['file'].close)
+            response.headers['Cache-Control']='no-store';response.headers['X-Content-Type-Options']='nosniff'
+            return response
+        except (ValueError,OSError):return err(CODE_BAD_REQUEST,'文件不可访问 / File unavailable')
+
+
+@ns.route('/session/<string:session_id>/afk')
+class SessionAfkMode(Resource):
+    def post(self, session_id):
+        body = request.get_json(silent=True) or {}
+        return _approval_call(session_id, 'set_afk_mode', body.get('enabled'), body.get('acknowledged', False),body.get('strategy',''))
+
+
+@ns.route('/session/<string:session_id>/request_approvals')
+class RequestApprovalList(Resource):
+    def get(self, session_id):
+        return _approval_call(session_id, 'request_approvals')
+
+
+@ns.route('/session/<string:session_id>/request_approvals/<string:approval_id>/packet')
+class RequestApprovalPacket(Resource):
+    def get(self, session_id, approval_id):
+        return _approval_call(session_id, 'request_approval_packet', approval_id)
+
+
+@ns.route('/session/<string:session_id>/request_approvals/<string:approval_id>/decide')
+class RequestApprovalDecision(Resource):
+    def post(self, session_id, approval_id):
+        return _approval_call(session_id, 'decide_request_approval', approval_id, (request.get_json(silent=True) or {}).get('allow'))
+
+
+@ns.route('/session/<string:session_id>/request_approvals/<string:approval_id>/reapply')
+class RequestApprovalRetry(Resource):
+    def post(self, session_id, approval_id):
+        return _approval_call(session_id, 'reapply_request_approval', approval_id)
+
+
 @ns.route('/finding/revision')
 class FindingRevision(Resource):
     def get(self):
-        from sentinel_platform.core import get_repo
-        from sentinel_platform.contracts import Collections
-        value=get_repo().collection(Collections.FINDING_IDENTITY).find_one({'_id':'_finding_revision'}) or {}
-        return ok({'revision':int(value.get('revision',0))})
+        from sentinel_platform.contracts import get_registry, ROLE
+        service = get_registry().get(ROLE.FINDING)
+        if not service or not hasattr(service, 'read_revision'):
+            return err(CODE_ERROR, 'Finding service unavailable')
+        return ok(service.read_revision())
 
 
 @ns.route("/session/console/<string:resume_key>/observe")

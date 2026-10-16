@@ -9,9 +9,15 @@
     "failed": "启动未完成",
     "firstRunHint": "首次准备可能需要数分钟，后台会继续完成初始化。",
     "readyHint": "本地服务正在启动，请稍候。",
-    "failureHint": "请查看本机 state/service.log 后重试，已有数据会保留。",
+    "failureHint": "启动诊断会记录实际失败阶段，已有数据会保留。",
     "version": "{version} · 本机测试版",
-    "stableVersion": "{version} · Windows原生版"
+    "stableVersion": "{version} · Windows原生版",
+    "configuration": "正在检查本地配置",
+    "guardian": "正在检查更新守护",
+    "runtime": "正在准备本地运行环境",
+    "webview": "正在准备浏览器组件",
+    "failureLog": "失败阶段：{stage}\n诊断日志：{path}\n请保留日志以便排查，已有数据会保留。",
+    "failureNoLog": "启动失败，当前目录和本机诊断目录均无法写入日志。请检查目录访问权限，已有数据会保留。"
   },
   "menu": {
     "application": "应用",

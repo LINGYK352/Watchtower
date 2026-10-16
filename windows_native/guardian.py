@@ -5,10 +5,18 @@ from windows_native import update_state
 from windows_native.update_channel import long_path
 
 def _version_key(version):
-    # The persistent installer/controller must work without importing business code.
+    # Same wire ordering as core.update_policy; controller runs without business imports.
     match=re.fullmatch(r'v(\d+)\.(\d+)\.(\d+)(?:-(\d+))?',version or '')
     if not match:raise ValueError('Invalid guardian source version')
-    return tuple(map(int,match.groups()[:3]))+((0,int(match[4])) if match[4] else (1,0))
+    main=tuple(map(int,match.groups()[:3]));number=int(match[4]) if match[4] else None
+    if number is None:return main+(1,0)
+    if number==1_000_000 or number>1_999_999:raise ValueError('Reserved patch marker or patch range exceeded')
+    return main+((2,number-1_000_000) if number>1_000_000 else (0,number))
+
+
+def display_version(version):
+    value=_version_key(version)
+    return 'v'+'.'.join(map(str,value[:3])) if value[3]==2 else version
 
 def current(root):
     base=Path(root)/'state/guardian'

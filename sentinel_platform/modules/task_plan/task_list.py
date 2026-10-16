@@ -182,6 +182,17 @@ def batch_stop(task_ids: List[str]) -> Dict[str, Any]:
     return {"stopped": stopped, "task_id": task_ids}
 
 
+def _notify_finding_change():
+    # Across module categories, use the registered FINDING facade, not leaf imports.
+    try:
+        from sentinel_platform.contracts import get_registry, ROLE
+        service = get_registry().get(ROLE.FINDING)
+        if service and hasattr(service, 'touch_revision'):
+            service.touch_revision()
+    except Exception:
+        pass  # The UI's bounded reconciliation covers a missed notification.
+
+
 def delete_tasks(task_ids: List[str], del_task_data: bool = False,
                  del_sessions: bool = False) -> Dict[str, Any]:
     """删除任务；del_task_data=True 时级联清结果集合（domain/site/ip/... 按 task_id）；
@@ -222,7 +233,9 @@ def delete_tasks(task_ids: List[str], del_task_data: bool = False,
                 for name in _CASCADE_COLLS:
                     try:
                         r = repo.collection(name).delete_many(match)
-                        purged += int(getattr(r, "deleted_count", 0) or 0)
+                        count = int(getattr(r, "deleted_count", 0) or 0)
+                        purged += count
+                        if count and name in (Collections.VULN, Collections.NUCLEI_RESULT): _notify_finding_change()
                     except Exception:
                         continue
                 # task_dedup 用 source_task_id 字段（非 task_id），单独清理（派发去重账本，随任务销毁）。
@@ -313,6 +326,7 @@ def purge_orphan_assets() -> Dict[str, Any]:
         if n:
             by_coll[name] = n
             purged += n
+            if name in (Collections.VULN, Collections.NUCLEI_RESULT): _notify_finding_change()
     return {"purged": purged, "by_collection": by_coll, "live_task_count": len(live)}
 
 

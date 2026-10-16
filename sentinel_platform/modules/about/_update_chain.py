@@ -27,7 +27,6 @@ def fetch(updater, source, credential, root, target=''):
     if not isinstance(steps,list) or len(steps)>2048 or len(set(steps))!=len(steps):raise ValueError('Invalid update chain')
     previous=current
     rollback=data.get('direction')=='rollback'
-    if update_policy.key(current)[:3]>=(1,21,175) and update_policy.key(data['target'])[:3]<(1,21,175):raise ValueError('175新基板禁止回退到较早版本')
     for step in steps:
         update_policy.key(step)
         bootstrap=(not previous or update_policy.key(previous)<update_policy.key(guardian)) and step==guardian
@@ -189,4 +188,4 @@ def ready_status(root,boot_version):
                     background[role]=row.get('phase','unknown')
                     if not row.get('ready') or row.get('version')!=boot_version or time.time()-row['heartbeat']>5:ready=False
                 except (OSError,ValueError,KeyError):ready=False;background[role]='not_ready'
-    return {'ready':ready and count>0,'version':boot_version,'workers':count,'background':background,'migration':migration,'guardian_revision':int(os.environ.get('SENTINEL_GUARDIAN_REVISION','0')),'frontend_sha':sha256(index) if index.is_file() else ''}
+    return {'ready':ready and count>0,'version':boot_version,'workers':count,'background':background,'migration':migration,'frontend_sha':sha256(index) if index.is_file() else ''}

@@ -31,6 +31,32 @@ _check_parser = ns.parser()
 _check_parser.add_argument("client", type=str, location="args", help="前端构建版本(如 v1.21.21)")
 
 
+@ns.route('/storage')
+class UpdateStorage(Resource):
+    @ns.doc(security='token',description='Managed Windows update storage; requires system:read')
+    def get(self):
+        from sentinel_platform.modules.about import _native_storage
+        return ok(_native_storage.summary())
+
+    @ns.doc(security='token',description='Prune completed managed update files; requires system:update')
+    def post(self):
+        from flask import request,g
+        from sentinel_platform.router.gateway import auth_enabled
+        from sentinel_platform.contracts import ROLE
+        from ..envelope import CODE_BAD_REQUEST,CODE_FORBIDDEN
+        user=getattr(g,'current_user',{}) or {}
+        if auth_enabled() and user.get('role')!='admin':
+            permissions=get_registry().get(ROLE.RBAC)
+            if not permissions or not permissions.check_permission(user,request.path,'POST')[0]:
+                return err(CODE_FORBIDDEN,'System update permission is required')
+        body=request.get_json(silent=True)
+        if not isinstance(body,dict) or body.get('confirmed') is not True:return err(CODE_BAD_REQUEST,'Explicit cleanup request is required')
+        from sentinel_platform.modules.about import _native_storage
+        if _native_storage.root() is None:return err(CODE_BAD_REQUEST,'Managed native storage is unavailable on this platform')
+        try:return ok(_native_storage.cleanup())
+        except (OSError,ValueError,KeyError):return err(CODE_ERROR,'Managed storage is unavailable; recovery data was preserved')
+
+
 @ns.route("/version")
 class _Version(Resource):
     @ns.doc(security=None)
@@ -39,7 +65,7 @@ class _Version(Resource):
         uc = _svc()
         if not uc:
             return err(CODE_ERROR, "更新检测服务未就绪")
-        return ok({"version": uc.server_version(),"guardian_revision":int(os.environ.get('SENTINEL_GUARDIAN_REVISION','0'))})
+        return ok(uc.release_metadata())
 
 
 @ns.route("/check")
@@ -222,12 +248,6 @@ class _Rollback(Resource):
             return err(CODE_ERROR, "full 必须为布尔值")
         if not target:
             return err(CODE_ERROR, "version 必填")
-        from sentinel_platform.core import update_policy
-        try:
-            requested=update_policy.key(target)
-            actual=update_policy.key(_updater._client_version(_project_root()))
-        except ValueError:return err(CODE_ERROR,"版本号格式不正确")
-        if actual[:3]>=(1,21,175) and requested[:3]<(1,21,175):return err(CODE_ERROR,"175新基板禁止回退到低于175的版本")
         p = _get_progress()
         if p.get("phase") in ("downloading", "validating", "applying"):
             return ok({"started": False, "msg": "更新正在进行中"})
@@ -318,5 +338,10 @@ class _Announcements(Resource):
         分发源落后未支持该端点(404)/不可达/未激活 → 优雅降级为空列表，
         不把失败甩给用户（通告是可选增强，分发源升级后自然恢复）。
         偶发超时经 _forward_get 重试自愈，不因单次抖动漏掉生效中的通告。"""
-        data, _ = _forward_get("/announcements", timeout=10)
-        return ok(data if data is not None else {"announcements": []})
+        from sentinel_platform.core.bounded_call import run
+        reply, bounded_error = run('announcements', lambda: _forward_get('/announcements', timeout=2, retry=2), 3.5)
+        data, reason = reply if reply is not None else (None, bounded_error)
+        if data is not None:
+            return ok(data)
+        return ok({'announcements': [], 'fetch_failed': True, 'fetch_reason': reason,
+                   'retry_after': 15, 'unsupported': reason == 'not_found'})

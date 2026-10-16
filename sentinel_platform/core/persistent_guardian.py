@@ -12,28 +12,11 @@ from sentinel_platform.core.update_commit import write
 class GuardianMigrationError(RuntimeError):
     """Operational migration failure; application routes must remain available."""
 
-def revision(data):
-    value=data.get('engine_revision',1)
-    if type(value) is not int or not 1<=value<=10000:raise ValueError('Invalid signed guardian revision')
-    return value
-
-def accepts(candidate,previous):
-    """Control revision wins before business version; both descriptors are signed."""
-    from sentinel_platform.core.update_policy import key
-    left,right=revision(candidate),revision(previous)
-    return left>right or left==right and key(candidate['version'])>=key(previous['version'])
-
-def installed_descriptor(home,state):
-    pointer=state.get('generation','')
-    if not isinstance(pointer,str) or not __import__('re').fullmatch('[0-9a-f]{16}',pointer):raise ValueError('Invalid installed guardian generation')
-    return verify(Path(home)/'generations'/pointer)
-
 def verify(source):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
     envelope=json.loads((source/'manifest.json').read_text(encoding='utf-8'));data=envelope['descriptor']
     Ed25519PublicKey.from_public_bytes(base64.b64decode(PUBLIC_KEY)).verify(base64.b64decode(envelope['signature'],validate=True),canonical(data))
     if data.get('schema')!=1 or data.get('product')!='watchtower-persistent-web-guardian' or data.get('engine_api')!=1:raise ValueError('Invalid persistent guardian manifest')
-    revision(data)
     for name,digest in data['files'].items():
         if name.startswith('/') or '..' in name.split('/') or '\\' in name:raise ValueError('Invalid guardian path')
         path=source/name;path.resolve().relative_to(source.resolve())
@@ -48,8 +31,9 @@ def install(root):
     engine=home/'generations'/generation
     if state.exists():
         previous=json.loads(state.read_text(encoding='utf-8'))
+        from sentinel_platform.core.update_policy import key
         # A business rollback must never downgrade the independent updater.
-        if previous.get('installed') and not accepts(data,installed_descriptor(home,previous)):return previous
+        if previous.get('installed') and key(data['version'])<key(previous['source_version']):return previous
         if previous.get('generation')==generation and ('guardian_runtime.py' not in data['files'] or previous.get('background_api')==1):return previous
     engine.mkdir(parents=True,exist_ok=True)
     for name in data['files']:
@@ -87,7 +71,7 @@ def install(root):
             if old and old!=entry:raise ValueError('Custom background entrypoint requires an explicit process adapter')
             service['entrypoint']=entry
     temporary=override.with_name(override.name+'.guardian-incoming');temporary.write_text(yaml.safe_dump(value,sort_keys=False),encoding='utf-8');os.replace(temporary,override)
-    result={'installed':True,'engine_api':1,'engine_revision':revision(data),'generation':generation,'manifest_sha':hashlib.sha256((source/'manifest.json').read_bytes()).hexdigest(),
+    result={'installed':True,'engine_api':1,'generation':generation,'manifest_sha':hashlib.sha256((source/'manifest.json').read_bytes()).hexdigest(),
             'source_version':data['version'],'requires_recreate':True,'cold_boot_mount':target,
             'background_api':1 if 'guardian_runtime.py' in data['files'] else 0}
     write(state,result);return result
@@ -101,7 +85,8 @@ def ensure(root):
     if (source/'manifest.json').is_file():
         data=verify(source);candidate=source/'core/persistent_guardian.py'
         state=Path(root)/'.update_stage/guardian/installation.json'
-        allowed=not state.exists() or accepts(data,installed_descriptor(state.parent,json.loads(state.read_text())))
+        from sentinel_platform.core.update_policy import key
+        allowed=not state.exists() or key(data['version'])>=key(json.loads(state.read_text())['source_version'])
         if allowed and candidate.is_file() and hashlib.sha256(candidate.read_bytes()).digest()!=hashlib.sha256(Path(__file__).read_bytes()).digest():
             import importlib.util
             spec=importlib.util.spec_from_file_location('watchtower_verified_guardian_installer',candidate)

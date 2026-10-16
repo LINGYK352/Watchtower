@@ -35,7 +35,7 @@ _recover_update_before_import()
 #It survives historical business rollback; this one-time migration does not
 #rebuild the image or replace user configuration and databases.
 from pathlib import Path as _GuardianPath
-from sentinel_platform.core.guardian_loader import ensure as _ensure_guardian
+from sentinel_platform.core.persistent_guardian import ensure as _ensure_guardian
 try:
     _ensure_guardian(_GuardianPath(__file__).resolve().parents[1])
 except RuntimeError as _migration_error:

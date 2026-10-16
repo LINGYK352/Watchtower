@@ -4,11 +4,28 @@ from windows_native.paths import configure
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--root');p.add_argument('--connect-existing',action='store_true');p.add_argument('--diagnostic-port',type=int);p.add_argument('--health-check',action='store_true');p.add_argument('--report');a=p.parse_args()
+ from windows_native.startup_diagnostics import StartupDiagnostics
+ candidate=a.root or (Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[2]/'native-test')
+ diagnostic=StartupDiagnostics(candidate)
+ try:return run(a,diagnostic,candidate)
+ except Exception as exc:
+  diagnostic.failed(exc)
+  info=diagnostic.public()
+  try:
+   from windows_native import splash
+   text=splash.messages(candidate)['startup'];stage=text.get(info['stage'],info['stage'])
+   detail=text['failureLog'].replace('{stage}',stage).replace('{path}',info['log_path']) if info['log_path'] else text['failureNoLog']
+   ctypes.windll.user32.MessageBoxW(None,text['failed']+'\n'+detail,'Watchtower',0x10)
+  except Exception:pass
+  return 1
+
+def run(a,diagnostic,candidate):
  from windows_native import update_runner,update_state
  from windows_native.single_instance import acquire,release
  mutex=None if a.health_check else acquire()
- if not a.health_check and mutex is None:return 0
- root=configure(a.root or (Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).resolve().parents[2]/'native-test'))
+ if not a.health_check and mutex is None:diagnostic.complete();return 0
+ diagnostic.stage('configuration',5)
+ root=configure(candidate)
  try:
   journal=update_state.read(root/'state/native-update-journal.json');interrupted=journal.get('phase')=='committing'
   if interrupted:
@@ -25,19 +42,23 @@ def main():
   def ready():
    result['ok']=w.evaluate_js('document.getElementById("native").textContent')=='native-runtime-ok';Path(a.report).write_text(json.dumps(result),encoding='utf-8');w.destroy()
   w.events.loaded+=ready;webview.start(gui='edgechromium',private_mode=True,storage_path=str(root/'state/health-webview'));return 0 if result['ok'] else 1
- from windows_native.guardian import install as install_guardian
+ from windows_native.guardian import install as install_guardian,display_version
+ diagnostic.stage('guardian',10)
  install_guardian(root)
  from windows_native.runtime import Runtime
- import webview
+ diagnostic.stage('runtime',15)
  rt=Runtime(root,backend=root/'runtime/service/NativeService.exe' if getattr(sys,'frozen',False) else None);closed=threading.Event();ready=False
+ diagnostic.stage('webview',20)
+ import webview
  if a.diagnostic_port:webview.settings['REMOTE_DEBUGGING_PORT']=a.diagnostic_port
  from windows_native import splash
  text=splash.messages(root)
- window=webview.create_window(text.get('windowTitle','瞭望塔 Watchtower · Windows 原生版')+' '+(root/'app/version.txt').read_text(encoding='utf-8').strip(),html=splash.render(root),maximized=True,min_size=(1100,760),background_color='#0c1422',js_api=splash.Api(root),text_select=True)
+ window=webview.create_window(text.get('windowTitle','瞭望塔 Watchtower · Windows 原生版')+' '+display_version((root/'app/version.txt').read_text(encoding='utf-8').strip()),html=splash.render(root),maximized=True,min_size=(1100,760),background_color='#0c1422',js_api=splash.Api(root),text_select=True)
  window.events.closed+=closed.set
  def start():
   try:
    def progress(stage,percent):
+    diagnostic.stage(stage,percent)
     if not closed.is_set():window.evaluate_js('window.watchtowerStartup && window.watchtowerStartup('+json.dumps(text['startup'][stage])+','+str(percent)+')')
    if not a.connect_existing:rt.start(progress=progress)
    if not closed.is_set():
@@ -61,13 +82,15 @@ def main():
      except Exception as exc:update_state.progress(root,phase='error',msg='原生更新启动失败',error=type(exc).__name__+': '+str(exc)[:150],terminal=True)
      continue
     if rt.service is not None and rt.service.poll() is not None:
+     diagnostic.stage('service',60)
      failures+=1
      if failures>3:raise RuntimeError('Native service repeatedly exited; inspect state/service.log')
      from sentinel_platform.core import process_control
      process_control.close(rt.service)
      rt.start_service()
   except Exception as e:
-   if not closed.is_set():window.load_html(splash.render(root,failed=True))
+   diagnostic.failed(e)
+   if not closed.is_set():window.load_html(splash.render(root,failed=True,diagnostic=diagnostic.public()))
  def mounted():
   if not (window.get_current_url() or '').startswith(rt.url+'/'):return
   try:
@@ -78,6 +101,7 @@ def main():
   for _ in range(80):
    if closed.is_set():return
    if window.evaluate_js('Boolean(document.querySelector(".ant-layout-sider") || document.querySelector("form input[type=password]"))'):
+    diagnostic.complete()
     update_state.write(root/'state/native-window.json',{'pid':os.getpid(),'version':(root/'app/version.txt').read_text().strip(),'mounted':True,'url':window.get_current_url()});return
    closed.wait(.25)
  window.events.loaded+=mounted

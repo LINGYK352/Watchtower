@@ -9,9 +9,15 @@
     "failed": "Startup did not complete",
     "firstRunHint": "First-time preparation may take a few minutes. Initialization will continue in the background.",
     "readyHint": "Local services are starting. Please wait.",
-    "failureHint": "Review the local state/service.log and retry. Existing data is retained.",
+    "failureHint": "Startup diagnostics record the failed stage. Existing data is retained.",
     "version": "{version} · Local test build",
-    "stableVersion": "{version} · Windows native edition"
+    "stableVersion": "{version} · Windows native edition",
+    "configuration": "Checking local configuration",
+    "guardian": "Checking update guardian",
+    "runtime": "Preparing the local runtime",
+    "webview": "Preparing the browser component",
+    "failureLog": "Failed stage: {stage}\nDiagnostic log: {path}\nKeep the log for troubleshooting. Existing data is retained.",
+    "failureNoLog": "Startup failed and neither diagnostic directory was writable. Check directory permissions. Existing data is retained."
   },
   "menu": {
     "application": "Application",

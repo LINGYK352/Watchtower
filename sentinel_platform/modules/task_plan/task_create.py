@@ -274,7 +274,8 @@ class TaskCreateServiceImpl:
                          pentest_egress_mode: str = "",
                          pentest_fallback_egress_mode: str = "",
                          observer_enabled: bool = False, observer_provider_id: str = "",
-                         pentest_max_context_tokens: Optional[int] = None) -> Dict[str, Any]:
+                         pentest_max_context_tokens: Optional[int] = None,
+                         require_auto_pentest: bool = False, override_ai_models: bool = False) -> Dict[str, Any]:
         """按策略下发任务（主入口，taskApi.policy）。经 policy_service 展开 options，按目标拆 task 落库。
         返回 {ok, items:[...], created:N} 或 {ok:False, error}。
         pentest_provider_id=为本任务派发的 AI 渗透会话锁定 AI 模型（空=跟随全局默认）。
@@ -291,6 +292,15 @@ class TaskCreateServiceImpl:
         options = self._resolve_options(policy_id, task_tag)
         if options is None:
             return {"ok": False, "error": "策略不存在或 policy 服务未就绪: {}".format(policy_id)}
+        if override_ai_models:
+            # New schedules choose explicitly; empty/False means off rather than policy inheritance.
+            options=dict(options)
+            options.update(pentest_provider_id=(pentest_provider_id or '').strip(),
+                           pentest_backup_provider_id=(pentest_backup_provider_id or '').strip(),
+                           observer_enabled=observer_enabled is True,
+                           observer_provider_id=(observer_provider_id or '').strip() if observer_enabled is True else '')
+        if require_auto_pentest and not options.get("auto_pentest"):
+            return {"ok": False, "error": "资产分组渗透任务必须选择开启扫描后自动AI渗透的策略"}
         # 禁渗透白名单 + 临时情报随 options 贯穿（scope 不拆字段，当自由文本存）
         wl = [w for w in re.split(r"[,;\s]+", (pentest_whitelist or "").strip()) if w]
         if wl:

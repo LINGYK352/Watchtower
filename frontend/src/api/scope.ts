@@ -6,6 +6,7 @@ export const assetScopeApi = {
   list: (query: ListQuery = {}) => request<ListResult<RowRecord>>(`/api/asset_scope/${toQueryString(query)}`),
   add: (payload: { name: string; scope: string; black_scope?: string; scope_type?: string }) =>
     request<RowRecord>(`/api/asset_scope/`, { method: 'POST', body: JSON.stringify(payload) }),
+  taskSource: (id: string) => request<{ scope_id: string; name: string; scope: string; black_scope: string; skipped: string[] }>(`/api/asset_scope/${encodeURIComponent(id)}/task_source`),
   /** 删除整个资产组（及组内资产） */
   delete: (scopeIds: string[]) =>
     request<RowRecord>(`/api/asset_scope/delete/`, { method: 'POST', body: JSON.stringify({ scope_id: scopeIds }) }),

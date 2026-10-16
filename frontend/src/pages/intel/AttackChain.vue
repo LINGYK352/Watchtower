@@ -1,16 +1,17 @@
 <template>
-  <PageContainer :title="translate('ui.m_c14a89bcd889')" kicker="Attack Chains"
+  <PageContainer :title="translate('ui.m_c14a89bcd889')" kicker="Sessions & Attack Chains"
     :description="translate('ui.m_513bc8798f81')">
     <template #extra><a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button></template>
 
     <a-row :gutter="12" style="margin-bottom:16px">
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_701b56ace515')" :value="stat.total" :value-style="{ color: '#1677ff' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_b1665f71ff5a')" :value="stat.cross_session" :value-style="{ color: '#722ed1' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_87b83957c31b')" :value="(stat.by_severity.critical || 0) + (stat.by_severity.high || 0)" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
-      <a-col :span="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f9a465a5dc89')" :value="stat.by_severity.medium || 0" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
+      <a-col :xs="12" :md="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_701b56ace515')" :value="stat.total" :value-style="{ color: '#1677ff' }" /></a-card></a-col>
+      <a-col :xs="12" :md="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_b1665f71ff5a')" :value="stat.cross_session" :value-style="{ color: '#722ed1' }" /></a-card></a-col>
+      <a-col :xs="12" :md="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_87b83957c31b')" :value="(stat.by_severity.critical || 0) + (stat.by_severity.high || 0)" :value-style="{ color: '#cf1322' }" /></a-card></a-col>
+      <a-col :xs="12" :md="6"><a-card :bordered="false"><a-statistic :title="translate('ui.m_f9a465a5dc89')" :value="stat.by_severity.medium || 0" :value-style="{ color: '#d46b08' }" /></a-card></a-col>
     </a-row>
 
     <SearchBar :model="query" @search="reload" @reset="onReset">
+      <a-form-item :label="translate('revision17.session')"><a-input v-model:value="query.session_id" allow-clear style="width:200px" /></a-form-item><a-form-item :label="translate('revision17.target')"><a-input v-model:value="query.target" allow-clear style="width:200px" /></a-form-item>
       <a-form-item :label="translate('ui.m_80b19d68b149')"><a-input v-model:value="query.unit" allow-clear :placeholder="translate('ui.m_702aab59cae9')" style="width:180px" /></a-form-item>
       <a-form-item :label="translate('ui.m_6320b4a8722a')">
         <a-select v-model:value="query.status" style="width:130px" :options="statusOptions" />
@@ -23,7 +24,7 @@
       </a-popconfirm>
     </div>
 
-    <AppTable :columns="columns" :data="rows" :loading="loading" selectable
+    <AppTable :columns="columns" :data="rows" :loading="loading" selectable :scroll="{x:1100}"
       v-model:selectedRowKeys="selectedKeys"
       :page="query.page" :size="query.size" :total="total" row-key="_id" @change="onPage">
       <template #bodyCell="{ column, record }">
@@ -31,6 +32,8 @@
           <a class="chain-title" :title="record.title" @click="showDetail(record)">{{ record.title }}</a>
           <a-tag v-if="record.cross_session" color="purple" style="margin-left:6px">{{ translate('ui.m_385ea2980e24') }}</a-tag>
         </template>
+        <template v-else-if="column.key === 'session'"><div class="source-cell" v-for="id in record.sessions||[]" :key="id"><CopyText :text="id" /></div></template>
+        <template v-else-if="column.key === 'target'"><div class="source-cell" v-for="target in Array.from(new Set((record.steps||[]).map((step:any)=>step.source_site||step.target).filter(Boolean)))" :key="String(target)">{{ target }}</div></template>
         <template v-else-if="column.key === 'step_count'">
           <a-badge :count="record.step_count" :number-style="{ backgroundColor: '#1677ff' }" />
         </template>
@@ -41,7 +44,11 @@
           <a-tag :color="record.status === 'done' ? 'green' : 'blue'">{{ record.status === 'done' ? translate('ui.m_f28461bb49c8') : translate('ui.m_2be422c43f34') }}</a-tag>
         </template>
         <template v-else-if="column.key === 'outline'">
-          <span class="outline">{{ chainOutline(record) }}</span>
+          <button class="chain-preview-button" @click="openGraph(record)" :aria-label="translate('chainView.open')" data-testid="chain-open-graph">
+            <span class="preview-label"><NodeIndexOutlined /> {{ translate('chainView.title') }} · {{ record.step_count || 0 }}</span>
+            <span class="preview-flow"><span v-for="(step,i) in (record.steps || []).slice(0,3)" :key="i" :class="'preview-'+normSev(step.severity)">{{ step.vuln_type || step.action || translate('chainView.unnamed') }}</span></span>
+            <span v-if="record.steps?.length>3" class="preview-more">{{ translate('chainView.more',{n:record.steps.length-3}) }}</span>
+          </button>
         </template>
         <template v-else-if="column.key === 'action'">
           <a-space size="small">
@@ -63,26 +70,10 @@
           <a-descriptions-item :label="translate('ui.m_0a5f9a892960')">{{ cur?.update_date || '—' }}</a-descriptions-item>
         </a-descriptions>
 
-        <!-- 图形化链路图（赛博风，对齐控制台内网拓扑）：入口→环节1→…→拿下，节点按危害着色，蛇形折行适应任意环节数 -->
-        <div v-if="graphNodes.length" class="chain-graph">
-          <svg :viewBox="`0 0 ${GW} ${graphH}`" class="chain-svg">
-            <defs>
-              <marker id="acArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                <path d="M0,0 L6,3 L0,6 Z" fill="#00e5ff" fill-opacity="0.7" />
-              </marker>
-            </defs>
-            <!-- 连线（按节点顺序，蛇形） -->
-            <path v-for="(e, i) in graphEdges" :key="'e'+i" :d="e" class="ac-edge" marker-end="url(#acArrow)" />
-            <!-- 节点 -->
-            <g v-for="n in graphNodes" :key="n.key" :transform="`translate(${n.x},${n.y})`"
-               class="ac-node" :class="'sev-'+n.sev" @click="focusStep(n.seq)" style="cursor:pointer">
-              <title>{{ n.label }}：{{ n.subFull }}</title>
-              <rect x="-70" y="-26" width="140" height="52" rx="9" />
-              <text class="ac-n-title" y="-8">{{ n.label }}</text>
-              <text class="ac-n-sub" y="10">{{ n.sub }}</text>
-            </g>
-          </svg>
-        </div>
+        <button v-if="cur?.steps?.length" class="detail-graph-open chain-preview-button" @click="openGraph(cur)" data-testid="chain-detail-open-graph">
+          <NodeIndexOutlined /> {{ translate('chainView.open') }} · {{ cur.step_count }}
+          <span class="preview-more">{{ translate('chainView.orderNotice') }}</span>
+        </button>
 
         <a-timeline class="chain-timeline">
           <a-timeline-item v-for="s in (cur?.steps || [])" :key="s.seq" :color="sevColor(s.severity) === 'default' ? 'blue' : sevColor(s.severity)">
@@ -103,6 +94,9 @@
         <a-empty v-if="!cur?.steps?.length" :description="translate('ui.m_ba052efe4258')" />
       </a-spin>
     </a-drawer>
+    <DraggableDialog v-model:open="graphOpen" :title="graphChain?.title || translate('chainView.title')">
+      <a-spin :spinning="graphLoading"><AttackChainGraph :chain="graphChain" /></a-spin>
+    </DraggableDialog>
   </PageContainer>
 </template>
 
@@ -110,8 +104,11 @@
 <script setup lang="ts">
 import { t as translate } from '../../i18n'
 
-import { onMounted, reactive, ref, computed } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import { NodeIndexOutlined } from '@ant-design/icons-vue'
+import DraggableDialog from '../../components/DraggableDialog.vue'
+import AttackChainGraph from '../../components/AttackChainGraph.vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import SearchBar from '../../components/SearchBar.vue'
 import AppTable from '../../components/AppTable.vue'
@@ -124,11 +121,13 @@ const rows = ref<AttackChain[]>([])
 const total = ref(0)
 const selectedKeys = ref<string[]>([])
 const stat = reactive<ChainStat>({ total: 0, cross_session: 0, by_severity: {} })
-const query = reactive({ unit: '', status: '', page: 1, size: 20 })
+const query = reactive({ session_id:'',target:'',min_severity:'',unit: '', status: '', page: 1, size: 20 })
 
 const statusOptions = [{ get label() { return translate('ui.m_5c55a67935af') }, value: '' }, { get label() { return translate('ui.m_2be422c43f34') }, value: 'building' }, { get label() { return translate('ui.m_f28461bb49c8') }, value: 'done' }]
 const columns = [
   { get title() { return translate('ui.m_31f1f49cdb27') }, key: 'title' },
+  {get title(){return translate('revision17.session')},key:'session',width:190},
+  {get title(){return translate('revision17.target')},key:'target',width:220},
   { get title() { return translate('ui.m_28475230f056') }, key: 'step_count', width: 70 },
   { get title() { return translate('ui.m_aea0fc420948') }, key: 'max_severity', width: 100 },
   { get title() { return translate('ui.m_6320b4a8722a') }, key: 'status', width: 90 },
@@ -158,83 +157,26 @@ function sevColor(s?: string) {
 }
 function sevLabel(s?: string) { return normSev(s).toUpperCase() }
 
-// —— 图形化链路图（SVG 蛇形网格布局，适应任意环节数）——
-const GW = 720                       // 画布宽
-const _PER_ROW = 4                   // 每行节点数
-const _CELL_W = 170, _CELL_H = 92    // 单元格宽高
-const _X0 = 90, _Y0 = 40             // 起始中心
-// 节点：入口 + 各环节（+ done 时终点）。蛇形排布（偶数行左→右，奇数行右→左），x/y 为中心坐标。
-// 问题17：SVG <text> 不自动换行/截断，节点框固定宽 140。长文本（如入口节点的完整 ICP 单位名
-// "上海递煌智能科技有限公司"、长 vuln_type）会横向溢出顶破节点框。故 sub 统一截断到能塞进框的长度
-// （~9 个全角字符），完整文本放 subFull 供 <title> hover 显示，不丢信息。
-const _NODE_SUB_MAX = 9
-function _clip(s: string): string {
-  const v = String(s || '')
-  return v.length > _NODE_SUB_MAX ? v.slice(0, _NODE_SUB_MAX) + '…' : v
+const graphOpen=ref(false),graphLoading=ref(false),graphChain=ref<AttackChain|null>(null)
+let graphController:AbortController|undefined,detailController:AbortController|undefined,graphEpoch=0,detailEpoch=0,disposed=false
+watch(graphOpen,value=>{if(!value){graphEpoch++;graphController?.abort();graphLoading.value=false}})
+watch(detailOpen,value=>{if(!value){detailEpoch++;detailController?.abort();detailLoading.value=false}})
+async function openGraph(record:AttackChain){
+  const epoch=++graphEpoch;graphController?.abort();graphController=new AbortController()
+  graphChain.value=null;graphOpen.value=true;graphLoading.value=true
+  try {const value=await intelApi.chainDetail(record._id,{signal:graphController.signal});if(!disposed&&epoch===graphEpoch&&graphOpen.value)graphChain.value=value}
+  catch(error){if(!disposed&&epoch===graphEpoch&&!(error instanceof Error&&error.name==='AbortError'))message.error((error as Error).message)}
+  finally{if(epoch===graphEpoch)graphLoading.value=false}
 }
-const graphNodes = computed(() => {
-  const steps = cur.value?.steps || []
-  if (!steps.length) return [] as Array<{ key: string; seq: number; x: number; y: number; sev: string; label: string; sub: string; subFull: string }>
-  const items: Array<{ seq: number; sev: string; label: string; sub: string; subFull: string }> = []
-  const entryFull = cur.value?.unit || translate('ui.m_57060c88a36b')
-  items.push({ seq: 0, sev: 'entry', get label() { return translate('ui.m_1fecdc2933e3') }, sub: _clip(entryFull), subFull: entryFull })
-  for (const s of steps) {
-    const sf = (s.vuln_type || s.action || '') || '—'
-    items.push({ seq: s.seq, sev: normSev(s.severity), label: translate('ui.m_28475230f056') + s.seq,
-      sub: _clip(sf), subFull: sf })
-  }
-  if (cur.value?.status === 'done') { const df = sevLabel(cur.value?.max_severity); items.push({ seq: -1, sev: cur.value?.max_severity ? normSev(cur.value.max_severity) : 'high', get label() { return translate('ui.m_d1c26cea235b') }, sub: _clip(df), subFull: df }) }
-  return items.map((it, i) => {
-    const row = Math.floor(i / _PER_ROW)
-    const colRaw = i % _PER_ROW
-    const col = row % 2 === 0 ? colRaw : (_PER_ROW - 1 - colRaw)   // 蛇形
-    return { key: 'n' + i, seq: it.seq, sev: it.sev, label: it.label, sub: it.sub, subFull: it.subFull,
-      x: _X0 + col * _CELL_W, y: _Y0 + row * _CELL_H }
-  })
-})
-// 连线：相邻节点（含蛇形折返），三次贝塞尔平滑
-const graphEdges = computed(() => {
-  const ns = graphNodes.value
-  const paths: string[] = []
-  for (let i = 1; i < ns.length; i++) {
-    const a = ns[i - 1], b = ns[i]
-    if (a.y === b.y) {
-      // 同行：水平箭头（留节点半宽 70 间隙）。**按方向取正确的出入边**（#9 用户 2026-09-15 修）：
-      // 蛇形布局奇数行是反向的（右→左），此时 a 在 b 右侧。原代码写死 a.x+70→b.x-70（假设 a 在左），
-      // 反向行会从 a 右边缘一路向左穿过 a 自己和 b 的方块 → "箭头横向穿出环节方块"。按 a、b 相对位置定：
-      //   正向(a 在左)：a 右缘(a.x+70) → b 左缘(b.x-70)
-      //   反向(a 在右)：a 左缘(a.x-70) → b 右缘(b.x+70)
-      const fwd = a.x <= b.x
-      const x1 = fwd ? a.x + 70 : a.x - 70
-      const x2 = fwd ? b.x - 70 : b.x + 70
-      const mx = (x1 + x2) / 2
-      paths.push(`M${x1},${a.y} C${mx},${a.y} ${mx},${b.y} ${x2},${b.y}`)
-    } else {                                             // 换行：从下方绕到下一行
-      paths.push(`M${a.x},${a.y + 26} C${a.x},${a.y + 60} ${b.x},${b.y - 60} ${b.x},${b.y - 26}`)
-    }
-  }
-  return paths
-})
-const graphH = computed(() => {
-  const rows = Math.ceil(graphNodes.value.length / _PER_ROW) || 1
-  return _Y0 + (rows - 1) * _CELL_H + 50
-})
-function focusStep(seq: number) {
-  if (seq <= 0) return
-  const el = document.querySelector(`[data-step-seq="${seq}"]`)
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-}
+onUnmounted(()=>{disposed=true;graphEpoch++;detailEpoch++;graphController?.abort();detailController?.abort()})
 
-function chainOutline(r: AttackChain) {
-  return (r.steps || []).map(s => (s.action || '').slice(0, 20)).join(' → ') || '—'
-}
 async function loadStat() {
   try { Object.assign(stat, await intelApi.chainStat(query.unit || undefined)) } catch (e) { /* ignore */ }
 }
 async function loadList() {
   loading.value = true
   try {
-    const data = await intelApi.chains({ unit: query.unit || undefined, status: query.status || undefined, page: query.page, size: query.size })
+    const data = await intelApi.chains({session_id:query.session_id||undefined,target:query.target||undefined,min_severity:query.min_severity,unit: query.unit || undefined, status: query.status || undefined, page: query.page, size: query.size })
     rows.value = data.items
     total.value = data.total
     selectedKeys.value = []
@@ -250,12 +192,14 @@ async function batchDelete() {
 }
 function loadAll() { loadStat(); loadList() }
 function reload() { query.page = 1; loadAll() }
-function onReset() { query.unit = ''; query.status = ''; reload() }
+function onReset() { query.session_id='';query.target='';query.unit = ''; query.status = ''; reload() }
 function onPage(page: number, size: number) { query.page = page; query.size = size; loadList() }
 async function showDetail(r: AttackChain) {
-  detailOpen.value = true
-  detailLoading.value = true
-  try { cur.value = await intelApi.chainDetail(r._id) } catch (e) { message.error((e as Error).message) } finally { detailLoading.value = false }
+  const epoch=++detailEpoch;detailController?.abort();detailController=new AbortController()
+  cur.value=null;detailOpen.value = true;detailLoading.value = true
+  try {const value=await intelApi.chainDetail(r._id,{signal:detailController.signal});if(!disposed&&epoch===detailEpoch&&detailOpen.value)cur.value=value}
+  catch(error){if(!disposed&&epoch===detailEpoch&&!(error instanceof Error&&error.name==='AbortError'))message.error((error as Error).message)}
+  finally {if(epoch===detailEpoch)detailLoading.value = false}
 }
 async function removeOne(r: AttackChain) {
   try { await intelApi.chainDelete(r._id); message.success(translate('ui.m_077a6d37719a')); loadAll() } catch (e) { message.error((e as Error).message) }
@@ -265,6 +209,7 @@ onMounted(loadAll)
 </script>
 
 <style scoped>
+.source-cell{max-width:220px;overflow-wrap:anywhere;font-size:12px;margin:3px 0}
 /* 问题17：列表标题过长时截断省略，避免顶破单元格；hover(title 属性)看全名 */
 .chain-title { font-weight: 600; cursor: pointer; display: inline-block; max-width: 360px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
@@ -277,24 +222,6 @@ onMounted(loadAll)
 .step-target { margin-bottom: 4px; }
 .step-ref { margin-top: 2px; }
 
-/* 图形化链路图（赛博深色风，对齐控制台内网拓扑） */
-.chain-graph { background: radial-gradient(circle at 30% 30%, #0b1526, #060a14); border: 1px solid #16233d; border-radius: 10px; margin: 0 0 16px; padding: 6px; overflow-x: auto; }
-.chain-svg { width: 100%; min-width: 680px; display: block; }
-.ac-edge { stroke: #00e5ff; stroke-opacity: .5; stroke-width: 1.5; fill: none; filter: drop-shadow(0 0 3px rgba(0,229,255,.4)); }
-.ac-node rect { stroke-width: 1.5; }
-.ac-node text { text-anchor: middle; dominant-baseline: middle; }
-.ac-n-title { font-size: 13px; font-weight: 600; }
-.ac-n-sub { font-size: 11px; }
-/* 节点按危害着色（发光边+半透明填充） */
-.ac-node.sev-entry rect { fill: rgba(0,229,255,.12); stroke: #00e5ff; filter: drop-shadow(0 0 5px rgba(0,229,255,.5)); }
-.ac-node.sev-entry text { fill: #7fe9ff; }
-.ac-node.sev-critical rect { fill: rgba(255,77,79,.16); stroke: #ff4d4f; filter: drop-shadow(0 0 5px rgba(255,77,79,.5)); }
-.ac-node.sev-high rect { fill: rgba(255,122,69,.15); stroke: #fa541c; filter: drop-shadow(0 0 5px rgba(250,84,28,.45)); }
-.ac-node.sev-medium rect { fill: rgba(250,173,20,.14); stroke: #faad14; }
-.ac-node.sev-low rect { fill: rgba(250,219,20,.12); stroke: #d4b106; }
-.ac-node.sev-info rect, .ac-node.sev-unknown rect { fill: rgba(140,160,190,.1); stroke: #5a7098; }
-.ac-node.sev-critical text, .ac-node.sev-high text { fill: #ffd9cf; }
-.ac-node.sev-medium text, .ac-node.sev-low text { fill: #ffe9a8; }
-.ac-node.sev-info text, .ac-node.sev-unknown text { fill: #9fb2d0; }
-.ac-node:hover rect { stroke-width: 2.5; }
+/* Stage previews share the same semantic palette as the full graph. */
+.chain-preview-button{display:block;width:100%;text-align:left;padding:10px 12px;border:1px solid var(--dt-border);border-radius:9px;background:var(--dt-card);color:var(--dt-text);cursor:pointer;min-width:0}.chain-preview-button:hover,.chain-preview-button:focus-visible{border-color:var(--dt-primary);background:var(--dt-hover)}.preview-label{display:flex;gap:7px;align-items:center;font-weight:600;font-size:12px;margin-bottom:7px}.preview-flow{display:flex;gap:6px;align-items:center;min-width:0}.preview-flow>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;padding:3px 6px;background:var(--dt-fill);border-radius:5px}.preview-flow>.preview-high,.preview-flow>.preview-critical{background:var(--dt-danger-soft);color:var(--dt-danger)}.preview-more{display:block;font-size:11px;color:var(--dt-muted);line-height:1.6;margin-top:6px}.detail-graph-open{margin-bottom:16px}.step-head{flex-wrap:wrap}.step-action,.step-result{overflow-wrap:anywhere}.outline{color:var(--dt-muted)}
 </style>

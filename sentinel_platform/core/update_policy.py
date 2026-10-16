@@ -5,18 +5,48 @@ GUARDIAN = 'v1.21.171'
 PACKAGE_START = 'v1.21.172'
 
 
+PATCH_OFFSET=1_000_000
+PATCH_MAX=999_999
+PATCH_CAPABILITY='numeric-patch-chain-v1'
+
 def key(version):
     match = re.fullmatch(r'v(\d+)\.(\d+)\.(\d+)(?:-(\d+))?', version or '')
     if not match:raise ValueError('Invalid update version')
-    return tuple(map(int, match.groups()[:3])) + ((0, int(match[4])) if match[4] else (1, 0))
+    main=tuple(map(int,match.groups()[:3]));number=int(match[4]) if match[4] else None
+    if number is None:return main+(1,0)
+    if number==PATCH_OFFSET or number>PATCH_OFFSET+PATCH_MAX:raise ValueError('Reserved patch marker or patch range exceeded')
+    return main+((2,number-PATCH_OFFSET) if number>PATCH_OFFSET else (0,number))
+
+def is_test(version):return key(version)[3]==0
+
+def feature_version(version):
+    value=key(version)
+    return 'v'+'.'.join(map(str,value[:3]))
+
+def display_version(version):return feature_version(version) if key(version)[3]==2 else version
+
+def patch_version(feature,number):
+    value=key(feature)
+    if value[3]!=1 or type(number) is not int or not 1<=number<=PATCH_MAX:raise ValueError('Patch requires a formal feature and positive bounded patch number')
+    return feature+'-'+str(PATCH_OFFSET+number)
+
+def patch_id(version,system):
+    value=key(version)
+    if value[3]!=2:return ''
+    if system not in ('linux','win'):raise ValueError('Unsupported patch system')
+    return 'W-'+system+'-'+str(value[2])+'B-'+str(value[4])
+
+def release_kind(version):return ('test','feature','patch')[key(version)[3]]
 
 
 def adjacent(before, after):
     left, right = key(before), key(after)
     if right <= left:return False
     if left[:3] == right[:3]:
-        return left[3] == 0 and (right[3] == 1 or right[4] == left[4] + 1)
-    return left[:2] == right[:2] and right[2] == left[2] + 1
+        if left[3]==0:return right[3]==1 or right[3]==0 and right[4]==left[4]+1
+        if left[3]==1:return right[3]==2 and right[4]==1
+        return right[3]==2 and right[4]==left[4]+1
+    return left[:2] == right[:2] and right[2] == left[2] + 1 and right[3]!=2
 
 
 def build(current, latest, releases, target='', guardian=GUARDIAN,persistent=False,minimum=''):
@@ -71,7 +101,6 @@ def build(current, latest, releases, target='', guardian=GUARDIAN,persistent=Fal
 
 def allow(current, requested, plan):
     key(requested)
-    if current and key(current)[:3]>=(1,21,175) and key(requested)[:3]<(1,21,175):raise ValueError('Rollback below175 is disabled')
     if current and requested==current:return  # same-version repair has no hop
     if requested != plan['next']:raise ValueError('Version skipping is forbidden; update to '+plan['next']+' first')
 

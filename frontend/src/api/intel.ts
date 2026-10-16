@@ -89,6 +89,11 @@ export type IntelCollection = 'intel_asset' | 'intel_system' | 'intel_code' | 'i
 const base = '/api/intel'
 
 export interface ChainStep {
+  step_id?:string
+  parent_seq?:number
+  parent_step_id?:string
+  parent_finding_ref?:string
+  intranet_breakthrough?:boolean
   seq: number
   action: string
   result?: string
@@ -174,8 +179,9 @@ export const intelApi = {
   remove: (collection: IntelCollection, ids: string[]) =>
     request<{ _id: string[] }>(`${base}/delete/`, { method: 'POST', body: JSON.stringify({ collection, _id: ids }) }),
   chains: (query: ListQuery = {}) => request<ListResult<AttackChain>>(`${base}/chain/${toQueryString(query)}`),
-  chainDetail: (id: string) => request<AttackChain>(`${base}/chain/${id}`),
-  chainStat: (unit?: string) => request<ChainStat>(`${base}/chain/stat/${toQueryString(unit ? { unit } : {})}`),
+  sessionChain: (resumeKey:string,options?:RequestInit) => request<AttackChain>(`/api/pentest/session/console/${encodeURIComponent(resumeKey)}/attack-chain`,options),
+  chainDetail: (id: string, options?: RequestInit) => request<AttackChain>(`${base}/chain/${id}`, options),
+  chainStat: (unit?: string) => request<ChainStat>(`${base}/chain/stat/${toQueryString({unit:unit||'',min_severity:''})}`),
   chainDelete: (ids: string | string[]) => request<{ deleted: number }>(`${base}/chain/delete/`, { method: 'POST', body: JSON.stringify({ _id: Array.isArray(ids) ? ids : [ids] }) }),
   units: () => request<{ units: UnitCard[] }>(`${base}/units/`),
   unitDetail: (unit: string) => request<UnitDetail>(`${base}/unit/${encodeURIComponent(unit)}`),
@@ -228,6 +234,7 @@ export interface ReportTemplate {
   learn_provider_id?: string; learn_provider_name?: string; refine_count?: number; need_review?: boolean
   learn_phase?: string; learn_progress?: number   // 异步学习进度（learning 时前端轮询显进度条）
   schema?: Record<string, unknown>; save_date?: string; update_date?: string
+  editor_mode?: 'manual' | 'manual_word'; manual_body?: string; revision?: number
 }
 
 // multipart 上传必须用原生 fetch 带 Token（request<T> 有 body 时强设 JSON header 会破坏 boundary，见 request.ts）
@@ -257,18 +264,35 @@ async function tplArrayBuffer(path: string): Promise<ArrayBuffer> {
   return resp.arrayBuffer()
 }
 
+export interface WordTemplateView {
+  ok: boolean
+  draft_id?: string
+  template_id?: string
+  name?: string
+  revision?: number
+  edits?: Record<string,string>
+  source_filename: string
+  tags: string[]
+  sections: {part:string;html:string;paragraphs:Record<string,string>}[]
+}
+
 export const reportTemplateApi = {
+  uploadWord: (file: File) => { const form = new FormData(); form.append('file', file); return tplUpload('/report_template/word/draft', form) as unknown as Promise<WordTemplateView> },
+  viewWord: (id: string) => request<WordTemplateView>(`${base}/report_template/word/${encodeURIComponent(id)}`),
+  saveWord: (payload: {name:string; edits:Record<string,string>; draft_id?:string; template_id?:string; revision?:number}) => request<{ok:boolean;template_id:string;revision:number;status:string}>(`${base}/report_template/word`,{method:'POST',body:JSON.stringify(payload)}),
+  discardWord: (id: string) => request(`${base}/report_template/word/draft/${encodeURIComponent(id)}`,{method:'DELETE'}),
+  saveManual: (payload: {name: string; body: string; template_id?: string; revision?: number}) =>
+    request<{ok: boolean; template_id: string; revision: number; status: string}>(`${base}/report_template/manual`, {method: 'POST', body: JSON.stringify(payload)}),
   list: (query: ListQuery = {}) =>
     request<ListResult<RowRecord>>(`${base}/report_template/${toQueryString(query)}`),
   detail: (id: string) => request<ReportTemplate>(`${base}/report_template/${id}`),
-  // 上传模板 docx（name 可选；opts.provider_id 空=跟随全局默认；opts.need_review 勾选→review 迭代态）→ 学习
-  // 异步：秒回 {status:'learning', template_id}，后台学习。need_review 默认 true（显式传 false 才直接 ready）。
+  // Both creation paths require review; older need_review flags are ignored.
   upload: (file: File, name?: string, opts?: { provider_id?: string; need_review?: boolean }) => {
     const form = new FormData()
     form.append('file', file)
     if (name) form.append('name', name)
     if (opts?.provider_id) form.append('provider_id', opts.provider_id)
-    form.append('need_review', opts?.need_review === false ? '0' : '1')
+    form.append('need_review', '1')
     return tplUpload('/report_template/upload', form)
   },
   // 人在回路重学（可换模型 + 纠正意见），仍落 review 态
@@ -276,8 +300,8 @@ export const reportTemplateApi = {
     request<{ ok: boolean; status: string }>(`${base}/report_template/${id}/refine`,
       { method: 'POST', body: JSON.stringify(payload) }),
   // 确认定稿 review→ready
-  confirm: (id: string) =>
-    request<{ ok: boolean; status: string }>(`${base}/report_template/${id}/confirm`, { method: 'POST' }),
+  confirm: (id: string, revision?: number) =>
+    request<{ ok: boolean; status: string }>(`${base}/report_template/${id}/confirm`, { method: 'POST', body: JSON.stringify({revision}) }),
   // 在线并排对比（origin 原文 vs schema 判定）
   diff: (id: string) =>
     request<{ rows: RowRecord[]; summary: Record<string, number> }>(`${base}/report_template/${id}/diff`),
@@ -288,9 +312,9 @@ export const reportTemplateApi = {
   remove: (id: string) =>
     request<{ ok: boolean; deleted: number }>(`${base}/report_template/${id}`, { method: 'DELETE' }),
   // 用模板生成报告（生成后到「会话级/任务级/漏洞报告」列表查看/导出）
-  generate: (payload: { template_id: string; type: 'task'; task_id: string }
+  generate: (payload: ({ template_id: string; type: 'task'; task_id: string }
     | { template_id: string; type: 'session'; session_id: string }
-    | { template_id: string; type: 'finding'; finding_id: string }) =>
+    | { template_id: string; type: 'finding'; finding_id: string; finding_source?: 'ai'|'poc'|'nuclei' }) & {options?:Record<string,unknown>}) =>
       request<{ ok: boolean; report_id: string; docx_path: string; vuln_total: number; updated: boolean; generation_warnings?: string[]; delivery_ready?: boolean }>(
       `${base}/report_template/generate`, { method: 'POST', body: JSON.stringify(payload) }),
   // 人工补充截图（绑定漏洞条目）

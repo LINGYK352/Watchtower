@@ -1,41 +1,13 @@
 # 瞭望塔 Watchtower
 
-> **v1.21.176 · Web + Windows** · 开发始于 **2026年6月3日** · 原创代码 **GPL-3.0-only**。
+Web与Windows当前正式版本：**v1.21.177**。开发始于2026年6月3日，原创代码采用GPL-3.0-only。
 
-[English](README.en.md) · [官网与安装](https://watchtowers.info/) · [176下载与日志](https://github.com/LINGYK352/Watchtower/releases/tag/v1.21.176)
+[官网与下载](https://watchtowers.info/) · [版本发布](https://github.com/LINGYK352/Watchtower/releases) · [English](README.en.md)
 
-| 产品 | 适合的工作 | 安装与更新 |
-| --- | --- | --- |
-| Web | 长任务、稳定服务器运行、集中部署和跨平台远程访问 | Linux x64 / Docker；175镜像基板安装，激活后逐级热更新176 |
-| Windows | 及时开始、本机工作、原生窗口和桌面入口 | 新用户使用176完整EXE，可浏览选择安装目录；存量175用户热更新176，无需重装 |
+177提供双端完整新安装基板。既有175/176用户可在更新页沿签名相邻链升级，保留账号、配置、任务、会话和证据；177是新的回退下限。更早Web用户使用官网安装脚本的保数据修复模式。更新前结束关键任务；首次更新控制组件迁移会协调后台进程。
 
-176修复Windows页面文字选择、Ctrl+C、右键复制与缩放，增加安装器目录浏览；AI控制台支持文件上传、真实进度、取消和失败重试；通告区分系统/安装版本/平台，并按优先级依次弹窗；资源按实际数据盘余量与内存预算计算并发；改善不同DPI和窗口宽度下的界面比例。
+本轮包含独立协同工作区、成员/副主持与区内身份、通用Linux维持节点和密文缓存、数据迁移及附件交付；模型名称与环节匹配的专有SKILL、首选/备用模型与计划任务；原Word模板人工标注/AI学习、统一报告来源选择；会话与分支攻击链、HTTP/HTTPS和WebSocket历史/重放；日夜与窄窗布局、详细叶子手册、本地系统及补丁更新日志。
 
-控制台单文件最大16MiB，上传完成后发送指令；上传文件不会自行执行或调用模型。Windows已在本机Win11验证，Win10尚缺实机验收。Linux专属工具有平台边界，不能宣称全部原生等价；未验收Android原型不在此版。
+功能版本与补丁分开管理，后续本轮改动合并为177B-1补丁，主界面隐藏补丁序号。Windows失败的早期本地诊断已包含；新增日志选择上传等未完成项目不计为已交付。Windows11与Linux测试通过所列用例，Windows10、APP真机和所有真实模型/目标组合不作等价实测承诺。
 
-更新使用构建端预制的签名公共/平台ZIP，升级与回退都逐级；配置、账号、任务、证据、浏览器资料和扩展属于用户数据。双端回退下限175，Web175基板不因普通代码更新而重复重建。
-
-[Windows源码](https://github.com/LINGYK352/Watchtower/tree/windows/v1.21.176) · [交付契约](docs/update-delivery.md) · [许可](LICENSE) · [安全说明](SECURITY.md)
-<!-- watchtower-ui-gallery:start -->
-## 夜间界面预览
-
-使用样本数据展示177-44研发界面。当前正式版仍为 **v1.21.176**，界面预览不代表新版本已发布。
-
-![Watchtower AI 控制台：会话上下文、工具结果与验证证据。](assets/screenshots/preview44/console-night.png)
-
-AI 控制台：会话上下文、工具结果与验证证据。
-
-<details>
-<summary>查看工作台与漏洞中心</summary>
-
-![Watchtower 工作台：资产、任务、网络体检与资源趋势。](assets/screenshots/preview44/dashboard-night.png)
-
-工作台：资产、任务、网络体检与资源趋势。
-
-![Watchtower 漏洞中心：确认结果、待验证线索与处理状态。](assets/screenshots/preview44/findings-night.png)
-
-漏洞中心：确认结果、待验证线索与处理状态。
-
-</details>
-<!-- watchtower-ui-gallery:end -->
-
+安装与操作请参照官网和系统内“使用手册”。第三方工具/库遵守各自许可；源码与完整运行包不包含运营注册库、真实配置或用户数据。

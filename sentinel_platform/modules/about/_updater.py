@@ -70,7 +70,6 @@ def _auth_headers(key: str, current_root: str) -> dict:
     h = {"X-Client-Version": _client_version(current_root)}
     from sentinel_platform.core.update_platform import request_headers
     h.update(request_headers())
-    h['X-Update-Guardian-Revision']=os.environ.get('SENTINEL_GUARDIAN_REVISION','0')
     if key:
         h["X-Update-Key"] = key
     return h

@@ -58,7 +58,7 @@ _COLLECT_MODES = ("single", "multi_brute", "multi_passive")
 _PENTEST_MODES = ("detect", "conservative", "src", "redteam")
 _EGRESS_PREFS = ("smart", "proxy", "direct")
 _DEDUP_LEVELS = (1, 2, 3)
-_SCOPE_DRIFT_LEVELS = (1, 2, 3)
+_SCOPE_DRIFT_LEVELS = (1, 2, 3, 4)
 
 
 def _oid(v: Any):
@@ -130,7 +130,7 @@ def _norm_dedup_level(v: Any) -> int:
 
 
 def _norm_scope_drift_level(v: Any) -> int:
-    """scope偏移级别归一：1=零偏移 2=轻度(默认) 3=中度。"""
+    """scope偏移级别归一：1零/2轻度/3中度/4不限制。"""
     try:
         v = int(v)
     except (TypeError, ValueError):

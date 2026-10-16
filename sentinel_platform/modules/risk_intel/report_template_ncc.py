@@ -182,7 +182,7 @@ def seed(force=False):
     preview.render(_sample_ctx("finding"), autoescape=True)
     preview.save(origin)
     meta = {"name": existing.get("name") or "NCC 事件型漏洞报告（可编辑）", "status": "ready",
-            "scope": "finding", "builtin": True, "ncc_version": VERSION,
+            "scope": "finding", "builtin": False, "ncc_version": VERSION,
             "template_path": os.path.relpath(path, template_dir()).replace("\\", "/"),
             "origin_path": os.path.relpath(origin, template_dir()).replace("\\", "/"),
             "source_filename": "NCC事件型漏洞报告模版.docx", "schema": _builtin_schema(),

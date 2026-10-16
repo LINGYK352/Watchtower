@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import re
 
-from flask import request
+from flask import request,g
 from flask_restx import Namespace, Resource
 
 from sentinel_platform.core import get_logger
 from sentinel_platform.contracts import get_registry, ROLE
-from ..envelope import ok, err, page as env_page, CODE_BAD_REQUEST, CODE_ERROR, CODE_NOT_FOUND
+from ..envelope import ok, err, page as env_page, CODE_BAD_REQUEST, CODE_ERROR, CODE_NOT_FOUND, CODE_FORBIDDEN
 
 logger = get_logger()
 
@@ -399,6 +399,62 @@ class IntelResolveIcp(Resource):
 import os as _os
 import tempfile as _tempfile
 
+def _template_actor():
+    from sentinel_platform.router.gateway import verify_token
+    caller=getattr(g,'current_user',None) or verify_token(request.headers.get('Token',''))
+    return str(caller.get('username') or '') if caller and caller.get('via')!='control_key' else ''
+
+def _report_source_denied(kind,source_id):
+    caller=getattr(g,'current_user',None)
+    if not caller or caller.get('role')=='admin':return None
+    permission={'task':'task:read','session':'pentest:read','finding':'intel:read'}[kind]
+    if permission not in (caller.get('permissions') or []):return err(CODE_FORBIDDEN,'无权读取该报告来源')
+    if kind=='session' and 'pentest:view_all' not in (caller.get('permissions') or []):
+        service=get_registry().get(ROLE.PENTEST_DISPATCH)
+        row=service.get_session(source_id,with_messages=False) if service else None
+        if not row or not caller.get('username') or row.get('owner')!=caller['username']:return err(CODE_FORBIDDEN,'无权访问该会话')
+    return None
+
+def _word_operation(action,**kwargs):
+    service=_svc()
+    if not service or not hasattr(service,'word_template'):return err(CODE_ERROR,'情报服务未就绪')
+    try:return ok(service.word_template(action,**kwargs))
+    except ValueError as exc:return err(CODE_BAD_REQUEST,str(exc)[:300])
+    except OSError:return err(CODE_BAD_REQUEST,'文档文件无法读取或保存，请刷新后重试')
+
+@ns.route('/report_template/word/draft')
+class ReportWordDraft(Resource):
+    def post(self):
+        file=request.files.get('file');actor=_template_actor()
+        if not file or not actor:return err(CODE_BAD_REQUEST,'请登录并上传Word基础模板')
+        raw=file.stream.read(20*1024*1024)
+        return _word_operation('upload',raw=raw,filename=file.filename or '',actor=actor)
+
+@ns.route('/report_template/word/draft/<string:token>')
+class ReportWordDraftDiscard(Resource):
+    def delete(self,token):return _word_operation('discard',token=token,actor=_template_actor())
+
+@ns.route('/report_template/word')
+class ReportWordSave(Resource):
+    def post(self):return _word_operation('save',payload=request.get_json(silent=True),actor=_template_actor())
+
+@ns.route('/report_template/word/<string:template_id>')
+class ReportWordView(Resource):
+    def get(self,template_id):return _word_operation('view',template_id=template_id)
+
+
+@ns.route("/report_template/manual")
+class ReportTemplateManual(Resource):
+    @ns.doc(security="token", description="需权限 pentest:write：保存人工文本与预设标签模板，不调用AI")
+    def post(self):
+        svc = _svc()
+        if not (svc and hasattr(svc, "save_manual_template")):
+            return err(CODE_ERROR, "情报服务未就绪")
+        result = svc.save_manual_template(request.get_json(silent=True), created_by=(request.headers.get("X-User") or "").strip())
+        if result.get("error"):
+            return err(CODE_BAD_REQUEST, result["error"])
+        return ok(result)
+
 
 @ns.route("/report_template/upload")
 class ReportTemplateUpload(Resource):
@@ -415,15 +471,15 @@ class ReportTemplateUpload(Resource):
         if not fname.lower().endswith(".docx"):
             return err(CODE_BAD_REQUEST, "仅支持 .docx 模板；.wps/.doc 请在 WPS/Word 中「另存为 .docx」后上传")
         name = (request.form.get("name") or "").strip() or _os.path.splitext(_os.path.basename(fname))[0]
-        created_by = (request.headers.get("X-User") or "").strip()
+        created_by = _template_actor()
         provider_id = (request.form.get("provider_id") or "").strip()   # 空=跟随全局默认/template_learn 场景
-        # 需人工复核：**默认 True**（学成落 review 待确认）；仅显式传假值(0/false/no/off)才直接 ready。
-        _nr = str(request.form.get("need_review") if request.form.get("need_review") is not None else "1").strip().lower()
-        need_review = _nr not in ("0", "false", "no", "off", "")
+        need_review = True
         fd, tmp = _tempfile.mkstemp(prefix="sentinel-tpl-", suffix=".docx")
         _os.close(fd)
         try:
-            f.save(tmp)
+            raw=f.stream.read(20*1024*1024)
+            if len(raw)>20*1024*1024-65536:return err(CODE_BAD_REQUEST,'Word文件不得超过20MiB')
+            with open(tmp,'wb') as output:output.write(raw)
             r = svc.learn_template(name, tmp, source_filename=fname, created_by=created_by,
                                    provider_id=provider_id, need_review=need_review)
         finally:
@@ -485,21 +541,29 @@ class ReportTemplateGenerate(Resource):
         if not (svc and hasattr(svc, "generate_from_template")):
             return err(CODE_ERROR, "情报服务未就绪")
         body = request.get_json(silent=True) or {}
-        tid = (body.get("template_id") or "").strip()
-        rtype = (body.get("type") or "").strip()
+        if not isinstance(body,dict):return err(CODE_BAD_REQUEST,'报告请求须为对象')
+        tid=body.get('template_id');rtype=body.get('type')
+        if not isinstance(tid,str) or not re.fullmatch('[A-Za-z0-9_-]{1,160}',tid):return err(CODE_BAD_REQUEST,'无效的模板标识')
         if not tid:
             return err(CODE_BAD_REQUEST, "template_id 必填")
         if rtype == "task":
-            sid = (body.get("task_id") or "").strip()
+            sid = body.get('task_id')
         elif rtype == "session":
-            sid = (body.get("session_id") or "").strip()
+            sid = body.get('session_id')
         elif rtype == "finding":
-            sid = (body.get("finding_id") or "").strip()
+            sid = body.get('finding_id')
         else:
             return err(CODE_BAD_REQUEST, "type 须为 task / session / finding")
-        if not sid:
+        if not isinstance(sid,str) or not re.fullmatch('[A-Za-z0-9_-]{1,160}',sid):
             return err(CODE_BAD_REQUEST, "task_id/session_id/finding_id 必填")
-        r = svc.generate_from_template(tid, rtype, sid, body.get("options") or {})
+        options=body.get('options',{})
+        if not isinstance(options,dict):return err(CODE_BAD_REQUEST,'报告选项须为对象')
+        options={**options}
+        if 'finding_source' in body:options['finding_source']=body['finding_source']
+        if options.get('finding_source','ai') not in ('ai','poc','nuclei'):return err(CODE_BAD_REQUEST,'无效的漏洞来源')
+        denied=_report_source_denied(rtype,sid)
+        if denied is not None:return denied
+        r = svc.generate_from_template(tid, rtype, sid, options)
         if r.get("error"):
             return err(CODE_BAD_REQUEST, r["error"])
         return ok(r)
@@ -585,7 +649,8 @@ class ReportTemplateConfirm(Resource):
         svc = _svc()
         if not (svc and hasattr(svc, "confirm_template")):
             return err(CODE_ERROR, "情报服务未就绪")
-        r = svc.confirm_template(template_id)
+        body=request.get_json(silent=True) or {}
+        r = svc.confirm_template(template_id,revision=body.get('revision'))
         if r.get("error"):
             return err(CODE_BAD_REQUEST, r["error"])
         return ok(r)

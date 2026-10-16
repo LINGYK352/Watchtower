@@ -5,10 +5,11 @@ FINDING 门面 → vuln_center → 信封 {code,message,data}。用内存 Mongo 
 验证载荷真实经 registry 链路取到（非空壳），覆盖 stat/unified/detail/delete/mark。
 """
 import unittest
+from unittest.mock import patch
 
 from sentinel_platform.core.db import set_repo, reset_repo
 from sentinel_platform.router import create_app
-from sentinel_platform.modules.risk_intel.tests._fakedb import FakeRepo, FakeCollection
+from sentinel_platform.modules.risk_intel.tests.test_vuln_center import _Repo as FakeRepo
 from sentinel_platform.contracts import Collections
 
 
@@ -25,6 +26,11 @@ def _seed_finding(repo, _id, target, sev="high", verified=True, unit="ACME",
 class FindingEndpointE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # This in-memory endpoint suite has no signed activation file. Actual gates
+        # are separately tested against the installed, activated QA services.
+        gate = patch('sentinel_platform.router.gateway.activation_enforced', return_value=False)
+        gate.start(); cls.addClassCleanup(gate.stop)
+        set_repo(FakeRepo())
         cls.app = create_app()          # 注册 risk_intel(含 FINDING)，挂 intel + pentest_finding 端点
         cls.client = cls.app.test_client()
 
@@ -34,7 +40,7 @@ class FindingEndpointE2E(unittest.TestCase):
         set_repo(self.repo)
         _seed_finding(self.repo, "f1", "http://a.acme.com/x", sev="high", verified=True)
         _seed_finding(self.repo, "f2", "http://b.acme.com/y", sev="critical", verified=True)
-        _seed_finding(self.repo, "f3", "http://c.acme.com/z", sev="low", verified=False)  # 线索,默认藏
+        _seed_finding(self.repo, "f3", "http://c.acme.com/z", sev="info", verified=False)  # 无证据的线索已被既有闸刀降为INFO
         # 空的 poc/nuclei 集合（三来源混排另两源为空）
         self.repo.collection(Collections.VULN)
         self.repo.collection(Collections.NUCLEI_RESULT)
@@ -66,7 +72,7 @@ class FindingEndpointE2E(unittest.TestCase):
 
     def test_unified_list_default_hides_leads(self):
         data = self._data(self.client.get("/api/pentest/finding/unified?source=ai"))
-        # 默认 verified=True → 只 f1/f2，藏线索 f3
+        # 既有契约：默认最低等级low；无证据INFO线索f3隐藏，不再强制verified=True
         self.assertEqual(data["total"], 2)
         ids = {i["_id"] for i in data["items"]}
         self.assertEqual(ids, {"f1", "f2"})
@@ -113,6 +119,28 @@ class FindingEndpointE2E(unittest.TestCase):
         resp = self.client.post("/api/pentest/finding/unified/delete", json={"source": "ai", "ids": []})
         self.assertEqual(resp.status_code, 400)
 
+
+    def test_revision_increases_after_mark_and_delete(self):
+        before = self._data(self.client.get('/api/pentest/finding/revision'))
+        self._data(self.client.post('/api/pentest/finding/unified/mark', json={'source':'ai','ids':['f1'],'handle_status':'submitted'}))
+        marked = self._data(self.client.get('/api/pentest/finding/revision'))
+        self.assertEqual(marked['revision'], before['revision'] + 1)
+        self.assertNotEqual(marked['stamp'], before['stamp'])
+        self._data(self.client.post('/api/pentest/finding/unified/delete', json={'source':'ai','ids':['f1']}))
+        self.assertEqual(self._data(self.client.get('/api/pentest/finding/revision'))['revision'], marked['revision'] + 1)
+
+    def test_watch_checks_presence_independent_of_filter(self):
+        data = self._data(self.client.get('/api/pentest/finding/unified', query_string={'keyword':'no matching rows','watch':'{"ai":["f1","missing"]}'}))
+        self.assertEqual(data['items'], [])
+        self.assertEqual(data['present_ids'], ['f1'])
+
+    def test_watch_unknown_collection_rejected(self):
+        response = self.client.get('/api/pentest/finding/unified', query_string={'watch':'{"user":["x"]}'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_watch_operator_injection_rejected(self):
+        response = self.client.get('/api/pentest/finding/unified', query_string={'watch':'{"ai":[{"$ne":""}]}'})
+        self.assertEqual(response.status_code, 400)
 
 if __name__ == "__main__":
     unittest.main()

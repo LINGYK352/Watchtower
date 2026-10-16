@@ -31,17 +31,13 @@ _notify_dedup: Dict[str, float] = {}
 
 
 def _api_keys_doc() -> Dict[str, Any]:
-    """读 api_keys 集合 default 文档（带 TTL 缓存）；失败返回 {}。"""
-    now = time.time()
-    if _cfg_cache["data"] is not None and now - _cfg_cache["ts"] < _CACHE_TTL:
-        return _cfg_cache["data"]
+    """每次发送fresh读取共享配置，让所有进程立即看到渠道开关和新凭据。"""
     doc: Dict[str, Any] = {}
     try:
         doc = get_repo().collection(Collections.API_KEYS).find_one({"name": "default"}) or {}
     except Exception as exc:  # 库不可用等：降级空配置，不崩
         logger.debug("notify: read api_keys failed: %s", exc)
         doc = {}
-    _cfg_cache.update(data=doc, ts=now)
     return doc
 
 
@@ -76,7 +72,7 @@ def _feishu_send(conf: Dict[str, Any], title: str, content: str) -> None:
         ts = str(int(time.time()))
         string_to_sign = "{}\n{}".format(ts, secret)
         sign = base64.b64encode(
-            hmac.new(secret.encode("utf-8"), string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+            hmac.new(string_to_sign.encode("utf-8"), msg=b"", digestmod=hashlib.sha256).digest()
         ).decode("utf-8")
         payload["timestamp"] = ts
         payload["sign"] = sign
@@ -160,6 +156,10 @@ class NotifyServiceImpl:
             return {"ok": False, "sent": [], "error": "message 必填"}
 
         title = kwargs.get("title") or "瞭望塔 Watchtower 通知"
+        from sentinel_platform.modules.system.activation import platform_identity
+        source=platform_identity()['source_id']
+        title='['+source+'] '+str(title)
+        message='来源 / Source: '+source+'\n'+str(message)
         req = kwargs.get("channel")
         if isinstance(req, str) and req:
             channels = [req]

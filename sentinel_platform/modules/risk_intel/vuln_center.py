@@ -29,9 +29,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from sentinel_platform.core import get_repo, get_logger
 from sentinel_platform.contracts import get_registry, ROLE, Collections
 from . import _cvss
+from . import _severity
 from . import _hazard_table
 from . import _finding_quality as _quality
 from . import _finding_index
+from ._finding_live import touch_revision, read_revision
 
 logger = get_logger()
 
@@ -379,15 +381,11 @@ _IMPACT_RE = re.compile(r"^-\s*危害[:：]\s*(.+?)\s*$", re.M)
 _VERIFY_RE = re.compile(r"^-\s*验证方式[:：]\s*(.+?)\s*$", re.M)
 _KEYRESP_RE = re.compile(r"^-\s*关键响应[:：]\s*(.+?)\s*$", re.M)
 
-_SEVERITY_MAP = {
-    "critical": "critical", "严重": "critical", "高危": "high", "high": "high",
-    "中危": "medium", "medium": "medium", "低危": "low", "low": "low",
-    "信息": "info", "info": "info", "informational": "info",
-}
+_SEVERITY_MAP = _severity.ALIASES
 
 
 def _norm_severity(s: str) -> str:
-    return _SEVERITY_MAP.get((s or "").strip().lower(), (s or "").strip() or "unknown")
+    return _severity.normalize(s)
 
 
 def _looks_like_time(s: str) -> bool:
@@ -762,7 +760,7 @@ class FindingServiceImpl:
         vuln_type, _name_matched, _name_garbage = _quality.category(raw_vuln_type)
         tool_log = tool_log if tool_log is not None else (finding.get("tool_log") or [])
         impact = finding.get("impact", "")
-        cvss_vec_in = finding.get("cvss_vector", "")
+        cvss_vec_in = _severity.grade_input(finding)
         cvss_vec, cvss_score, severity, cal_severity, cal_basis = _grade(cvss_vec_in, vuln_type, impact, target)
         reproduction = _quality.reproduction(finding, tool_log)
         request_method = _quality.request_method({**finding, "poc": reproduction["poc"]})
@@ -850,7 +848,7 @@ class FindingServiceImpl:
             doc.update(verification_status=verification['status'],verification_reason=verification['reason'])
             saved, duplicate, upgraded = _persist_finding(coll, doc)
             repo=get_repo()
-            repo.collection(Collections.FINDING_IDENTITY).update_one({'_id':'_finding_revision'}, {'$inc':{'revision':1}},upsert=True)
+            touch_revision()
             for affected in set(saved.get('session_ids') or [saved.get('session_id')])-{None,''}:
                 repo.collection(Collections.PENTEST_SESSION).update_one({'_id':_oid(affected)},{'$inc':{'finding_revision':1}})
             try:
@@ -909,10 +907,16 @@ def _oid(v: Any):
         return v                       # 非法 ObjectId 回退原值（对齐平台约定；生产真库对字符串查不到，效果一致）
 
 
+def _origin_category(doc,source):
+    if source!='ai':return 'kernel'
+    workspace=doc.get('workspace_id')
+    return 'group' if isinstance(workspace,str) and workspace.startswith('group:') else 'ai'
+
+
 def _norm_unified(doc: Dict[str, Any], source: str) -> Dict[str, Any]:
     """把一条原始漏洞文档归一成混排列表行（只取公共字段，详情另拉）。"""
     base = {
-        "_id": str(doc.get("_id", "")), "source": source,
+        "_id": str(doc.get("_id", "")), "source": source,'origin_category':_origin_category(doc,source),
         "save_date": doc.get("save_date", ""), "task_id": doc.get("task_id", ""),
         "task_name": "",
         "session_id": str(doc.get("session_id", "")) if source == "ai" else "",
@@ -920,8 +924,8 @@ def _norm_unified(doc: Dict[str, Any], source: str) -> Dict[str, Any]:
         "handle_by": doc.get("handle_by", "") or "", "handle_at": doc.get("handle_at", "") or "",
     }
     if source == "ai":
-        _sev = (doc.get("severity") or "unknown").lower()
-        _chain = (doc.get("chain_severity") or "").lower()
+        _sev = _severity.resolve(doc)
+        _chain = _severity.normalize(doc.get('chain_severity')) if doc.get('chain_severity') else ''
         _eff = _chain if _SEV_RANK.get(_chain, 0) > _SEV_RANK.get(_sev, 0) else _sev
         _mode = (doc.get("pentest_mode") or "").strip()
         base.update({
@@ -946,14 +950,14 @@ def _norm_unified(doc: Dict[str, Any], source: str) -> Dict[str, Any]:
         base.update({
             "name": doc.get("vuln_name", "") or doc.get("template_id", "") or "nuclei",
             "target": doc.get("vuln_url", "") or doc.get("target", ""),
-            "severity": (doc.get("vuln_severity") or "unknown").lower(),
+            "severity": _severity.resolve(doc, ('vuln_severity', 'severity')),
             "verified": True, "unit": "", "cvss_score": None,
         })
     else:  # poc（vuln 集合，NPoC 插件命中，无 severity 字段）
         base.update({
             "name": doc.get("vul_name", "") or doc.get("plg_name", "") or "PoC",
             "target": doc.get("target", ""),
-            "severity": (doc.get("vuln_severity") or doc.get("severity") or "unknown").lower(),
+            "severity": _severity.resolve(doc, ('vuln_severity', 'severity')),
             "verified": True, "unit": "", "cvss_score": None,
         })
     return base
@@ -1015,7 +1019,7 @@ def _apply_handle_date(q: Dict[str, Any], handle_status: Optional[str],
 
 def list_unified_findings(unit=None, severity=None, source=None, keyword=None, verified=None,
                           page=1, size=20, include_leads=False, handle_status=None,
-                          date_from=None, date_to=None, min_severity=None, dedup=True) -> Dict[str, Any]:
+                          date_from=None, date_to=None, min_severity=None, dedup=True, watch=None) -> Dict[str, Any]:
     """三来源混排列表（vuln + nuclei_result + intel_finding），按 save_date 倒序 + 分页。
     **v1.21.157-47（治 item2 漏洞被吞）**：不再默认锁 verified=True 隐藏线索——未证实的 finding 已被
     证据封顶闸降到 info（见 _record_one），默认按 min_severity(low) 过滤即自然隐藏 info 噪声；
@@ -1028,8 +1032,8 @@ def list_unified_findings(unit=None, severity=None, source=None, keyword=None, v
     size = max(1, int(size or 20))
     # verified=None → 不加 verified 过滤（已验证漏洞 + 线索都进候选，靠 min_severity 控噪）。
     # 仅当调用方显式传 verified 才按其过滤（如 stat 卡"已验证漏洞"计数走 verified=True）。
-    sources = [source] if source in UNIFIED_SOURCES else list(UNIFIED_SOURCES)
-    if unit and source not in ("poc", "nuclei"):
+    sources = ['poc','nuclei'] if source=='kernel' else ['ai'] if source=='group' else [source] if source in UNIFIED_SOURCES else list(UNIFIED_SOURCES)
+    if unit and source not in ("poc", "nuclei", "kernel"):
         sources = [s for s in sources if s == "ai"]
     kw = (keyword or "").strip()
     below = _below_severities(min_severity)
@@ -1060,6 +1064,8 @@ def list_unified_findings(unit=None, severity=None, source=None, keyword=None, v
     for src in sources:
         if src == "ai":
             aq: Dict[str, Any] = {"source": "ai", "duplicate_of": None}
+            if source=='group':aq['workspace_id']={'$regex':'^group:'}
+            elif source=='ai':aq['$nor']=[{'workspace_id':{'$regex':'^group:'}}]
             if unit:
                 aq["unit"] = {"$regex": re.escape(unit.strip()), "$options": "i"}
             if verified is not None:
@@ -1079,7 +1085,19 @@ def list_unified_findings(unit=None, severity=None, source=None, keyword=None, v
     _attach_task_names(page_rows)
     # 总数在分组后、分页前计算，不受页码影响。
     total = sum(source_totals.values())
-    return {"items": page_rows, "total": total}
+    result = {"items": page_rows, "total": total}
+    if watch is not None:
+        if not isinstance(watch, dict) or any(src not in _SRC_COLL or not isinstance(ids, list)
+                or any(not isinstance(item, str) for item in ids) for src, ids in watch.items()):
+            raise ValueError('Invalid finding watch IDs')
+        present = []
+        for src, ids in watch.items():
+            oids = [value for value in (_oid(item) for item in ids) if value is not None]
+            if oids:
+                present.extend(str(doc['_id']) for doc in repo.collection(_SRC_COLL[src]).find(
+                    {'_id': {'$in': oids}}, {'_id': 1}))
+        result['present_ids'] = present
+    return result
 
 
 def _kw_terms(kw: str) -> List[str]:
@@ -1185,6 +1203,11 @@ def unified_detail(source: str, _id: str) -> Optional[Dict[str, Any]]:
         _finding_index.annotate(get_repo(), [doc])
     doc["_id"] = str(doc["_id"])
     doc["source"] = source
+    doc['origin_category']=_origin_category(doc,source)
+    normalized = _norm_unified(doc, source)
+    doc['severity'] = normalized['severity']
+    if source != 'ai':
+        doc['vuln_severity'] = normalized['severity']
     return doc
 
 
@@ -1197,7 +1220,9 @@ def delete_unified(source: str, ids: List[str]) -> int:
     if not oids:
         return 0
     try:
-        return get_repo().collection(coll_name).delete_many({"_id": {"$in": oids}}).deleted_count
+        deleted = get_repo().collection(coll_name).delete_many({"_id": {"$in": oids}}).deleted_count
+        if deleted: touch_revision()
+        return deleted
     except Exception as exc:
         logger.debug("vuln_center: delete_unified failed: %s", exc)
         return 0
@@ -1218,8 +1243,10 @@ def mark_unified(source: str, ids: List[str], handle_status: str, handle_by: str
     set_fields["handle_by"] = handle_by or "" if handle_status else ""
     set_fields["handle_at"] = now if handle_status else ""
     try:
-        return get_repo().collection(coll_name).update_many(
+        modified = get_repo().collection(coll_name).update_many(
             {"_id": {"$in": oids}}, {"$set": set_fields}).modified_count
+        if modified: touch_revision()
+        return modified
     except Exception as exc:
         logger.debug("vuln_center: mark_unified failed: %s", exc)
         return 0
@@ -1257,6 +1284,7 @@ def downgrade_severity(source: str, ids: List[str], target_severity: str, handle
             "severity_basis": (d.get("severity_basis", "") + " | " if d.get("severity_basis") else "")
                               + "人工降级 {}→{}".format(cur, tgt)}})
         updated += 1
+    if updated: touch_revision()
     return {"ok": True, "updated": updated, "skipped": skipped}
 
 
@@ -1283,7 +1311,7 @@ def reconcile_session_findings(session_id: str, dry_run: bool = False, tool_log=
             row,_,_=_persist_finding(coll,{**row,'vuln_type':canon,'update_date':row.get('update_date') or time.strftime('%Y-%m-%d %H:%M:%S')})
             if original_id!=str(row['_id']):
                 duplicates.append({'id':original_id,'duplicate_of':str(row['_id'])})
-                repo.collection(Collections.FINDING_IDENTITY).update_one({'_id':'_finding_revision'},{'$inc':{'revision':1}},upsert=True)
+                touch_revision()
                 for affected in set(row.get('session_ids') or [row.get('session_id')])-{None,''}:
                     repo.collection(Collections.PENTEST_SESSION).update_one({'_id':_oid(affected)},{'$inc':{'finding_revision':1}})
         original_poc = row.get("poc_original", row.get("poc", ""))
@@ -1300,7 +1328,7 @@ def reconcile_session_findings(session_id: str, dry_run: bool = False, tool_log=
             verification={'confirmed':True,'status':'confirmed','reason':row.get('verification_reason','已保留既有实证')}
         if row.get("quality_version") == _quality.QUALITY_VERSION and row.get('verification_status')==verification['status']:
             continue
-        _, _, _, severity, basis = _grade(row.get("cvss_vector", ""), canon, row.get("impact", ""), row.get("target", ""))
+        _, _, _, severity, basis = _grade(_severity.grade_input(row), canon, row.get("impact", ""), row.get("target", ""))
         # 已有人工/对抗复核评级不以无证据理由覆盖；保留明确复核结论及说明。
         if row.get("review_adjusted"):
             severity, basis = row.get("severity", severity), row.get("review_reason", basis)
@@ -1323,7 +1351,7 @@ def reconcile_session_findings(session_id: str, dry_run: bool = False, tool_log=
                              "cvss_vector": row.get("cvss_vector"), "poc": row.get("poc"),
                              "manual_severity": row.get("manual_severity")}, {"$set": fields})
             if getattr(updated,'modified_count',0):
-                repo.collection(Collections.FINDING_IDENTITY).update_one({'_id':'_finding_revision'},{'$inc':{'revision':1}},upsert=True)
+                touch_revision()
                 for affected in set(row.get('session_ids') or [row.get('session_id')])-{None,''}:
                     repo.collection(Collections.PENTEST_SESSION).update_one({'_id':_oid(affected)},{'$inc':{'finding_revision':1}})
     for group in groups.values():
@@ -1335,9 +1363,10 @@ def reconcile_session_findings(session_id: str, dry_run: bool = False, tool_log=
                 continue
             duplicates.append({"id": str(row["_id"]), "duplicate_of": str(canonical["_id"])})
             if not dry_run:
-                coll.update_one({"_id": row["_id"], "duplicate_of": None}, {"$set": {
+                result = coll.update_one({"_id": row["_id"], "duplicate_of": None}, {"$set": {
                     "duplicate_of": str(canonical["_id"]), "duplicate_reason": "same_endpoint_same_type",
                     "quality_version": _quality.QUALITY_VERSION}})
+                if getattr(result, "modified_count", 0): touch_revision()
     return {"ok": True, "updates": updates, "duplicates": duplicates, "dry_run": dry_run}
 
 
@@ -1403,3 +1432,6 @@ def get_service() -> FindingServiceImpl:
 
 
 
+
+FindingServiceImpl.touch_revision = staticmethod(touch_revision)
+FindingServiceImpl.read_revision = staticmethod(read_revision)

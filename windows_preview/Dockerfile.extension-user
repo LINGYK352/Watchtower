@@ -1,0 +1,6 @@
+# Windows portable runtime only; original Web image and Dockerfile stay unchanged.
+FROM sentinel:base
+# RLIMIT_NPROC counts Linux UIDs across containers. UID 999 is also MongoDB's UID.
+RUN groupmod -g 61276 sentinel-ext \
+    && usermod -u 61276 -g 61276 sentinel-ext \
+    && chown -R 61276:61276 /var/lib/sentinel-ext

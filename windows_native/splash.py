@@ -20,11 +20,16 @@ class Api:
         write(self.root/'state/ui-language.json',{'locale':value})
         return {'ok':True}
 
-def render(root,failed=False):
-    text=messages(root)['startup'];version=(Path(root)/'app/version.txt').read_text(encoding='utf-8').strip()
+def render(root,failed=False,diagnostic=None):
+    from windows_native.guardian import display_version
+    text=messages(root)['startup'];version=display_version((Path(root)/'app/version.txt').read_text(encoding='utf-8').strip())
     image=base64.b64encode((ASSETS/'watchtower.png').read_bytes()).decode()
     status=text['failed'] if failed else text['checking']
     hint=text['failureHint'] if failed else text['firstRunHint'] if not (Path(root)/'state/db-initialized.json').exists() else text['readyHint']
+    if failed:
+        diagnostic=diagnostic or {}
+        stage=text.get(diagnostic.get('stage','checking'),text['checking'])
+        hint=text['failureLog'].replace('{stage}',stage).replace('{path}',str(diagnostic.get('log_path',''))) if diagnostic.get('log_path') else text['failureNoLog']
     page='''<!doctype html><html lang="__LANG__"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{box-sizing:border-box}html,body{height:100%;margin:0}body{overflow:hidden;background:#0c1422;color:#edf4ff;font-family:"Segoe UI","Microsoft YaHei",sans-serif}
@@ -35,7 +40,7 @@ h1{font-size:44px;line-height:1.1;font-weight:700;letter-spacing:.4px;margin:42p
 .caption{font-size:18px;color:#6899d1;letter-spacing:4px}.track{height:4px;width:270px;border-radius:3px;background:#1c3550;margin:43px 0 65px;overflow:hidden}
 .bar{height:100%;width:4%;background:linear-gradient(90deg,#397acd,#13c6db);border-radius:3px;transition:width .35s ease;position:relative}
 .bar:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#d3faff55,transparent);animation:shine 1.6s linear infinite}
-#status{font-size:24px;line-height:1.5;margin:0 0 23px;min-height:36px}.hint{color:#799cc9;font-size:20px;text-align:center;line-height:1.6;margin:0 0 48px}.version{font-size:16px;color:#4f78a8}
+#status{font-size:24px;line-height:1.5;margin:0 0 23px;min-height:36px}.hint{color:#799cc9;font-size:20px;text-align:center;line-height:1.6;margin:0 0 48px;max-width:920px;overflow-wrap:anywhere;white-space:pre-line}.version{font-size:16px;color:#4f78a8}
 @keyframes shine{from{transform:translateX(-100%)}to{transform:translateX(100%)}}@keyframes enter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:750px){h1{font-size:34px}.hint{font-size:16px}#status{font-size:20px}.logo{width:84px;height:84px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

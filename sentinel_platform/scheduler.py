@@ -51,6 +51,11 @@ def tick() -> dict:
     from sentinel_platform.modules.kernel import orchestration
     result = {"waiting": {}, "due_schedules": 0, "sessions": {}, "stalled": 0, "vuln_feed": False}
     try:
+        from sentinel_platform.modules.about import _native_storage
+        _native_storage.tick()
+    except Exception as exc:
+        logger.debug('Managed native storage cleanup deferred: %s',type(exc).__name__)
+    try:
         result["waiting"] = orchestration.run_waiting_tasks()   # 资源感知限速投递（非硬上限）
     except Exception as exc:
         logger.warning("scheduler tick run_waiting_tasks degraded: %s", exc)
@@ -60,6 +65,16 @@ def tick() -> dict:
         logger.debug("scheduler tick reclaim_stalled degraded: %s", exc)
     result["due_schedules"] = _promote_due_schedules()
     result["sessions"] = _tick_sessions()
+    try:
+        from sentinel_platform.modules.ai_pentest import _request_approvals
+        _request_approvals.expire()
+        _request_approvals.flush_notifications()
+        from .modules.ai_pentest import _afk
+        _afk.tick()
+        from .modules.system import guard_log
+        guard_log.ensure_capped();guard_log.migrate_legacy();guard_log.maintain()
+    except Exception as exc:
+        logger.debug('scheduler request approvals degraded: %s', type(exc).__name__)
     # 会话台后台回合 crash 兜底（独立于自动会话；只清 console_running 死锁 + 按 pending 重投，不碰 status）
     try:
         result["console_sessions"] = _tick_console_sessions()

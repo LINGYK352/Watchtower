@@ -1,0 +1,8 @@
+# Developer build only; end users run the packaged executable.
+PyInstaller==6.20.0
+paramiko==3.5.1
+pycdlib==1.21.0
+PyYAML==6.0.2
+cryptography==45.0.7
+Pillow==12.3.0
+-r requirements-desktop.txt

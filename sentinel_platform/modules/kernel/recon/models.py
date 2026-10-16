@@ -94,6 +94,11 @@ class WihRec:
     content: str
     site: str = ""
     source: str = "webinfohunter"
+    source_url: str = ""
+    capture_status: str = ""
+    incomplete_reason: str = ""
+    content_sha256: str = ""
+    reference_only: bool = True
 
 
 @dataclass

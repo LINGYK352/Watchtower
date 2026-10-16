@@ -13,7 +13,10 @@ from sentinel_platform.contracts import Collections
 
 def _match(doc, query):
     for k, v in (query or {}).items():
-        if doc.get(k) != v:
+        if isinstance(v,dict):
+            actual=doc.get(k)
+            if any(actual is None or (op=='$gte' and actual<value) or (op=='$gt' and actual<=value) for op,value in v.items()):return False
+        elif doc.get(k) != v:
             return False
     return True
 
@@ -25,6 +28,8 @@ class _Cursor:
     def sort(self, key, direction=1):
         if key == "$natural" and direction < 0:
             self._docs = list(reversed(self._docs))
+        if isinstance(key,list):
+            for field,order in reversed(key):self._docs.sort(key=lambda d:str(d.get(field,'')),reverse=order<0)
         return self
 
     def skip(self, n):

@@ -49,6 +49,7 @@ class Runtime:
    with self.client(True) as c:c.admin.command('createUser',self.config['app_user'],pwd=self.config['app_password'],roles=[{'role':'readWrite','db':self.config['db']},{'role':'dbAdmin','db':self.config['db']}])
    atomic(marker,{'initialized':True})
   configuration=self.state/'config.yaml'
+  if progress:progress('configuration',45)
   if not configuration.exists():
    sample=yaml.safe_load((self.root/'app/config/config.yaml.example').read_text(encoding='utf-8'));c=self.config
    sample['MONGO']={'URI':'mongodb://'+c['app_user']+':'+quote(c['app_password'],safe='')+'@127.0.0.1:'+str(c['mongo_port'])+'/?authSource=admin','DB':c['db']}

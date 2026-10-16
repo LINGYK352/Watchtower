@@ -3,7 +3,11 @@ import { request } from './request'
 export interface VulnIntelItem {
   _id: string
   cve_id: string
+  identifier: string
+  watchtower_id?: string
   title: string
+  source_url?: string
+  source_urls?: string[]
   severity: string
   in_kev: boolean
   executable: boolean
@@ -30,6 +34,7 @@ export interface FeedSource {
 }
 
 export interface FeedStatus {
+  notifications?: { enabled: boolean; pending: number; retry: number; sending: number; sent: number; failed: number }
   last_fetch: string
   interval_seconds: number
   interval_hours: number
@@ -58,6 +63,7 @@ export interface VulnQuery {
 const base = '/api/intel/vuln_feed'
 
 export const vulnIntelApi = {
+  retryNotifications: () => request<{ retrying: number }>(`${base}/notification/retry/`, { method: 'POST', body: '{}' }),
   stat: () => request<VulnIntelStat>(`${base}/stat/`),
   status: () => request<FeedStatus>(`${base}/status/`),
   list: (q: VulnQuery = {}) => {

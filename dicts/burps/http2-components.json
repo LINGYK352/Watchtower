@@ -1,0 +1,23 @@
+{
+  "h2": {
+    "version": "4.1.0",
+    "wheel": "h2-4.1.0-py3-none-any.whl",
+    "sha256": "03a46bcf682256c95b5fd9e9a99c1323584c3eec6440d379b9903d709476bc6d",
+    "requires_python": ">=3.6.1",
+    "source": "https://pypi.org/project/h2/4.1.0/"
+  },
+  "hpack": {
+    "version": "4.0.0",
+    "wheel": "hpack-4.0.0-py3-none-any.whl",
+    "sha256": "84a076fad3dc9a9f8063ccb8041ef100867b1878b25ef0ee63847a5d53818a6c",
+    "requires_python": ">=3.6.1",
+    "source": "https://pypi.org/project/hpack/4.0.0/"
+  },
+  "hyperframe": {
+    "version": "6.0.1",
+    "wheel": "hyperframe-6.0.1-py3-none-any.whl",
+    "sha256": "0ec6bafd80d8ad2195c4f03aacba3a8265e57bc4cff261e802bf39970ed02a15",
+    "requires_python": ">=3.6.1",
+    "source": "https://pypi.org/project/hyperframe/6.0.1/"
+  }
+}

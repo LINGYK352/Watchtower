@@ -7,9 +7,9 @@
 <template>
   <a-modal v-model:open="open" :title="translate('ui.m_a80ec42f8a47')" :footer="null" :width="560" :mask-closable="false">
     <a-alert type="info" show-icon style="margin-bottom:12px"
-      :message="translate('ui.m_a56c015b0fbd', { p0: (curVer) })" />
+      :message="translate('ui.m_a56c015b0fbd', { p0: (displayVersion(curVer)) })" />
     <div v-for="item in notices" :key="item.ver" class="up-notice-item">
-      <div class="up-notice-ver"><a-tag color="blue">{{ item.ver }}</a-tag></div>
+      <div class="up-notice-ver"><a-tag color="blue">{{ displayVersion(item.ver) }}</a-tag></div>
       <div class="up-notice-text">{{ item.notice }}</div>
     </div>
     <div style="text-align:right;margin-top:16px">
@@ -21,6 +21,7 @@
 </template>
 
 <script setup lang="ts">
+import { versionKey, displayVersion, isPatchVersion } from '../config/releaseVersion'
 import { t as translate } from '../i18n'
 
 import { ref, onMounted, onUnmounted } from 'vue'
@@ -38,10 +39,7 @@ const curVer = ref('')
 const notices = ref<Array<{ ver: string; notice: string }>>([])
 
 // 版本号数值比较（复用 UpdateNotice 同款逻辑）：v1.21.149-1 → [1,21,149,1]
-function parseVer(v: string): number[] {
-  const match=String(v||'').match(/^v?(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$/i)
-  return match ? [Number(match[1]),Number(match[2]),Number(match[3]),match[4] ? 0 : 1,Number(match[4]||0)] : [0,0,0,0,0]
-}
+function parseVer(v:string):number[]{return versionKey(v)}
 function cmpVer(a: string, b: string): number {
   const ta = parseVer(a), tb = parseVer(b)
   const n = Math.max(ta.length, tb.length)

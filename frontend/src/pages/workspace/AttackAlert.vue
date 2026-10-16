@@ -6,24 +6,25 @@
       </a-space>
     </template>
 
+    <a-alert v-if="stats.monitor" :type="stats.monitor.state==='error'?'warning':'info'" show-icon style="margin-bottom:16px" data-testid="attack-monitor-status" :message="translate('attackMonitor.'+stats.monitor.state)" :description="translate('attackMonitor.reason.'+(stats.monitor.reason||'running'))" />
     <!-- 统计卡片 -->
     <a-row :gutter="16" style="margin-bottom: 16px">
-      <a-col :span="6">
+      <a-col :xs="12" :sm="6">
         <a-card :bordered="false">
           <a-statistic :title="translate('ui.m_d435554f6d52')" :value="stats.total_attacks" :value-style="{ color: '#cf1322' }" />
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :xs="12" :sm="6">
         <a-card :bordered="false">
           <a-statistic :title="translate('ui.m_70c07a5a1c79')" :value="stats.today_attacks" :value-style="{ color: '#d46b08' }" />
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :xs="12" :sm="6">
         <a-card :bordered="false">
           <a-statistic :title="translate('ui.m_0d6fbc5813b6')" :value="stats.by_severity?.high || 0" :value-style="{ color: '#a8071a' }" />
         </a-card>
       </a-col>
-      <a-col :span="6">
+      <a-col :xs="12" :sm="6">
         <a-card :bordered="false">
           <a-statistic :title="translate('ui.m_b31427d6e3a2')" :value="stats.top_attackers?.length || 0" :value-style="{ color: '#096dd9' }" />
         </a-card>
@@ -32,7 +33,7 @@
 
     <!-- 攻击类型分布 -->
     <a-row :gutter="16" style="margin-bottom: 16px">
-      <a-col :span="12">
+      <a-col :xs="24" :lg="12">
         <a-card :title="translate('ui.m_934ef3c99ade')" :bordered="false">
           <div v-if="Object.keys(stats.by_type || {}).length > 0">
             <div v-for="(count, type) in stats.by_type" :key="type" style="margin-bottom: 8px">
@@ -43,7 +44,7 @@
           <a-empty v-else :description="translate('ui.m_497c85690c4c')" />
         </a-card>
       </a-col>
-      <a-col :span="12">
+      <a-col :xs="24" :lg="12">
         <a-card :title="translate('ui.m_8a7741921641')" :bordered="false">
           <a-list v-if="stats.top_attackers && stats.top_attackers.length > 0" size="small" :data-source="stats.top_attackers">
             <template #renderItem="{ item }">
@@ -149,8 +150,8 @@
 
     <!-- 封禁管理 + 白名单管理 -->
     <a-row :gutter="16" style="margin-top:16px">
-      <a-col :span="12">
-        <a-card :title="translate('ui.m_af1bbbadeda1')" :bordered="false">
+      <a-col :xs="24" :lg="12">
+        <a-card data-guide="alert-bans" :title="translate('ui.m_af1bbbadeda1')" :bordered="false">
           <template #extra><a-button size="small" @click="loadBans">{{ translate('ui.m_aee887434131') }}</a-button></template>
           <a-table :columns="banColumns" :data-source="bans" :loading="banLoading" size="small"
             :pagination="false" row-key="_id" :scroll="{ y: 260 }">
@@ -172,8 +173,8 @@
           <a-empty v-if="!bans.length && !banLoading" :description="translate('ui.m_2a2707600e42')" />
         </a-card>
       </a-col>
-      <a-col :span="12">
-        <a-card :title="translate('ui.m_27e2d9e2d924')" :bordered="false">
+      <a-col :xs="24" :lg="12">
+        <a-card data-guide="alert-whitelist" :title="translate('ui.m_27e2d9e2d924')" :bordered="false">
           <template #extra>
             <a-space>
               <a-input v-model:value="wlInput" :placeholder="translate('ui.m_c9b7121a6dcc')" size="small" style="width:160px" @pressEnter="doAddWhitelistInput" />

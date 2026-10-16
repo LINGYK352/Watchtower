@@ -7,7 +7,8 @@
  * 本 composable 运行时从后端 `/api/about/version`（读 version.txt）拉真实版本，显示与比对都用它，
  * APP_VERSION 仅作后端不可达时的兜底。一次拉取全局缓存，多处共享同一 ref。
  */
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { displayVersion } from '../config/releaseVersion'
 import { APP_VERSION } from '../config/brand'
 import { request } from '../api/request'
 
@@ -39,5 +40,5 @@ export async function fetchServerVersion(force = false): Promise<string> {
 /** 供组件绑定的响应式版本 ref + 主动刷新方法。 */
 export function useServerVersion() {
   if (!_fetched) fetchServerVersion()   // 首次使用即懒加载
-  return { serverVersion, refresh: () => fetchServerVersion(true) }
+  return { serverVersion:computed(()=>displayVersion(serverVersion.value)), rawServerVersion:serverVersion, refresh: () => fetchServerVersion(true) }
 }

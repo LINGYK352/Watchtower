@@ -1,18 +1,12 @@
 <template>
-  <div>
-    <a-alert
-      class="page-alert"
-      type="info"
-      show-icon
-      :message="translate('ui.m_dbeb89948740')"
-    />
+  <PageContainer :title="translate('proxyPage.title')" kicker="Network" :description="translate('ui.m_dbeb89948740')">
 
     <!-- ① 平台代理模式：4模式(直连/全局/规则/智能)×3源(自定义/机场/公共代理)。
          本区配「全局代理」和「智能代理」各绑哪个源(3选一)；策略页选 direct/global/smart 时套用。 -->
-    <a-card class="page-card netmode-card" :title="translate('ui.m_4fa362683021')" size="small">
-      <template #extra><a-button size="small" type="primary" :loading="modeSaving" @click="saveMode">{{ translate('ui.m_a3030bf8f16d') }}</a-button></template>
+    <a-card data-testid="proxy-mode-card" class="page-card netmode-card" :title="translate('ui.m_4fa362683021')" size="small">
+      <template #extra><a-space><a-tag v-if="unsaved.dirty.value" color="warning" data-testid="proxy-unsaved">{{ translate('proxySafety.dirty') }}</a-tag><a-button data-testid="proxy-save-mode" size="small" type="primary" :loading="modeSaving || sourceChecking" :disabled="loading || !status" @click="saveMode">{{ translate('ui.m_a3030bf8f16d') }}</a-button></a-space></template>
       <!-- 顶层总开关：直连（默认）/ 启用代理。直连时全局+智能配置禁用 -->
-      <a-radio-group v-model:value="platformTop" button-style="solid" class="top-radios">
+      <a-radio-group data-testid="proxy-platform-mode" :disabled="modeSaving || sourceChecking || loading || !status" v-model:value="platformTop" button-style="solid" class="top-radios">
         <a-radio-button value="direct">{{ translate('ui.m_a2895bde5c79') }}</a-radio-button>
         <a-radio-button value="proxy">{{ translate('ui.m_36c4b473328f') }}</a-radio-button>
       </a-radio-group>
@@ -26,16 +20,16 @@
             <div class="mode-block" :class="{ 'mode-on': globalForm.enabled }">
               <div class="mode-block-head">
                 <span class="mode-name">{{ translate('ui.m_47a6434fe7b6') }} <a-tag color="blue">global</a-tag></span>
-                <a-switch v-model:checked="globalForm.enabled" checked-children="开" un-checked-children="关" />
+                <a-switch :disabled="modeSaving || sourceChecking" v-model:checked="globalForm.enabled" :checked-children="translate('proxySafety.yes')" :un-checked-children="translate('proxySafety.no')" />
               </div>
-              <SrcPicker v-if="globalForm.enabled" :src="globalForm.source" :customs="customs" @update="(s:ProxySource)=>globalForm.source=s" />
+              <SrcPicker v-if="globalForm.enabled" data-testid="proxy-global-source" :disabled="modeSaving || sourceChecking" :src="globalForm.source" :customs="customs" @update="(s:ProxySource)=>chooseSource('global',s)" />
               <div class="hint">{{ translate('ui.m_c17ff8f56f02') }}</div>
             </div>
           </a-col>
           <a-col :xs="24" :md="12">
             <div class="mode-block mode-on">
               <div class="mode-block-head"><span class="mode-name">{{ translate('ui.m_7b026997bac4') }} <a-tag color="green">smart</a-tag></span></div>
-              <SrcPicker :src="smartForm.source" :customs="customs" @update="(s:ProxySource)=>smartForm.source=s" />
+              <SrcPicker data-testid="proxy-smart-source" :allow-direct="false" :disabled="modeSaving || sourceChecking" :src="smartForm.source" :customs="customs" @update="(s:ProxySource)=>chooseSource('smart',s)" />
               <div class="hint">{{ translate('ui.m_4737d54672e4') }}</div>
             </div>
           </a-col>
@@ -53,13 +47,13 @@
           <a-badge v-else status="error" text="运行中 · 代理不可用" />
         </a-space>
       </template>
-      <template #extra><a-button size="small" @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button></template>
+      <template #extra><a-button data-testid="proxy-refresh" :disabled="loading || modeSaving || sourceChecking" size="small" @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button></template>
       <!-- 出口 IP 大字对比（最直观的"代理生不生效"）-->
       <a-row :gutter="16" class="exit-row">
         <a-col :xs="24" :sm="8">
           <div class="exit-box" :class="exitBoxClass">
             <div class="exit-k">{{ translate('ui.m_c2d411a98923') }}</div>
-            <div class="exit-v">{{ status?.last_exit_ip || exitResult?.proxy_ip || exitResult?.direct_ip || '—' }}</div>
+            <div class="exit-v">{{ (exitResult?.proxied ? exitResult.proxy_ip : exitResult?.direct_ip) || '—' }}</div>
             <div class="exit-tag">
               <a-tag v-if="exitResult?.proxied" color="green">{{ translate('ui.m_00c682cdcc54') }}</a-tag>
               <a-tag v-else-if="exitProxyUnreachable" color="red">{{ translate('ui.m_2469998ac9e4') }}</a-tag>
@@ -71,14 +65,15 @@
           <a-descriptions :column="{ xs: 1, sm: 2 }" size="small" bordered>
             <a-descriptions-item :label="translate('ui.m_416baf7ad2a7')">
               <a-tag :color="status?.running ? 'success' : 'default'">{{ status?.running ? translate('ui.m_1f0eb99b7ed0') : translate('ui.m_62cdc8713bcf') }}</a-tag>
-              <span class="muted" style="font-size:12px">{{ translate('ui.m_19fdba1f7361') }}</span>
+              <span class="muted" style="font-size:12px">{{ translate(status?.container_mode ? 'proxySafety.containerManaged' : 'proxySafety.localManaged') }}</span>
             </a-descriptions-item>
             <a-descriptions-item :label="translate('ui.m_ccc148ea9788')">{{ status?.pid || '-' }}</a-descriptions-item>
             <a-descriptions-item :label="translate('ui.m_4696e67647af')">{{ status?.config?.active_profile_id || translate('ui.m_fdc1183b6810') }}</a-descriptions-item>
             <a-descriptions-item :label="translate('ui.m_c29326ab330d')"><a-typography-text :copyable="!!status?.proxy_url" :content="status?.proxy_url || '-'" /></a-descriptions-item>
             <a-descriptions-item :label="translate('ui.m_c9859a7f6cc3')" :span="2">
-              <a-tag :color="status?.last_health_ok ? 'success' : 'error'">{{ status?.last_health_ok ? translate('ui.m_296de0e31f8c') : translate('ui.m_428fb8bfeecf') }}</a-tag>
-              <span v-if="status?.last_health_check_time" style="color:#999;font-size:12px">{{ status?.last_health_check_time }}</span>
+              <a-tag v-if="!status?.running" color="default">{{ translate('proxySafety.unverified') }}</a-tag>
+              <a-tag v-else :color="status?.last_health_ok ? 'success' : 'error'">{{ status?.last_health_ok ? translate('ui.m_296de0e31f8c') : translate('ui.m_428fb8bfeecf') }}</a-tag>
+              <span v-if="status?.last_health_check_time && !kernelCheckResult" style="color:#999;font-size:12px">{{ status?.last_health_check_time }}</span>
               <span v-if="!status?.last_health_ok && status?.last_health_error" style="color:#cf1322">（{{ status?.last_health_error }}）</span>
             </a-descriptions-item>
           </a-descriptions>
@@ -131,9 +126,9 @@
     </a-card>
 
     <!-- ④ 代理源配置（全部折叠：自定义 / mihomo机场 / 公共代理 / 内核日志 / 基础配置） -->
-    <a-collapse class="page-card src-collapse">
+    <a-collapse v-model:activeKey="sourceSections" class="page-card src-collapse">
       <!-- 自定义代理 -->
-      <a-collapse-panel key="custom">
+      <a-collapse-panel data-guide="proxy-custom" key="custom">
         <template #header><span class="cp-h">{{ translate('ui.m_b5f943f6f042') }}</span><span class="cp-sub">{{ customs.length }} {{ translate('ui.m_0d9651ec92f7') }}</span></template>
         <template #extra><a-button size="small" type="primary" @click.stop="openCustom()">{{ translate('ui.m_0006d696d8e1') }}</a-button></template>
         <a-table :columns="customCols" :data-source="customs" :loading="customLoading" row-key="_id" :pagination="false" size="small">
@@ -156,7 +151,7 @@
       </a-collapse-panel>
 
       <!-- 内核代理（mihomo）：订阅导入 + YAML 上传 + 配置列表 + 代理组节点 + 内核基础配置，全并入此折叠 -->
-      <a-collapse-panel key="mihomo">
+      <a-collapse-panel data-guide="proxy-kernel" key="mihomo">
         <template #header><span class="cp-h">{{ translate('ui.m_7c140e4cb81e') }}</span><span class="cp-sub">{{ profiles.length }} {{ translate('ui.m_7dbe94dd5ac0') }}</span></template>
         <a-row :gutter="16">
           <a-col :xs="24" :lg="12">
@@ -231,7 +226,7 @@
       </a-collapse-panel>
 
       <!-- 公共代理（原公开抓取代理池） -->
-      <a-collapse-panel key="pool">
+      <a-collapse-panel data-guide="proxy-pool" key="pool">
         <template #header><span class="cp-h">{{ translate('ui.m_be7654e5e349') }}</span><span class="cp-sub">{{ poolStats?.alive ?? '-' }}/{{ poolStats?.total ?? '-' }} {{ translate('ui.m_3942cbf29122') }}</span></template>
         <template #extra>
           <a-space @click.stop>
@@ -301,7 +296,7 @@
       </a-collapse-panel>
 
       <!-- 内核日志 -->
-      <a-collapse-panel key="logs">
+      <a-collapse-panel data-guide="proxy-logs" key="logs">
         <template #header><span class="cp-h">{{ translate('ui.m_4fdb0cd045bf') }}</span></template>
         <template #extra><a-button size="small" @click.stop="loadLogs">{{ translate('ui.m_aee887434131') }}</a-button></template>
         <pre class="log-box">{{ logs || translate('ui.m_10fafbeaa7fd') }}</pre>
@@ -321,16 +316,18 @@
         <a-space><span>{{ translate('ui.m_f4f0ead1116b') }}</span><a-switch v-model:checked="customForm.enabled" /></a-space>
       </a-form>
     </a-modal>
-  </div>
+  </PageContainer>
 </template>
 <script setup lang="ts">
 import { t as translate } from '../../i18n'
 
-import { computed, onMounted, reactive, ref, h } from 'vue'
+import { computed, onMounted, onBeforeUnmount, reactive, ref, h } from 'vue'
 import { message, Modal, RadioGroup, RadioButton, Select } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
 import { proxyApi, type ProxyConfig, type ProxyProfile, type ProxyStatus, type ExitIpResult, type ProxyTraffic, type PoolProxy, type PoolStats, type PoolConfig, type CustomProxy, type ProxySource } from '../../api/proxy'
+import { useUnsavedGuard } from '../../composables/useUnsavedGuard'
 import ConfirmAction from '../../components/ConfirmAction.vue'
+import PageContainer from '../../layouts/PageContainer.vue'
 
 const profileCols = [
   { get title() { return translate('ui.m_11f8f3d952a7') }, dataIndex: 'name', key: 'name', ellipsis: true },
@@ -387,7 +384,7 @@ const dohText = ref('')
 const exitResult = ref<ExitIpResult | null>(null)
 // 代理不可达=网络异常：代理已启用(error 非"未启用")但探不到代理出口 IP
 const exitProxyUnreachable = computed(() => {
-  const r = exitResult.value; if (!r) return false
+  const r = exitResult.value; if (!r || r.platform_mode === 'direct') return false
   const err = String((r as { error?: string }).error || '')
   return !r.proxied && !r.proxy_ip && err !== '' && err !== 'proxy not enabled'
 })
@@ -418,132 +415,247 @@ const groupsCardOpen = ref<string[]>([])
 
 // —— 平台代理模式（4模式×3源，对齐设计）：本区配 global/smart 两个模式各绑哪个源 ——
 // global_mode_enabled=全局开关；global_source/smart_source={type:custom/subscription/pool, ref_id}
-const platformTop = ref<'direct' | 'proxy'>('direct')   // 顶层：直连(默认)/启用代理
+// Each save region owns its baseline. Refreshing status cannot erase a draft,
+// and saving one region must not mark the other region as saved.
+const platformTop = ref<'direct' | 'proxy'>('direct')
 const globalForm = reactive<{ enabled: boolean; source: ProxySource }>({ enabled: false, source: { type: 'subscription', ref_id: '' } })
 const smartForm = reactive<{ source: ProxySource }>({ source: { type: 'subscription', ref_id: '' } })
 const modeSaving = ref(false)
+const sourceChecking = ref(false)
+const sourceSections = ref<string[]>([])
 const customs = ref<CustomProxy[]>([])
 const customLoading = ref(false)
-// 内联「源选择器」：3源(自定义/机场/公共代理)单选 + 自定义时选具体条目
-const SrcPicker = (props: { src: ProxySource; customs: CustomProxy[] }, ctx: any) => {
+const savedMode = ref<string | null>(null)
+const savedCore = ref<string | null>(null)
+const savedPool = ref<string | null>(null)
+const savedImport = ref(JSON.stringify(importForm))
+const savedUpload = ref(JSON.stringify(uploadForm))
+let alive = true
+let probeController: AbortController | null = null
+let savedGeneration = 0
+function serializeMode() {
+  return JSON.stringify(platformTop.value === 'direct' ? { mode: 'direct' } : {
+    mode: 'proxy', global: { enabled: globalForm.enabled, source: globalForm.enabled ? globalForm.source : null }, smart: smartForm.source
+  })
+}
+function corePayload() {
+  return { http_port: form.http_port, socks_port: form.socks_port, mixed_port: form.mixed_port,
+    controller_port: form.controller_port, auto_select: form.auto_select, test_url: form.test_url,
+    health_check_url: form.health_check_url, health_check_interval: form.health_check_interval,
+    health_fail_threshold: form.health_fail_threshold, doh_endpoints: dohText.value }
+}
+const modeDirty = computed(() => savedMode.value !== null && savedMode.value !== serializeMode())
+const coreDirty = computed(() => savedCore.value !== null && savedCore.value !== JSON.stringify(corePayload()))
+function serializePool() { return JSON.stringify({ queries: poolCfg.queries, limit: poolCfg.limit }) }
+const poolDirty = computed(() => savedPool.value !== null && savedPool.value !== serializePool())
+const unsaved = useUnsavedGuard(() => JSON.stringify({
+  mode: modeDirty.value ? serializeMode() : null, core: coreDirty.value ? corePayload() : null,
+  pool: poolDirty.value ? serializePool() : null,
+  import: JSON.stringify(importForm) === savedImport.value ? null : importForm,
+  upload: JSON.stringify(uploadForm) === savedUpload.value ? null : uploadForm
+}))
+unsaved.markSaved()
+onBeforeUnmount(() => { alive = false; probeController?.abort() })
+
+function isSourceConfigured(src: ProxySource | undefined): boolean {
+  if (!src || !['custom', 'subscription', 'pool'].includes(src.type)) return false
+  return src.type === 'pool' || !!src.ref_id
+}
+function acceptMode(config: ProxyConfig) {
+  globalForm.enabled = !!config.global_mode_enabled
+  globalForm.source = { type: config.global_source?.type || 'subscription', ref_id: config.global_source?.ref_id || '' }
+  smartForm.source = { type: config.smart_source?.type || 'subscription', ref_id: config.smart_source?.ref_id || '' }
+  platformTop.value = globalForm.enabled || isSourceConfigured(smartForm.source) ? 'proxy' : 'direct'
+  savedMode.value = serializeMode()
+}
+function applyConfig(config: ProxyConfig, forceCore = false) {
+  if (forceCore || !coreDirty.value) {
+    Object.assign(form, config)
+    const eps = config.doh_endpoints
+    dohText.value = Array.isArray(eps) ? eps.join('\n') : (eps || '')
+    savedCore.value = JSON.stringify(corePayload())
+  }
+  if (!modeDirty.value) acceptMode(config)
+}
+
+// The direct radio uses the existing empty-subscription wire representation.
+// Selecting a kernel is explicit, with an active profile ID; it is never the
+// same state as an unbound smart source. Custom entries are not auto-selected.
+const SrcPicker = (props: { src: ProxySource; customs: CustomProxy[]; allowDirect?: boolean; disabled?: boolean }, ctx: any) => {
   const src = props.src || { type: 'subscription', ref_id: '' }
   const enabledCustoms = (props.customs || []).filter(c => c.enabled)
+  const current = props.allowDirect && src.type === 'subscription' && !src.ref_id ? 'direct' : src.type
+  const radios = ['custom', 'subscription', 'pool']
+  if (props.allowDirect) radios.unshift('direct')
   const typeRadios = h(RadioGroup as any, {
-    value: src.type, size: 'small', buttonStyle: 'solid',
-    'onUpdate:value': (v: string) => ctx.emit('update', { type: v, ref_id: v === 'custom' ? (src.ref_id || (enabledCustoms[0]?._id || '')) : '' })
-  }, () => [
-    h(RadioButton as any, { value: 'custom' }, () => '🧩 自定义'),
-    h(RadioButton as any, { value: 'subscription' }, () => '✈️ 内核代理'),
-    h(RadioButton as any, { value: 'pool' }, () => '🌐 公共代理')
-  ])
+    value: current, size: 'small', buttonStyle: 'solid', disabled: props.disabled,
+    'onUpdate:value': (v: string) => ctx.emit('update', v === 'direct' ? { type: 'subscription', ref_id: '' } : {
+      type: v, ref_id: v === 'subscription' ? (status.value?.config?.active_profile_id || '@active') : v === 'custom' && src.type === 'custom' ? src.ref_id || '' : ''
+    })
+  }, () => radios.map(v => h(RadioButton as any, { value: v, 'data-testid': 'source-' + v }, () => translate('proxySafety.' + ({ subscription: 'kernel', custom: 'custom', pool: 'pool', direct: 'direct' } as Record<string,string>)[v]))))
   const children: any[] = [typeRadios]
   if (src.type === 'custom') {
     children.push(h(Select as any, {
-      value: src.ref_id || undefined, size: 'small', style: 'min-width:200px;margin-left:8px',
-      get placeholder() { return translate('ui.m_7dc5dd5bdff1') },
+      value: src.ref_id || undefined, size: 'small', allowClear: true, disabled: props.disabled,
+      style: { minWidth: '180px', maxWidth: '100%', marginLeft: '8px' },
+      placeholder: translate('ui.m_7dc5dd5bdff1'),
       options: enabledCustoms.map(c => ({ label: c.name + ' (' + c.url + ')', value: c._id })),
-      'onUpdate:value': (v: string) => ctx.emit('update', { type: 'custom', ref_id: v })
+      'onUpdate:value': (v: string | undefined) => ctx.emit('update', { type: 'custom', ref_id: v || '' })
     }))
-    if (!enabledCustoms.length) children.push(h('span', { class: 'hint', style: 'margin-left:8px' }, '无可用自定义代理，去下方新增'))
+    if (!enabledCustoms.length) children.push(h('span', { class: 'hint' }, translate('proxySafety.emptyCustomList')))
   }
   return h('div', { class: 'src-picker' }, children)
 }
-async function saveMode() {
-  // 直连模式：全局关闭；智能源也置直连(subscription空占位，实际直连时策略选smart会降级)。
-  if (platformTop.value === 'direct') {
-    modeSaving.value = true
-    try {
-      await proxyApi.saveConfig({ global_mode_enabled: false, global_source: { type: 'subscription', ref_id: '' }, smart_source: { type: 'subscription', ref_id: '' } })
-      message.success(translate('ui.m_1573747cb18b'))
-    } catch (e) { message.error((e as Error).message) } finally { modeSaving.value = false }
-    return
-  }
-  // 启用代理：先做前置结构性校验（即时提示，不必等后端往返）——只查源是否为空，不探可达性。
-  const preErr = validateSourceLocal(globalForm.enabled ? globalForm.source : null, '全局代理')
-    || (isSourceConfigured(smartForm.source) ? validateSourceLocal(smartForm.source, '智能代理') : '')
-  if (preErr) { message.error(preErr); return }
-  modeSaving.value = true
-  try {
-    const res: any = await proxyApi.saveConfig({
-      global_mode_enabled: globalForm.enabled,
-      global_source: globalForm.source,
-      smart_source: smartForm.source
-    })
-    // 后端校验失败返回 {error}（HTTP 200，非异常），必须显式检查——否则空源会误报"已保存"
-    if (res && res.error) { message.error(res.error); return }
-    message.success(translate('ui.m_28b27652c0f3'))
-    // 需求3：勾选启用代理后立即探测一次出口，失效则明确提示（不等定时的10分钟）
-    verifyAfterSave()
-  } catch (e) { message.error((e as Error).message) } finally { modeSaving.value = false }
-}
 
-// 与后端 _source_configured 逐字一致：subscription 空 ref_id=默认占位=未配置(直连)
-function isSourceConfigured(src: ProxySource): boolean {
-  if (!src || !src.type) return false
-  if (src.type === 'subscription' && !src.ref_id) return false
-  if (src.type === 'custom' && !src.ref_id) return false
-  return true
+SrcPicker.props = ['src', 'customs', 'allowDirect', 'disabled']
+
+type SourceCheck = Awaited<ReturnType<typeof proxyApi.validateSource>>
+const kernelCheckResult = ref<SourceCheck>()
+function showCustomRequired(reason?: string) {
+  Modal.warning({ title: translate('proxySafety.emptyCustom'), content: reason || translate('proxySafety.chooseCustom'), okText: translate('proxySafety.acknowledge') })
 }
-// 前端源「结构性为空」前置校验（与后端 _validate_source_bound 对齐，只查空不探可达）。返回错误串（空=通过）。
+function validationReason(check: SourceCheck) {
+  const key: Record<string, string> = { unconfigured: 'unconfigured', kernel_stopped: 'kernelStopped', probe_failed: 'probeFailed', probe_timeout: 'probeTimeout', invalid: 'invalid' }
+  return key[check.reason_code] ? translate('proxySafety.' + key[check.reason_code]) : check.reason || translate('proxySafety.probeFailed')
+}
+function kernelUnavailable(check: SourceCheck) {
+  platformTop.value = 'direct'
+  globalForm.enabled = false
+  smartForm.source = { type: 'subscription', ref_id: '' }
+  const label = (value: boolean | null | undefined) => translate('proxySafety.' + (value === true ? 'yes' : value === false ? 'no' : 'unknown'))
+  Modal.confirm({
+    title: translate('proxySafety.kernelFailed'),
+    content: h('div', { 'data-testid': 'kernel-validation-details' }, [
+      h('p', validationReason(check)),
+      h('p', translate('proxySafety.running') + ': ' + label(check.running) + ' · ' + translate('proxySafety.profile') + ': ' + label(check.profile_configured)),
+      h('p', translate('proxySafety.implementation')), h('p', translate('proxySafety.unchanged'))
+    ]),
+    okText: translate('proxySafety.openKernel'), cancelText: translate('proxySafety.acknowledge'),
+    onOk: () => { sourceSections.value = [...new Set([...sourceSections.value, 'mihomo'])]; requestAnimationFrame(() => document.querySelector('[data-guide="proxy-kernel"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
+  })
+}
+async function checkKernel(src: ProxySource): Promise<SourceCheck> {
+  probeController?.abort()
+  probeController = new AbortController()
+  try {
+    const result = await proxyApi.validateSource(src, probeController.signal)
+    if (alive && status.value) {
+      kernelCheckResult.value = result
+      if (typeof result.running === 'boolean') status.value.running = result.running
+      status.value.last_health_ok = result.ok
+      status.value.last_health_error = result.ok ? '' : validationReason(result)
+    }
+    return result
+  }
+  catch (error) {
+    return { ok: false, reason_code: 'probe_timeout', reason: translate('proxySafety.probeTimeout') }
+  }
+}
+async function chooseSource(region: 'global' | 'smart', src: ProxySource) {
+  if (modeSaving.value || sourceChecking.value) return
+  const destination = region === 'global' ? globalForm : smartForm
+  destination.source = { ...src }
+  if (src.type === 'custom' && !src.ref_id) { showCustomRequired(); return }
+  if (src.type !== 'subscription' || !src.ref_id) return
+  sourceChecking.value = true
+  try {
+    const result = await checkKernel(src)
+    if (!alive) return
+    if (!result.ok) kernelUnavailable(result)
+    else destination.source = { type: 'subscription', ref_id: result.ref_id || status.value?.config?.active_profile_id || src.ref_id }
+  } finally { sourceChecking.value = false }
+}
 function validateSourceLocal(src: ProxySource | null, label: string): string {
-  if (!src || !src.type) return ''
+  if (!src) return ''
   if (src.type === 'custom') {
-    if (!src.ref_id) return translate('ui.m_883514a84b43', { p0: (label) })
-    if (!customs.value.some(c => c._id === src.ref_id && c.enabled)) return translate('ui.m_d21bf721faea', { p0: (label) })
-    return ''
+    if (!src.ref_id) return translate('proxySafety.chooseCustom')
+    if (!customs.value.some(c => c._id === src.ref_id && c.enabled)) return translate('ui.m_d21bf721faea', { p0: label })
   }
   if (src.type === 'pool') {
     const enabled = Number(poolStats.value?.enabled ?? 0), alive = Number(poolStats.value?.alive ?? 0)
-    if (!(enabled > 0 && alive > 0)) return translate('ui.m_2536533d1eba', { p0: (label), p1: (enabled), p2: (alive) })
-    return ''
-  }
-  if (src.type === 'subscription') {
-    if (!(status.value?.config as any)?.active_profile_id) return translate('ui.m_d2ddec937f55', { p0: (label) })
-    return ''
+    if (!(enabled > 0 && alive > 0)) return translate('ui.m_2536533d1eba', { p0: label, p1: enabled, p2: alive })
   }
   return ''
 }
-
-// 保存代理模式后主动探测出口可达性并提示（勾选时测失效）
-async function verifyAfterSave() {
+async function saveMode() {
+  if (modeSaving.value || sourceChecking.value || !status.value) return
+  const direct = platformTop.value === 'direct'
+  const smart = { ...smartForm.source }
+  const global = { ...globalForm.source }
+  if (!direct) {
+    const preErr = validateSourceLocal(globalForm.enabled ? global : null, translate('ui.m_47a6434fe7b6')) || validateSourceLocal(smart, translate('ui.m_7b026997bac4'))
+    if (preErr) { Modal.warning({ title: translate('proxySafety.invalid'), content: preErr }); return }
+    if (!globalForm.enabled && !isSourceConfigured(smart)) { Modal.warning({ title: translate('proxySafety.invalid'), content: translate('proxySafety.noSource') }); return }
+  }
+  modeSaving.value = true
   try {
-    const r = await proxyApi.exitIp()
-    exitResult.value = r
-    if (r.proxied) message.success(translate('ui.m_906deffe1d59', { p0: (r.proxy_ip) }))
-    else if (r.error && r.error !== 'proxy not enabled' && !r.proxy_ip) message.warning(translate('ui.m_ab3ebd8b7e95'))
-  } catch { /* 探测失败不阻断保存 */ }
+    if (!direct) {
+      const kernel = globalForm.enabled && global.type === 'subscription' ? global : smart.type === 'subscription' && !!smart.ref_id ? smart : null
+      if (kernel) {
+        const checked = await checkKernel(kernel)
+        if (!alive) return
+        if (!checked.ok) { kernelUnavailable(checked); return }
+        if (global.type === 'subscription' && globalForm.enabled) global.ref_id = checked.ref_id || status.value.config.active_profile_id || global.ref_id
+        if (smart.type === 'subscription' && smart.ref_id) smart.ref_id = checked.ref_id || status.value.config.active_profile_id || smart.ref_id
+      }
+    }
+    const empty: ProxySource = { type: 'subscription', ref_id: '' }
+    const config = await proxyApi.saveConfig({ enabled: true, global_mode_enabled: direct ? false : globalForm.enabled,
+      global_source: direct ? empty : global, smart_source: direct ? empty : smart })
+    if (!config || (config as any).error) throw new Error((config as any)?.error || translate('proxySafety.invalid'))
+    if (!alive) return
+    acceptMode(config)
+    status.value = { ...status.value!, config }
+    message.success(translate(direct ? 'ui.m_1573747cb18b' : 'ui.m_28b27652c0f3'))
+    const generation = ++savedGeneration
+    if (!direct) verifyAfterSave(generation)
+    else exitResult.value = null
+  } catch (error) {
+    if (alive) {
+      const reason = error instanceof Error ? error.message : String(error)
+      if (!direct && ((globalForm.enabled && global.type === 'subscription') || (smart.type === 'subscription' && !!smart.ref_id))) {
+        kernelUnavailable({ ok: false, reason_code: '', reason })
+      } else Modal.warning({ title: translate('proxySafety.invalid'), content: reason })
+    }
+  } finally { modeSaving.value = false }
 }
-
-function applyConfig(config: ProxyConfig) {
-  Object.assign(form, config)
-  const eps = config.doh_endpoints
-  dohText.value = Array.isArray(eps) ? eps.join('\n') : (eps || '')
+async function verifyAfterSave(generation: number) {
+  try {
+    const result = await proxyApi.exitIp(true)
+    if (!alive || generation !== savedGeneration) return
+    exitResult.value = result
+    if (result.proxied) message.success(translate('ui.m_906deffe1d59', { p0: result.proxy_ip }))
+    else if (result.error && result.error !== 'proxy not enabled') message.warning(translate('proxySafety.probeFailed'))
+  } catch { /* Optional exit display does not turn a saved configuration into a failed write. */ }
 }
 async function withLoading(fn: () => Promise<void>) {
+  if (loading.value) return
   loading.value = true
   try { await fn() } catch (error) { message.error(error instanceof Error ? error.message : String(error)) } finally { loading.value = false }
 }
-async function loadStatus() { status.value = await proxyApi.status(); applyConfig(status.value.config) }
-async function loadTraffic() { try { traffic.value = await proxyApi.traffic() } catch { /* 降级 */ } }
+async function loadStatus() { const fresh = await proxyApi.status(); if (!alive) return; status.value = fresh; applyConfig(fresh.config) }
+async function loadTraffic() { try { traffic.value = await proxyApi.traffic() } catch { /* Degraded display only. */ } }
 async function resetTraffic(scope: string, key: string) {
-  try { traffic.value = await proxyApi.resetTraffic(scope, key); message.success(translate('ui.m_9790c6e72a16')) } catch (e) { message.error((e as Error).message || translate('ui.m_660fb1b057cd')) }
+  try { traffic.value = await proxyApi.resetTraffic(scope, key); message.success(translate('ui.m_9790c6e72a16')) } catch (error) { message.error(String(error)) }
 }
 async function resetTrafficAll() {
-  try { traffic.value = await proxyApi.resetTraffic(); message.success(translate('ui.m_ac1f7acd8cb3')) } catch (e) { message.error((e as Error).message || translate('ui.m_660fb1b057cd')) }
+  try { traffic.value = await proxyApi.resetTraffic(); message.success(translate('ui.m_ac1f7acd8cb3')) } catch (error) { message.error(String(error)) }
 }
 async function loadProfiles() { profiles.value = (await proxyApi.profiles()).items || [] }
 async function loadProxies() { proxies.value = (await proxyApi.proxies()).proxies || {} }
 async function loadLogs() { logs.value = (await proxyApi.logs()).logs || '' }
 async function loadCustoms() {
   customLoading.value = true
-  try { customs.value = (await proxyApi.customList()).items || [] } catch { /* 降级空 */ } finally { customLoading.value = false }
+  try { customs.value = (await proxyApi.customList()).items || [] } catch { /* Keep an already loaded list on transient failure. */ } finally { customLoading.value = false }
 }
 async function checkExitIp() {
+  if (exitLoading.value) return
   exitLoading.value = true
   try {
-    exitResult.value = await proxyApi.exitIp()
-    if (exitResult.value.proxied) message.success(translate('ui.m_906deffe1d59', { p0: (exitResult.value.proxy_ip) }))
-    else message.warning(translate('ui.m_eb682235349c'))
+    const generation = savedGeneration
+    const result = await proxyApi.exitIp(true)
+    if (!alive || generation !== savedGeneration) return
+    exitResult.value = result
     await loadStatus()
   } catch (error) { message.error(error instanceof Error ? error.message : String(error)) } finally { exitLoading.value = false }
 }
@@ -590,16 +702,7 @@ async function loadAll() {
     await loadTraffic()
     await loadPool().catch(() => { /* 代理池失败不影响主流程 */ })
     await loadCustoms()
-    // 从 status.config 回填平台模式（global_mode_enabled + global_source/smart_source）
-    const cfg = status.value?.config as any
-    if (cfg) {
-      globalForm.enabled = !!cfg.global_mode_enabled
-      if (cfg.global_source && cfg.global_source.type) globalForm.source = { type: cfg.global_source.type, ref_id: cfg.global_source.ref_id || '' }
-      if (cfg.smart_source && cfg.smart_source.type) smartForm.source = { type: cfg.smart_source.type, ref_id: cfg.smart_source.ref_id || '' }
-      // 顶层：全局开 or 智能绑了非默认源 → 判定为"启用代理"；否则直连
-      const smartConfigured = cfg.smart_source && cfg.smart_source.type && !(cfg.smart_source.type === 'subscription' && !cfg.smart_source.ref_id)
-      platformTop.value = (cfg.global_mode_enabled || smartConfigured) ? 'proxy' : 'direct'
-    }
+
   })
 }
 
@@ -612,8 +715,11 @@ async function loadPool() {
   poolItems.value = list.items || []
   poolTotal.value = list.total || 0
   poolStats.value = st
-  poolCfg.queries = cfg.queries || []
-  poolCfg.limit = cfg.limit || 100
+  if (!poolDirty.value) {
+    poolCfg.queries = cfg.queries || []
+    poolCfg.limit = cfg.limit || 100
+    savedPool.value = serializePool()
+  }
 }
 async function crawlPool() {
   poolCrawling.value = true
@@ -640,13 +746,13 @@ async function deletePool(ids: string[]) {
   try { await proxyApi.poolDelete(ids); poolSel.value = []; message.success(translate('ui.m_077a6d37719a')); await loadPool() } catch (e) { message.error((e as Error).message || translate('ui.m_c228558cf257')) }
 }
 async function savePoolCfg() {
-  try { await proxyApi.poolSaveConfig({ queries: poolCfg.queries, limit: poolCfg.limit }); message.success(translate('ui.m_2b68cb9b659a')) } catch (e) { message.error((e as Error).message || translate('ui.m_6309a3bb5ba4')) }
+  try { await proxyApi.poolSaveConfig({ queries: poolCfg.queries, limit: poolCfg.limit }); savedPool.value = serializePool(); message.success(translate('ui.m_2b68cb9b659a')) } catch (e) { message.error((e as Error).message || translate('ui.m_6309a3bb5ba4')) }
 }
 async function saveConfig() {
   await withLoading(async () => {
     // enabled 恒 true：mihomo 独立容器常驻，内核级 enabled 开关已删（是否走代理由顶层总开关+源绑定决定）
-    const payload = { ...form, enabled: true, doh_endpoints: dohText.value }
-    applyConfig(await proxyApi.saveConfig(payload))
+    const payload = { ...corePayload(), enabled: true }
+    applyConfig(await proxyApi.saveConfig(payload), true)
     message.success(translate('ui.m_985c5a8ccded'))
     await loadStatus()
   })
@@ -656,14 +762,14 @@ async function importUrl() {
   if (!importForm.url) return message.warning(translate('ui.m_6011ba08d5c2'))
   await withLoading(async () => {
     await proxyApi.importUrl(importForm.name, importForm.url)
-    message.success(translate('ui.m_9aa5b676ae86')); importForm.url = ''; await loadProfiles()
+    message.success(translate('ui.m_9aa5b676ae86')); importForm.url = ''; savedImport.value = JSON.stringify(importForm); await loadProfiles()
   })
 }
 async function uploadProfile() {
   if (!uploadForm.content) return message.warning(translate('ui.m_f082c4f9e125'))
   await withLoading(async () => {
     await proxyApi.upload(uploadForm.name, uploadForm.content)
-    message.success(translate('ui.m_3740b6bd4a5b')); uploadForm.content = ''; await loadProfiles()
+    message.success(translate('ui.m_3740b6bd4a5b')); uploadForm.content = ''; savedUpload.value = JSON.stringify(uploadForm); await loadProfiles()
   })
 }
 function beforeYamlUpload(file: File) {
@@ -734,6 +840,14 @@ onMounted(loadAll)
 .sub-title { font-weight: 500; margin-bottom: 8px; }
 .log-box { background: #1e1e1e; color: #d4d4d4; border-radius: 8px; padding: 12px; max-height: 400px; overflow: auto; font-size: 12px; margin: 0; white-space: pre-wrap; word-break: break-all; }
 .full { width: 100%; }
+/* A translated action group may be wider than its collapse header. Give it
+   its own row instead of forcing the page itself to scroll horizontally. */
+@media(max-width:768px) {
+ .src-collapse :deep(.ant-collapse-header) { flex-wrap:wrap; row-gap:8px; }
+ .src-collapse :deep(.ant-collapse-header-text) { min-width:0; flex:1 1 120px; }
+ .src-collapse :deep(.ant-collapse-extra) { flex:1 1 100%; max-width:100%; margin-inline-start:0; }
+ .src-collapse :deep(.ant-collapse-extra .ant-space) { display:flex; flex-wrap:wrap; justify-content:flex-end; max-width:100%; }
+}
 </style>
 
 

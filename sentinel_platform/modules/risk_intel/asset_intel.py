@@ -516,12 +516,12 @@ def list_collection(collection: str, page: int = 1, size: int = 10, **filters: A
     for f in ("unit", "system_id", "pentest_status", "asset_key"):
         if filters.get(f):
             q[f] = filters[f]
-    # #4 报告编辑分栏：task 精确匹配；session 用 $ne task（兼容存量会话报告无 report_type 字段）
+    # Legacy session reports may have no report_type; finding is an independent level.
     rt = filters.get("report_type")
-    if rt == "task":
-        q["report_type"] = "task"
+    if rt in ("task", "finding"):
+        q["report_type"] = rt
     elif rt == "session":
-        q["report_type"] = {"$ne": "task"}
+        q["report_type"] = {"$nin": ["task", "finding"]}
     if filters.get("keyword"):
         kw = {"$regex": re.escape(filters["keyword"]), "$options": "i"}
         q["$or"] = [{"key": kw}, {"system_name": kw}, {"hostname": kw}, {"name": kw}]
@@ -1880,14 +1880,24 @@ class IntelServiceImpl:
         return rt.learn_template(name, origin_path, source_filename, created_by,
                                  provider_id=provider_id, need_review=need_review, sync=sync)
 
+    def save_manual_template(self, payload: Dict[str, Any], created_by: str = "") -> Dict[str, Any]:
+        from .report_manual import save
+        return save(payload, created_by=created_by)
+
+    def word_template(self, action: str, **kwargs: Any) -> Dict[str, Any]:
+        from . import report_word
+        operations={'upload':report_word.upload,'view':report_word.view,'save':report_word.save,'discard':report_word.discard}
+        if action not in operations:raise ValueError('Invalid Word template operation')
+        return operations[action](**kwargs)
+
     def refine_template(self, template_id: str, provider_id: str = "",
                         feedback: str = "") -> Dict[str, Any]:
         from . import report_template as rt
         return rt.refine_template(template_id, provider_id=provider_id, feedback=feedback)
 
-    def confirm_template(self, template_id: str) -> Dict[str, Any]:
+    def confirm_template(self, template_id: str, revision=None) -> Dict[str, Any]:
         from . import report_template as rt
-        return rt.confirm_template(template_id)
+        return rt.confirm_template(template_id,revision=revision)
 
     def template_diff(self, template_id: str) -> Dict[str, Any]:
         from . import report_template as rt

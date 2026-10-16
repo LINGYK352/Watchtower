@@ -2,30 +2,37 @@
   <PageContainer :title="translate('ui.m_de6811e73d40')" kicker="Changelog" :description="translate('ui.m_288369648f65')">
     <a-card class="page-card">
       <a-spin v-if="loading" :tip="translate('ui.m_4927a53bcc88')" style="display:block;padding:24px 0" />
+      <template v-else>
+      <a-tabs v-model:active-key="kind" data-testid="changelog-tabs"><a-tab-pane key="system" :tab="translate('revision17.systemUpdates')" /><a-tab-pane key="patch" :tab="translate('revision17.patchUpdates')" /></a-tabs>
+      <a-empty v-if="!visibleLogs.length" :description="translate('revision17.noLogs')" />
       <a-timeline v-else class="cl-timeline">
-        <a-timeline-item v-for="(log, i) in logs" :key="log.ver" :color="i === 0 ? 'blue' : 'gray'">
+        <a-timeline-item v-for="(log, i) in visibleLogs" :key="log.ver" :color="i === 0 ? 'blue' : 'gray'">
           <div class="cl-head">
-            <a-tag :color="i === 0 ? 'blue' : 'default'">{{ log.ver }}</a-tag>
+            <a-tag :color="i === 0 ? 'blue' : 'default'">{{ displayVersion(log.ver) }}</a-tag>
             <span class="cl-date">{{ log.date }}</span>
             <a-tag v-if="i === 0" color="green" style="margin-left:4px">{{ translate('ui.m_cb62ebd689ee') }}</a-tag>
           </div>
           <div class="cl-summary">{{ log.summary }}</div>
         </a-timeline-item>
       </a-timeline>
+      </template>
     </a-card>
   </PageContainer>
 </template>
 
 <script setup lang="ts">
+import { displayVersion, isPatchVersion } from "../../config/releaseVersion"
 import { t as translate } from '../../i18n'
 
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import { request } from '../../api/request'
 
 interface LogItem { ver: string; date: string; summary: string }
 const logs = ref<LogItem[]>([])
 const loading = ref(true)
+const kind=ref('system')
+const visibleLogs=computed(()=>logs.value.filter(log=>isPatchVersion(log.ver)===(kind.value==='patch')))
 
 // 更新日志改为读后端 /api/about/changelog（后端优先读本地 changelog.json，权威且随版本部署即最新）——
 // 根治「前端硬编码列表卡在旧版本」。接口失败时降级用本地内置 fallback（仅精简近版，保证离线可看）。

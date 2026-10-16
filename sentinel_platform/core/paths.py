@@ -55,3 +55,9 @@ def template_dir() -> str:
     except Exception:
         pass
     return os.path.join(project_root(), "template")
+
+
+def model_skill_dir() -> str:
+    """Shared portable storage convention; state remains outside update payloads."""
+    native = os.environ.get('SENTINEL_NATIVE_ROOT')
+    return os.path.join(native, 'state', 'model-skills') if native else os.path.join(project_root(), 'shared', 'model-skills')

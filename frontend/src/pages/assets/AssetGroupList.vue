@@ -13,6 +13,7 @@
           <template v-else-if="column.key === 'action'">
             <a-space size="small">
               <a-button type="link" size="small" @click="router.push(`/asset-groups/${record._id}`)">{{ translate('ui.m_f88182fcd575') }}</a-button>
+              <a-button v-if="hasPerm('task:write')" type="link" size="small" data-testid="group-create-task" @click="router.push({ path: '/tasks/create', query: { asset_scope: String(record._id) } })">{{ translate('groupTask.action') }}</a-button>
               <ConfirmAction danger :title="translate('ui.m_96b002a9670d')" @confirm="remove(String(record._id))">{{ translate('ui.m_2f9daa828907') }}</ConfirmAction>
             </a-space>
           </template>
@@ -46,6 +47,7 @@ import PageContainer from '../../layouts/PageContainer.vue'
 import SearchBar from '../../components/SearchBar.vue'
 import CopyText from '../../components/CopyText.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
+import { hasPerm } from '../../api/request'
 import { assetScopeApi } from '../../api/scope'
 import type { RowRecord } from '../../api/types'
 
@@ -60,7 +62,7 @@ const columns = [
   { get title() { return translate('ui.m_0d12cbd6562b') }, key: 'scope_type', width: 90 },
   { get title() { return translate('ui.m_ae72b532f4b8') }, key: 'scope', ellipsis: true },
   { get title() { return translate('ui.m_174ec5a4ab6a') }, dataIndex: 'black_scope', key: 'black_scope', ellipsis: true },
-  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 130 }
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 270 }
 ]
 const pagination = computed(() => ({ current: query.page, pageSize: query.size, total: total.value, showSizeChanger: true, showTotal: (t: number) => translate('ui.m_f292bcb94fe6', { p0: (t) }) }))
 

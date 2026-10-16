@@ -20,6 +20,12 @@ export interface RetentionItem {
 export type LogRetention = Record<string, RetentionItem>
 
 export interface GuardLogItem {
+  request_preview_b64?:string
+  response_preview_b64?:string
+  truncation_reason?:string
+  capture_note?:string
+  source?:string
+  status_code?:number
   _id: string
   method: string
   url: string
@@ -32,6 +38,7 @@ export interface GuardLogItem {
   save_date: string
 }
 export interface GuardLogStat {
+  retention_days?:number
   total: number
   blocked: number
   allowed: number
@@ -49,11 +56,13 @@ export const logMonitorApi = {
   setRetention: (updates: Record<string, number>) =>
     request<LogRetention>(`${base}/retention/`, { method: 'POST', body: JSON.stringify(updates) }),
   guardStat: () => request<GuardLogStat>(`${base}/guard/stat/`),
-  guardList: (q: { allow?: string; mode?: string; level?: string; page?: number; size?: number } = {}) => {
+  guardList: (q: { session_id?:string; allow?: string; mode?: string; level?: string; page?: number; size?: number } = {}) => {
     const p = new URLSearchParams()
+    p.set('metadata_only','1')
     Object.entries(q).forEach(([k, v]) => { if (v !== undefined && v !== '') p.set(k, String(v)) })
     return request<{ items: GuardLogItem[]; total: number }>(`${base}/guard/?${p.toString()}`)
   },
-  setGuardSize: (size_mb: number) =>
-    request<{ size_mb: number }>(`${base}/guard/size/`, { method: 'POST', body: JSON.stringify({ size_mb }) })
+  trafficInteraction: (id:string)=>request<GuardLogItem>(`${base}/guard/${encodeURIComponent(id)}/`),
+  setGuardSize: (size_mb: number, retention_days = 30) =>
+    request<{ size_mb: number }>(`${base}/guard/size/`, { method: 'POST', body: JSON.stringify({ size_mb,retention_days }) })
 }

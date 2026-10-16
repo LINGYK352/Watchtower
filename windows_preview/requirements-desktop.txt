@@ -1,0 +1,2 @@
+pywebview==6.2.1
+# Reuse the isolated core build dependencies; WebView2 runtime is required on Windows.

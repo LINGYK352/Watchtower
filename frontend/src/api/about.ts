@@ -39,6 +39,10 @@ export function getProgress() {
   return request<any>('/api/about/progress')
 }
 
+export interface UpdateStorageResult{supported:boolean;platform?:string;logical_bytes?:Record<string,number>;cleanable_logical_bytes?:number;blocked?:string;retention_days?:number;cache_budget_bytes?:number;protected_backups?:number;disk_free_bytes?:number}
+export function getUpdateStorage(){return request<UpdateStorageResult>('/api/about/storage')}
+export function cleanupUpdateStorage(){return request<{cleaned:boolean;blocked?:string;removed_logical_bytes:number;failures?:number}>('/api/about/storage',{method:'POST',body:JSON.stringify({confirmed:true})})}
+
 /** 从分发服务器获取更新日志 */
 export function getChangelog() {
   return request<any[]>('/api/about/changelog')
@@ -125,6 +129,6 @@ export interface Announcement {
 }
 
 /** 生效中的通告（转发分发系统，失败降级空列表）。供通告栏 / 弹窗消费。 */
-export function getAnnouncements() {
-  return request<{ announcements: Announcement[] }>('/api/about/announcements')
+export function getAnnouncements(signal?: AbortSignal) {
+  return request<{ announcements: Announcement[]; fetch_failed?: boolean; unsupported?: boolean; retry_after?: number }>('/api/about/announcements',{signal})
 }

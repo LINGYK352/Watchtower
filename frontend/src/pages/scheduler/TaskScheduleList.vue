@@ -25,16 +25,13 @@
       </a-table>
     </a-card>
 
-    <a-modal v-model:open="addOpen" :title="translate('ui.m_4bf0c42c2d65')" @ok="submitAdd" :confirm-loading="adding" width="560px">
-      <a-form layout="vertical">
+    <a-modal  :open="addOpen" :title="translate('ui.m_4bf0c42c2d65')" :footer="null" @cancel="cancelAdd" :mask-closable="!adding" :keyboard="!adding" width="640px">
+      <a-steps :current="addStep" size="small" :items="[{title:translate('revision24.scheduleBasics')},{title:translate('revision24.scheduleTargets')}]" style="margin-bottom:22px" /><a-form layout="vertical"><section v-show="addStep===0" data-testid="schedule-step-basics">
         <a-form-item :label="translate('ui.m_d44e9b3d3b31')" required><a-input v-model:value="form.name" :placeholder="translate('ui.m_95ce00d503eb')" /></a-form-item>
-        <a-form-item :label="translate('ui.m_57060c88a36b')" required><a-textarea v-model:value="form.target" :rows="2" :placeholder="translate('ui.m_64c5e550a0f8')" /></a-form-item>
-        <a-form-item :label="translate('ui.m_93877a087498')" required>
-          <a-radio-group v-model:value="form.task_tag">
-            <a-radio value="task">{{ translate('ui.m_60d1ef084057') }}</a-radio>
-            <a-radio value="risk_cruising">{{ translate('ui.m_7dc02b74d145') }}</a-radio>
-          </a-radio-group>
-        </a-form-item>
+        <a-form-item :label="translate('scheduleAI.preferred')"><a-select v-model:value="form.pentest_provider_id" :loading="modelsLoading" data-testid="schedule-preferred-model"><a-select-option value="">{{ translate('scheduleAI.defaultModel') }}</a-select-option><a-select-option v-for="p in providers" :key="p._id" :value="p._id">{{ p.name }} · {{ p.model }}</a-select-option></a-select></a-form-item>
+        <a-form-item :label="translate('scheduleAI.backup')"><a-select v-model:value="form.pentest_backup_provider_id" :loading="modelsLoading"  data-testid="schedule-backup-model"><a-select-option value="">{{ translate('scheduleAI.noBackup') }}</a-select-option><a-select-option v-for="p in backupModels" :key="p._id" :value="p._id">{{ p.name }} · {{ p.model }}</a-select-option></a-select></a-form-item>
+        <a-form-item><a-checkbox v-model:checked="form.observer_enabled" data-testid="schedule-observer-enabled">{{ translate('scheduleAI.observer') }}</a-checkbox><p class="schedule-ai-note">{{ translate('scheduleAI.policyNote') }}</p></a-form-item>
+        <a-form-item v-if="form.observer_enabled" :label="translate('scheduleAI.observerModel')"><a-select v-model:value="form.observer_provider_id" data-testid="schedule-observer-model"><a-select-option value="">{{ translate('scheduleAI.defaultModel') }}</a-select-option><a-select-option v-for="p in providers" :key="p._id" :value="p._id">{{ p.name }} · {{ p.model }}</a-select-option></a-select></a-form-item>
         <a-form-item :label="translate('ui.m_9c8eb75c7e58')" required>
           <a-select v-model:value="form.policy_id" :options="policyOptions" :placeholder="translate('ui.m_62ca1e390e3a')" show-search :filter-option="filterPolicy" />
         </a-form-item>
@@ -50,7 +47,12 @@
         <a-form-item v-else :label="translate('ui.m_c9657db58a07')" required>
           <a-input v-model:value="form.cron" :placeholder="translate('ui.m_5eee6fea4c91')" />
         </a-form-item>
-      </a-form>
+      </section><section v-show="addStep===1" data-testid="schedule-step-targets">        <a-form-item :label="translate('scheduleAI.assetGroup')">
+          <a-select v-model:value="form.target_scope_id" :options="groupOptions" :loading="groupsLoading" show-search allow-clear option-filter-prop="label" @change="selectGroup" data-testid="schedule-asset-group" />
+          <p class="schedule-ai-note">{{ translate('revision24.groupFillNote') }}</p><a-alert v-if="groupError" type="warning" :message="groupError" />
+        </a-form-item>
+        <a-form-item :label="translate('ui.m_57060c88a36b')" required><a-textarea v-model:value="form.target" :rows="5" :placeholder="translate('ui.m_64c5e550a0f8')" data-testid="schedule-target-preview" /></a-form-item>
+</section></a-form><div class="schedule-steps-actions"><a-button v-if="addStep" :disabled="adding" @click="addStep=0">{{ translate('revision24.previous') }}</a-button><a-button v-else @click="cancelAdd">{{ translate('ui.m_120e7cea1231') }}</a-button><a-button v-if="!addStep" type="primary" @click="nextStep" data-testid="schedule-next">{{ translate('revision24.next') }}</a-button><a-button v-else type="primary" :loading="adding" @click="submitAdd" data-testid="schedule-submit">{{ translate('ui.m_bcc5da2cf6c1') }}</a-button></div>
     </a-modal>
   </PageContainer>
 </template>
@@ -58,7 +60,7 @@
 <script setup lang="ts">
 import { t as translate } from '../../i18n'
 
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import PageContainer from '../../layouts/PageContainer.vue'
 import SearchBar from '../../components/SearchBar.vue'
@@ -67,6 +69,8 @@ import CopyText from '../../components/CopyText.vue'
 import ConfirmAction from '../../components/ConfirmAction.vue'
 import { taskScheduleApi } from '../../api/taskSchedule'
 import { policyApi } from '../../api/policy'
+import { assetScopeApi } from '../../api/scope'
+import { aiConfigApi, type AIProviderOption } from '../../api/aiConfig'
 import type { RowRecord, SelectOption } from '../../api/types'
 
 const loading = ref(false)
@@ -109,7 +113,28 @@ function onChange(p: { current?: number; pageSize?: number }) { query.page = p.c
 const addOpen = ref(false)
 const adding = ref(false)
 const policyOptions = ref<SelectOption[]>([])
-const form = reactive({ name: '', target: '', task_tag: 'task' as 'task' | 'risk_cruising', policy_id: undefined as string | undefined, schedule_type: 'future_scan' as 'future_scan' | 'recurrent_scan', start_date: '', cron: '' })
+const form = reactive({ name: '', target: '', target_scope_id:undefined as string|undefined, pentest_provider_id:'',pentest_backup_provider_id:'',observer_enabled:false,observer_provider_id:'',task_tag: 'task' as 'task' | 'risk_cruising', policy_id: undefined as string | undefined, schedule_type: 'future_scan' as 'future_scan' | 'recurrent_scan', start_date: '', cron: '' })
+const addStep=ref(0),groupOptions=ref<SelectOption[]>([]),groupsLoading=ref(false),groupError=ref('')
+const providers=ref<AIProviderOption[]>([]),modelsLoading=ref(false),defaultModelId=ref('')
+const primaryModel=computed(()=>providers.value.find(p=>p._id===(form.pentest_provider_id || defaultModelId.value)))
+const backupModels=computed(()=>primaryModel.value?providers.value.filter(p=>p._id!==primaryModel.value?._id && (p.protocol||'openai')===(primaryModel.value?.protocol||'openai')):providers.value)
+watch(backupModels,options=>{if(form.pentest_backup_provider_id && !options.some(p=>p._id===form.pentest_backup_provider_id))form.pentest_backup_provider_id=''})
+watch(()=>form.observer_enabled,enabled=>{if(!enabled)form.observer_provider_id=''})
+let groupSerial=0
+async function selectGroup(value?:string){
+ const serial=++groupSerial;const previous=form.target;groupError.value='';if(!value)return
+ try{const data=await assetScopeApi.taskSource(value);if(serial!==groupSerial || !addOpen.value || form.target_scope_id!==value)return;if(form.target===previous)form.target=data.scope;else groupError.value=translate('revision24.targetChanged')}
+ catch(error){if(serial===groupSerial)groupError.value=(error as Error).message}
+}
+async function loadGroups(){
+ groupsLoading.value=true
+ try{
+  const all:SelectOption[]=[];const seen=new Set<string>();let page=1
+  for(;;){const data=await assetScopeApi.list({page,size:200});const incoming=(data.items||[]).filter(g=>!seen.has(String(g._id)));for(const g of incoming){seen.add(String(g._id));all.push({value:String(g._id),label:String(g.name)})}if(!incoming.length || all.length>=data.total)break;page++}
+  groupOptions.value=all
+ }catch(error){groupError.value=(error as Error).message}finally{groupsLoading.value=false}
+}
+async function loadModels(){modelsLoading.value=true;try{const [options,config]=await Promise.all([aiConfigApi.providerOptions(),aiConfigApi.runtimeConfig()]);providers.value=options.items.filter(p=>p.enabled!==false);defaultModelId.value=config.active_provider_id||''}catch{providers.value=[]}finally{modelsLoading.value=false}}
 function filterPolicy(input: string, option: SelectOption) { return String(option.label).toLowerCase().includes(input.toLowerCase()) }
 async function loadPolicies() {
   try {
@@ -120,17 +145,32 @@ async function loadPolicies() {
 function openAdd() {
   form.name = ''; form.target = ''; form.task_tag = 'task'; form.policy_id = undefined
   form.schedule_type = 'future_scan'; form.start_date = ''; form.cron = ''
+  addStep.value=0;form.target_scope_id=undefined;form.pentest_provider_id='';form.pentest_backup_provider_id='';form.observer_enabled=false;form.observer_provider_id='';groupError.value='';groupSerial++
   addOpen.value = true
   if (!policyOptions.value.length) loadPolicies()
+  void loadGroups();void loadModels()
 }
+function cancelAdd(){if(adding.value)return;groupSerial++;addOpen.value=false}
+function validBasics(){
+ if(!form.name.trim()||!form.policy_id){message.warning(translate('ui.m_7f3ba0c6767e'));return false}
+ if(form.schedule_type==='future_scan'&&!form.start_date){message.warning(translate('ui.m_aefc0bf8b8a4'));return false}
+ if(form.schedule_type==='recurrent_scan'&&!form.cron){message.warning(translate('ui.m_bbc067b4eb88'));return false}
+ if(form.pentest_backup_provider_id&&!primaryModel.value){message.warning(translate('revision24.selectPreferred'));return false}
+ return true
+}
+function nextStep(){if(validBasics())addStep.value=1}
 async function submitAdd() {
-  if (!form.name || !form.target || !form.policy_id) return message.warning(translate('ui.m_7f3ba0c6767e'))
+  if(!validBasics()){addStep.value=0;return}
+  if(!form.target.trim())return message.warning(translate('ui.m_7f3ba0c6767e'))
   if (form.schedule_type === 'future_scan' && !form.start_date) return message.warning(translate('ui.m_aefc0bf8b8a4'))
   if (form.schedule_type === 'recurrent_scan' && !form.cron) return message.warning(translate('ui.m_bbc067b4eb88'))
   adding.value = true
   try {
     await taskScheduleApi.add({
-      name: form.name, target: form.target, task_tag: form.task_tag, policy_id: form.policy_id,
+      name: form.name, target: form.target, task_tag: form.task_tag, policy_id: form.policy_id!,
+      ...(form.target_scope_id?{target_scope_id:form.target_scope_id}:{}),editable_target:true,
+      pentest_provider_id:form.pentest_provider_id,pentest_backup_provider_id:form.pentest_backup_provider_id,
+      observer_enabled:form.observer_enabled,observer_provider_id:form.observer_enabled?form.observer_provider_id:'',
       schedule_type: form.schedule_type,
       ...(form.schedule_type === 'future_scan' ? { start_date: form.start_date } : { cron: form.cron })
     })
@@ -143,3 +183,7 @@ async function recover(id: string) { try { await taskScheduleApi.recover([id]); 
 async function remove(id: string) { try { await taskScheduleApi.delete([id]); message.success(translate('ui.m_077a6d37719a')); load() } catch (e) { message.error(String(e)) } }
 onMounted(load)
 </script>
+
+<style scoped>
+.schedule-steps-actions{display:flex;justify-content:space-between;gap:12px;margin-top:20px}.schedule-ai-note{color:var(--dt-muted);font-size:12px;line-height:1.6;margin:8px 0 0}
+</style>

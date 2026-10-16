@@ -34,10 +34,10 @@ export const miniappApi = {
     request<{ ok: boolean; wxid: string }>(`/api/miniapp/${encodeURIComponent(wxid)}`, { method: 'DELETE' }),
 
   // 对勾选的小程序包发起 AI 渗透（一包一会话，选模式+模型；provider_id 空=全局默认模型）
-  launch: (wxids: string[], mode: string, providerId = '') =>
-    request<{ ok: boolean; created: number; session_ids: string[]; mode: string }>('/api/miniapp/launch', {
+  launch: (wxids: string[], mode: string, providerId = '', backupProviderId = '', interactionMode: 'autonomous'|'interactive' = 'autonomous') =>
+    request<{ ok: boolean; created: number; session_ids: string[]; mode: string; interaction_mode:string; warnings?:string[] }>('/api/miniapp/launch', {
       method: 'POST',
-      body: JSON.stringify({ wxids, mode, provider_id: providerId }),
+      body: JSON.stringify({ wxids, mode, provider_id: providerId,backup_provider_id:backupProviderId,interaction_mode:interactionMode }),
     }),
 
   // 解包上传：FormData 多文件（webkitdirectory 选中的整个文件夹）。

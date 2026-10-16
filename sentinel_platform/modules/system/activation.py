@@ -149,6 +149,16 @@ def decode_payload(token: str) -> Dict[str, Any]:
         return {}
 
 
+def platform_identity(key=None) -> Dict[str,str]:
+    """Public provenance only. UID is never a credential or a replacement for membership identity."""
+    from sentinel_platform.core.client_identity import describe
+    payload=decode_payload(read_key() if key is None else key)
+    value=payload.get('uid');uid=str(value) if isinstance(value,(str,int)) and not isinstance(value,bool) else ''
+    if any(ord(char)<32 for char in uid):uid=''
+    kind='win' if describe('')['product']=='win' else 'linux'
+    return {'platform_id':uid,'source_id':'W-'+kind+'-'+(uid or 'unactivated')}
+
+
 def local_status() -> Dict[str, Any]:
     """**激活时钟（唯一权威）**：本地离线校验 JWT 时间字段 + 云端否决标记。全 worker 读同一磁盘故一致。
     返回 {has_key, activated, expired, revoked, expires_at, activated_at, remaining_days, username}。
@@ -158,6 +168,7 @@ def local_status() -> Dict[str, Any]:
     revoked = is_revoked()
     out = {"has_key": bool(key), "activated": False, "expired": False, "revoked": revoked,
            "expires_at": "", "activated_at": "", "remaining_days": 0, "username": ""}
+    out.update(platform_identity(key))
     if not is_jwt(key):
         return out
     payload = decode_payload(key)

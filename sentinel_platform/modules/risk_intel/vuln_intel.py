@@ -130,7 +130,7 @@ def _norm_products(products) -> List[str]:
     return sorted(out)
 
 
-def upsert_vuln(vuln: Dict[str, Any]):
+def upsert_vuln(vuln: Dict[str, Any],notification_batch=None):
     """去重入库：同一漏洞（同去重键）归并，多源聚合 sources/poc_urls/products。
 
     vuln 标准字段：cve_id, title, severity, cvss, products[], poc_urls[], in_kev(bool),
@@ -138,6 +138,8 @@ def upsert_vuln(vuln: Dict[str, Any]):
     返回 (action, key)：action ∈ new/merged/skip。内部捕获异常，失败返回 ("error", "")。
     """
     try:
+        from . import _severity
+        vuln = {**vuln, 'severity': _severity.resolve(vuln)}
         keytype, keyval = _dedup_key(vuln)
         if not keyval:
             return ("skip", "")
@@ -149,13 +151,20 @@ def upsert_vuln(vuln: Dict[str, Any]):
                      "raw_id": vuln.get("source_raw_id", "")}
         existed = coll.find_one(query)
         if existed:
+            from ._intel_number import ensure as ensure_number
+            ensure_number(existed)
             set_fields: Dict[str, Any] = {"update_date": now}
-            old_rank = SEVERITY_RANK.get((existed.get("severity") or "unknown").lower(), 0)
+            old_severity = _severity.resolve(existed)
+            old_rank = SEVERITY_RANK.get(old_severity, 0)
             new_rank = SEVERITY_RANK.get((vuln.get("severity") or "unknown").lower(), 0)
-            if new_rank > old_rank:
+            if new_rank > old_rank or old_severity == 'unknown' and vuln['severity'] != 'unknown':
                 set_fields["severity"] = vuln.get("severity")
+            elif old_severity != existed.get('severity'):
+                set_fields['severity'] = old_severity
             if vuln.get("in_kev"):
                 set_fields["in_kev"] = True
+            if not existed.get('cvss') and _severity.score_rating(vuln.get('cvss')) != 'unknown':
+                set_fields['cvss'] = vuln['cvss']
             # 外部 CVE 后来匹配到本地 PoC/nuclei 模板时升级为可执行
             if vuln.get("executable") and not existed.get("executable"):
                 set_fields["executable"] = True
@@ -187,18 +196,50 @@ def upsert_vuln(vuln: Dict[str, Any]):
             "save_date": now,
             "update_date": now,
         }
-        coll.insert_one(doc)
+        from ._intel_number import beijing_month, ensure as ensure_number
+        doc['number_month'] = beijing_month()
+        from ._intel_notifications import eligible, enabled
+        doc['intel_push_pending'] = eligible(doc) and enabled()
+        doc['intel_push_created_at'] = time.time()
+        if notification_batch:doc['intel_push_batch']=notification_batch
+        result = coll.update_one(query, {"$setOnInsert": doc}, upsert=True)
+        inserted = result.upserted_id
+        if inserted is None:
+            # Another process won the same dedup-key insert. Reuse the normal merge
+            # branch; it now has a persisted document and cannot issue a new event.
+            return upsert_vuln(vuln,notification_batch=notification_batch)
+        doc['_id'] = inserted
+        ensure_number(doc)
+        from ._intel_notifications import enqueue
+        enqueue(doc)
         return ("new", keyval)
     except Exception as exc:  # 库不可用等：不拖垮抓取循环
         logger.debug("vuln_intel upsert failed: %s", exc)
         return ("error", "")
 
 
+def _publisher_urls(d):
+    from urllib.parse import urlsplit
+    candidates=[d.get('source_url','')]+[s.get('url','') for s in d.get('sources',[]) if isinstance(s,dict)]
+    result=[]
+    for value in candidates:
+        if not isinstance(value,str) or len(value)>4096:continue
+        value=value.strip()
+        try:parsed=urlsplit(value)
+        except ValueError:continue
+        if parsed.scheme.lower() in ('http','https') and parsed.hostname and value not in result:result.append(value)
+    return result
+
 def _project(d: Dict[str, Any]) -> Dict[str, Any]:
     """情报文档 → 对外精简 dict（query/list 共用主体字段）。"""
+    from ._intel_number import ensure as ensure_number
+    from ._severity import resolve
+    identifier = ensure_number(d)
     return {
+        "identifier": identifier, "watchtower_id": d.get('watchtower_id', ''),
         "cve_id": d.get("cve_id", ""), "title": d.get("title", ""),
-        "severity": d.get("severity", ""), "cvss": d.get("cvss", ""),
+        'source_urls':_publisher_urls(d),'source_url':next(iter(_publisher_urls(d)),''),
+        "severity": resolve(d), "cvss": d.get("cvss", ""),
         "in_kev": d.get("in_kev", False),
         "executable": d.get("executable", False),
         "exec_kind": d.get("exec_kind", ""), "exec_ref": d.get("exec_ref", ""),
@@ -283,6 +324,7 @@ def list_vulns(severity=None, source=None, in_kev=None, executable=None, keyword
         if keyword:
             safe = re.escape(keyword)
             q["$or"] = [{"cve_id": {"$regex": safe, "$options": "i"}},
+                        {"watchtower_id": {"$regex": safe, "$options": "i"}},
                         {"title": {"$regex": safe, "$options": "i"}},
                         {"products": {"$regex": safe, "$options": "i"}}]
         total = coll.count_documents(q)
@@ -354,7 +396,12 @@ class VulnIntelServiceImpl:
 
     def feed_status(self) -> Dict[str, Any]:
         from ._feed import feed_status as _status
-        return _status()
+        from ._intel_notifications import status as notification_status
+        result = _status();result['notifications'] = notification_status();return result
+
+    def retry_notifications(self):
+        from ._intel_notifications import retry_failed
+        return retry_failed()
 
     def get_feed_interval(self) -> int:
         from ._feed import get_feed_interval as _get
@@ -369,4 +416,6 @@ _service = VulnIntelServiceImpl()
 
 
 def get_service() -> VulnIntelServiceImpl:
+    from ._intel_notifications import start
+    start()
     return _service

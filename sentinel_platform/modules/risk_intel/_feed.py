@@ -174,6 +174,10 @@ def _notify_new_highrisk(new_highrisk: List[Dict[str, Any]]) -> None:
 
 
 def run_feed(sources: Optional[List[str]] = None) -> Dict[str, Any]:
+    from ._intel_notifications import intake_batch
+    with intake_batch('local') as identity:return _run_feed(sources,identity)
+
+def _run_feed(sources,notification_batch):
     """拉取本地可执行源（arl_npoc/nuclei）→ 去重入库。**不再拉取任何外部开源源**（已移到分发系统中心爬）。
     外部 CVE 情报由 scheduler 经 intel_pull 从云端拉取，本函数只负责本地能力源。"""
     from .vuln_intel import upsert_vuln
@@ -189,7 +193,7 @@ def run_feed(sources: Optional[List[str]] = None) -> Dict[str, Any]:
             vulns = fetcher()
             new_cnt = merged_cnt = 0
             for v in vulns:
-                action, _ = upsert_vuln(v)
+                action, _ = upsert_vuln(v,notification_batch=notification_batch)
                 if action == "new":
                     new_cnt += 1
                     if v.get("in_kev") or (v.get("severity") or "").lower() == "critical":
@@ -202,7 +206,8 @@ def run_feed(sources: Optional[List[str]] = None) -> Dict[str, Any]:
             report[name] = {"error": str(e)[:200]}
             logger.warning("vuln_feed(local) %s failed: %s", name, str(e)[:120])
     _save_feed_meta(report)
-    _notify_new_highrisk(new_highrisk)
+    # All local and central intake now queues notifications in upsert_vuln.
+    # Calling the legacy feed-only hook would duplicate local notifications.
     return report
 
 
@@ -266,4 +271,3 @@ def feed_status() -> Dict[str, Any]:
     interval = get_feed_interval()
     return {"last_fetch": doc.get("last_fetch", ""), "interval_seconds": interval,
             "interval_hours": round(interval / 3600, 1), "sources": sources, "mode": "cloud"}
-

@@ -5,7 +5,7 @@
         <div class="ver-badge"><CloudSyncOutlined /></div>
         <div>
           <div class="ver-label">{{ translate('ui.m_837bc9576721') }}</div>
-          <div class="ver-num">{{ version }}</div>
+          <div class="ver-num">{{ displayVersion(version) }}</div>
         </div>
       </div>
 
@@ -19,15 +19,15 @@
         <!-- 发现新版本 -->
         <div v-if="checked && hasUpdate && !updating && !updateDone && !updateError" class="update-found">
           <a-alert type="success" show-icon>
-            <template #message>{{ translate('ui.m_ac217e4d1ca4') }} <a-tag color="blue">{{ latest }}</a-tag></template>
+            <template #message>{{ translate(isPatchVersion(latest)?'patchUpdates.available':'ui.m_ac217e4d1ca4') }} <a-tag color="blue">{{ displayVersion(latest) }}</a-tag></template>
             <template #description>
               <a-tag color="green" style="margin-bottom:12px">{{ translate(requiresRestart ? 'ui.native_update_note' : 'ui.m_432bb30c280d') }}</a-tag>
               <div v-if="changelogs.length" class="changelog-box">
                 <div class="changelog-title">
-                  {{ translate('ui.m_00d640b1490e') }} {{ latest }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
+                  {{ translate('ui.m_00d640b1490e') }} {{ displayVersion(latest) }}<span v-if="changelogs.length > 1">{{ translate('ui.m_7d2ea55dbbc5') }} {{ changelogs.length }} {{ translate('ui.m_3961b2e3b43d') }}</span>
                 </div>
                 <div class="changelog-item" v-for="item in changelogs" :key="item.ver">
-                  <span class="changelog-ver">{{ item.ver }}</span>
+                  <span class="changelog-ver">{{ displayVersion(item.ver) }}</span>
                   <span class="changelog-text">{{ item.summary }}</span>
                 </div>
               </div>
@@ -52,7 +52,7 @@
         <!-- 已是最新 -->
         <a-alert v-if="checked && !hasUpdate && !networkError && !authError" type="success" show-icon
           :message="translate('ui.m_bc310480b4ce')"
-          :description="serverMessage || (translate('ui.m_cb62ebd689ee') + version + translate('ui.m_b4f9b5812821'))" />
+          :description="serverMessage || (translate('ui.m_cb62ebd689ee') + displayVersion(version) + translate('ui.m_b4f9b5812821'))" />
 
         <!-- 网络不可达 -->
         <a-alert v-if="checked && networkError" type="error" show-icon
@@ -69,6 +69,16 @@
       </a-space>
     </a-card>
 
+    <a-card v-if="storage?.supported" class="page-card storage-card" style="margin-top:16px" data-testid="update-storage">
+      <template #title><span>{{ translate('updateStorage.title') }}</span></template>
+      <template #extra><a-button size="small" :loading="storageLoading" @click="loadStorage">{{ translate('updateStorage.refresh') }}</a-button></template>
+      <div class="storage-metrics"><div v-for="key in ['cache','backups','guardian','helpers','retired_sdk']" :key="key"><span>{{ translate('updateStorage.'+key) }}</span><strong>{{ storageBytes(storage.logical_bytes?.[key]) }}</strong></div></div>
+      <p class="storage-note">{{ translate('updateStorage.logicalNote') }}</p>
+      <a-space wrap><span>{{ translate('updateStorage.cleanable') }} <strong>{{ storageBytes(storage.cleanable_logical_bytes) }}</strong></span><a-button v-if="canRollback" :loading="storageCleaning" :disabled="!!storage.blocked||updating" @click="cleanStorage" data-testid="update-storage-clean">{{ translate('updateStorage.clean') }}</a-button></a-space>
+      <a-alert v-if="storage.blocked" type="info" :message="translate('updateStorage.block_'+storage.blocked)" style="margin-top:10px"/>
+      <a-alert v-if="storageResult" type="success" :message="storageResult" style="margin-top:10px" data-testid="update-storage-result"/>
+    </a-card>
+
     <!-- 历史版本与回退（版本仓） -->
     <a-card class="page-card" style="margin-top:16px" v-if="canRollback">
       <template #title>
@@ -82,11 +92,11 @@
         {{ translate('ui.m_3ef7e543fc93') }}
       </a-checkbox>
       <a-alert v-if="versionsHint" type="info" show-icon style="margin-bottom:12px" :message="versionsHint" />
-      <a-table :columns="versionColumns" :data-source="versions" :loading="loadingVersions"
-        row-key="version" size="middle" :pagination="{ pageSize: 10 }">
+      <a-table :columns="versionColumns" :data-source="visibleVersions" :loading="loadingVersions"
+        row-key="version" size="middle" data-testid="version-history" :pagination="{ pageSize: 10 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'version'">
-            <a-tag :color="record.version === version ? 'green' : 'blue'">{{ record.version }}</a-tag>
+            <a-tag :color="record.version === version ? 'green' : 'blue'">{{ displayVersion(record.version) }}</a-tag>
             <a-tag v-if="record.version === version" color="green">{{ translate('ui.m_cb62ebd689ee') }}</a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
@@ -95,7 +105,7 @@
                  高于当前=前滚/升级（应走上方“检查更新→立即更新”），不在回退入口出现，避免误导。 -->
             <a-popconfirm
               v-if="isOlderThanCurrent(record.version)"
-              :title="translate('ui.m_885df13560e0', { p0: (record.version) })"
+              :title="translate('ui.m_885df13560e0', { p0: (displayVersion(record.version)) })"
               :ok-text="translate('ui.m_8771e3682df1')" :cancel-text="translate('ui.m_2cd0f3be8738')" @confirm="doRollback(record.version)">
               <a-button type="link" danger size="small">{{ translate('ui.m_8771e3682df1') }}</a-button>
             </a-popconfirm>
@@ -105,12 +115,12 @@
     </a-card>
 
     <!-- 改动详情抽屉 -->
-    <a-drawer v-model:open="changesOpen" :title="translate('ui.m_7b421c218686', { p0: (changesVersion) })" width="520">
+    <a-drawer v-model:open="changesOpen" :title="translate('ui.m_7b421c218686', { p0: (displayVersion(changesVersion)) })" width="min(520px, calc(100vw - 24px))">
       <a-spin :spinning="loadingChanges">
         <template v-if="changes">
           <a-descriptions size="small" :column="1" bordered style="margin-bottom:12px">
             <a-descriptions-item :label="translate('ui.m_e8ff4d335dee')">{{ changes.published_at || '-' }}</a-descriptions-item>
-            <a-descriptions-item :label="translate('ui.m_c3066077e363')">{{ changes.from || translate('ui.m_f8605f479658') }} → {{ changes.to }}</a-descriptions-item>
+            <a-descriptions-item :label="translate('ui.m_c3066077e363')">{{ changes.from ? displayVersion(changes.from) : translate('ui.m_f8605f479658') }} → {{ displayVersion(changes.to) }}</a-descriptions-item>
             <a-descriptions-item :label="translate('ui.m_a8bab354dba5')">{{ changes.total }}</a-descriptions-item>
           </a-descriptions>
           <a-collapse>
@@ -134,6 +144,7 @@
 </template>
 
 <script setup lang="ts">
+import { versionKey, displayVersion, isPatchVersion } from '../../config/releaseVersion'
 import { t as translate } from '../../i18n'
 
 import { ref, computed, onMounted, onUnmounted } from 'vue'
@@ -144,23 +155,24 @@ import UpdateProgressPanel from '../../components/UpdateProgressPanel.vue'
 import { APP_VERSION } from '../../config/brand'
 import { checkUpdate, applyUpdate, getProgress, getChangelog,
   getVersions, getVersionChanges, rollbackTo, type VersionItem, type ChangesResult } from '../../api/about'
+import { getUpdateStorage,cleanupUpdateStorage,type UpdateStorageResult } from '../../api/about'
 import { hasPerm } from '../../api/request'
 import { useServerVersion } from '../../composables/useServerVersion'
 
 // 「当前版本」显示/版本表比对/回退资格/changelog 过滤都用**后端真实版本**（version.txt），
 // 非编译进包的 APP_VERSION——跳板逐级更新时前端产物 brand 标签可能滞后/错配。
-const { serverVersion: version } = useServerVersion()
+const { rawServerVersion: version } = useServerVersion()
 const canRollback = computed(() => hasPerm('system:update') || getRoleIsAdmin())
+const storage=ref<UpdateStorageResult|null>(null),storageLoading=ref(false),storageCleaning=ref(false),storageResult=ref('')
+function storageBytes(value?:number){return value===undefined?'—':value>=1024**3?(value/1024**3).toFixed(2)+' GiB':(value/1024**2).toFixed(1)+' MiB'}
+async function loadStorage(){if(storageLoading.value)return;storageLoading.value=true;try{storage.value=await getUpdateStorage()}catch{storage.value=null}finally{storageLoading.value=false}}
+async function cleanStorage(){if(storageCleaning.value)return;storageCleaning.value=true;storageResult.value='';try{const result=await cleanupUpdateStorage();if(result.cleaned)storageResult.value=translate('updateStorage.completed',{bytes:storageBytes(result.removed_logical_bytes)});await loadStorage()}catch(error){message.error(error instanceof Error?error.message:String(error))}finally{storageCleaning.value=false}}
 function getRoleIsAdmin() { return (localStorage.getItem('arl_role') || '') === 'admin' }
 
 // 版本号数值比较（与后端 update_check._cmp 同逻辑）：剥 v 前缀，逐段按数值比，补齐位数。
 // 修复原字符串比较 bug：'v1.21.65' > 'v1.21.131' 字符串比会误判为 true（'6'>'1'），
 // 导致 v1.21.6x 等旧版被当成“比当前新”混进更新内容列表（看似反向更新）。
-function _parseVer(v: string): number[] {
-  return String(v || '').trim().replace(/^v/i, '').split(/[.\-_]/).map(s => {
-    const m = /^\d+/.exec(s); return m ? parseInt(m[0], 10) : 0
-  })
-}
+function _parseVer(v:string):number[]{return versionKey(v)}
 function _cmpVer(a: string, b: string): number {
   const ta = _parseVer(a), tb = _parseVer(b)
   const n = Math.max(ta.length, tb.length)
@@ -178,6 +190,11 @@ function isOlderThanCurrent(v: string): boolean {
 
 // —— 历史版本与回退 ——
 const versions = ref<VersionItem[]>([])
+const visibleVersions=computed(()=>{
+ const current=displayVersion(version.value),selected=new Map<string,VersionItem>()
+ for(const row of versions.value){const key=displayVersion(row.version);if(!selected.has(key)||key===current&&row.version===version.value)selected.set(key,row)}
+ return [...selected.values()]
+})
 const loadingVersions = ref(false)
 const versionsHint = ref('')   // 空列表/不支持时的友好提示（不再弹 error）
 const fullRollback = ref(false)
@@ -192,7 +209,7 @@ async function loadVersions() {
   versionsHint.value = ''
   try {
     const r = await getVersions()
-    versions.value = r.versions || []
+    versions.value = [...(r.versions || [])].sort((a, b) => _cmpVer(b.version, a.version))
     // 空列表分三种语义，别混为一谈（治"暂无历史版本"闪烁：其实是拿取失败非真没有）：
     //   unsupported  = 分发源尚不支持版本仓端点（确定性，升级分发端才有）
     //   fetch_failed = 转发层重试 N 次仍超时/失败（偶发，重试即可，不是真没历史）
@@ -243,6 +260,7 @@ async function doRollback(v: string) {
 }
 
 onMounted(async () => {
+  void loadStorage()
   if (canRollback.value) loadVersions()
   // v1.21.159-x 后台更新：更新器是独立进程、进度落服务端文件——切菜单/刷新返回后，
   // 若后台仍在更新，重新挂上进度轮询（不丢进度、不用重新点更新）。
@@ -401,10 +419,12 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
 </script>
 
 <style scoped>
-.ver-hero { display: flex; align-items: center; gap: 18px; }
+.ver-hero { display:flex; align-items:center; gap:12px; flex-wrap:wrap; min-width:0; }
+.ver-hero > div:last-child { min-width:0; flex:1; }
+.storage-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px}.storage-metrics>div{display:flex;flex-direction:column;gap:5px;min-width:0}.storage-metrics span,.storage-note{color:var(--dt-muted);font-size:12px}.storage-metrics strong{font-variant-numeric:tabular-nums;font-size:18px;color:var(--dt-text)}.storage-note{margin:12px 0;line-height:1.6}
 .ver-badge { width: 60px; height: 60px; border-radius: 16px; background: var(--dt-gradient-soft); color: var(--dt-primary); font-size: 28px; display: flex; align-items: center; justify-content: center; flex: none; }
 .ver-label { color: var(--dt-muted); font-size: 13px; }
-.ver-num { font-size: 30px; font-weight: 750; letter-spacing: -.01em; margin-top: 2px; }
+.ver-num { font-size:clamp(22px,2.2vw,26px); font-weight:600; letter-spacing:-.01em; margin-top:2px; line-height:1.3; overflow-wrap:anywhere; }
 .changelog-box { background: var(--dt-fill); border-radius: 8px; padding: 12px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
 .changelog-title { font-size: 13px; font-weight: 600; color: var(--dt-text); margin-bottom: 8px; }
 .changelog-item { padding: 5px 0; border-bottom: 1px solid var(--dt-border); font-size: 12px; display: flex; gap: 8px; }

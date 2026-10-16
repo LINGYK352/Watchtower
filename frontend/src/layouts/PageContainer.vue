@@ -1,10 +1,10 @@
 <template>
   <div class="page-container">
     <div class="page-heading">
-      <div>
+      <div class="page-heading-main">
         <div class="page-kicker" v-if="kicker">{{ kicker }}</div>
         <h1>{{ title }}</h1>
-        <p v-if="description">{{ description }}</p>
+        <p v-if="description" :title="description" class="page-description">{{ description }}</p>
       </div>
       <div class="page-extra"><slot name="extra" /></div>
     </div>

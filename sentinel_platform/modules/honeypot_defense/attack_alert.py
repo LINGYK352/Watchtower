@@ -461,7 +461,8 @@ def get_attack_stats() -> Dict[str, Any]:
         "by_type": by_type,
         "by_severity": by_severity,
         "top_attackers": top_attackers,
-        "recent_attacks": recent_attacks
+        "recent_attacks": recent_attacks,
+        "monitor": monitor_status(),
     }
 
 
@@ -644,6 +645,51 @@ _LOCK_ID = "attack_alert_monitor"     # MongoDB 单例锁（跨 gunicorn 多 wor
 _LOCK_TTL = 45                        # 锁有效期（秒）；持有者每 15s 续期，进程死后 45s 锁过期可被接管
 
 
+def monitor_capability() -> Dict[str, Any]:
+    """Docker log ingestion is optional; native installs have no nginx container."""
+    import shutil
+    from sentinel_platform.core.client_identity import describe
+    if describe('')['product'] == 'win':
+        return {'available': False, 'state': 'unavailable', 'reason': 'native_runtime'}
+    cli, sock = bool(shutil.which('docker')), os.path.exists('/var/run/docker.sock')
+    if not cli and not sock and not os.path.exists('/.dockerenv'):
+        return {'available': False, 'state': 'unavailable', 'reason': 'non_docker'}
+    if not cli:
+        return {'available': False, 'state': 'unavailable', 'reason': 'docker_cli_missing'}
+    if not sock:
+        return {'available': False, 'state': 'unavailable', 'reason': 'docker_socket_missing'}
+    return {'available': True}
+
+
+def monitor_status() -> Dict[str, Any]:
+    """Read the shared collector lease, never a receiving worker's local flag."""
+    capability = monitor_capability()
+    if not capability['available']:
+        return capability
+    try:
+        lease = get_repo().collection('attack_alert_locks').find_one({'_id': _LOCK_ID}) or {}
+        now = time.time()
+        if lease.get('expire_at', 0) <= now:
+            return dict(capability, state='stopped', reason='no_active_collector')
+        if lease.get('last_error'):
+            return dict(capability, state='error', reason=lease['last_error'])
+        last = lease.get('last_success', 0)
+        if not last:
+            return dict(capability, state='starting', reason='awaiting_first_poll')
+        if last < now - _LOCK_TTL:
+            return dict(capability, state='error', reason='stale_poll', last_success=last)
+        return dict(capability, state='running', reason='', last_success=last)
+    except Exception:
+        return dict(capability, state='error', reason='status_unavailable')
+
+
+def _monitor_result(owner: str, error: str = '') -> None:
+    update = {'last_poll': time.time(), 'last_error': error}
+    if not error:
+        update['last_success'] = update['last_poll']
+    get_repo().collection('attack_alert_locks').update_one({'_id': _LOCK_ID, 'owner': owner}, {'$set': update})
+
+
 def _try_acquire_lock(owner: str) -> bool:
     """抢占/续期监控单例锁。返回是否持有（本进程是唯一监控者）。
     机制：锁文档带 expire_at；抢占条件=不存在 或 已过期 或 自己持有。多 worker 竞争只一个成功。
@@ -689,7 +735,7 @@ def _monitor_loop(owner: str):
             time.sleep(30)
             continue
         if not logged_start:
-            logger.info("attack_alert 日志监控已启动（轮询 docker logs --tail %d %s，%ss/次）", tail_n, _NGINX_CONTAINER, poll_interval)
+            logger.info("attack_alert 正在连接日志源（docker logs --tail %d %s，%ss/次）", tail_n, _NGINX_CONTAINER, poll_interval)
             logged_start = True
         try:
             # **用 --tail 而非 --since/-f**：本环境 docker daemon 的 --since（时区错乱恒返 0 行）
@@ -699,6 +745,9 @@ def _monitor_loop(owner: str):
                 ["docker", "logs", "--tail", str(tail_n), _NGINX_CONTAINER],
                 capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=15,
             )
+            if r.returncode:
+                raise RuntimeError('docker_logs_failed')
+            _monitor_result(owner)
             nowp = time.time()
             for line in (r.stdout or "").splitlines():
                 line = line.strip()
@@ -749,6 +798,10 @@ def _monitor_loop(owner: str):
             for k in [k for k, v in seen_lines.items() if v < cutoff]:
                 seen_lines.pop(k, None)
         except Exception as exc:
+            try:
+                _monitor_result(owner, 'docker_logs_failed' if isinstance(exc, RuntimeError) else 'poll_failed')
+            except Exception:
+                pass
             logger.debug("attack_alert 日志轮询异常: %s", exc)
         time.sleep(poll_interval)
 
@@ -760,9 +813,9 @@ def start_monitor() -> bool:
     global _monitor_started
     if _monitor_started:
         return True
-    import shutil
-    if not shutil.which("docker") or not os.path.exists("/var/run/docker.sock"):
-        logger.warning("attack_alert 日志监控未启动：无 docker CLI 或 docker.sock（非 docker 部署/未挂 sock 降级）")
+    capability = monitor_capability()
+    if not capability['available']:
+        logger.info("attack_alert 自动日志采集不适用于当前环境（%s）；已有告警查询与手动检测可用", capability['reason'])
         return False
     import threading
     # owner 唯一标识：主机名+PID+线程，用于 MongoDB 锁归属判定

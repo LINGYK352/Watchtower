@@ -1,105 +1,125 @@
-"""system/disclaimer —— 免责声明签署状态（服务端磁盘持久化，单一权威）。
+"""Installation assent to a substantive legal version, independent of software builds.
 
-**为什么服务端存**：免责声明"同意"必须重启服务器/容器后仍保留、换浏览器后仍保留，
-只有清目录/重装才需重签。纯前端 localStorage 满足不了（换浏览器/清缓存即丢）。
-故照 `system/activation` 的磁盘文件先例：签署标记落盘到 config 目录旁的隐藏文件，
-全 worker 读同一文件天然一致，写后立即生效。
-
-签署标记按**条款版本**区分：条款实质变更时前端 DISCLAIMER_VERSION 递增，
-旧签署对新版本不算数（accepted_version != 当前版本 → 视为未签，需重新确认）。
-
-纯 stdlib（json/os/time），无 ROLE、无 DB 依赖。端点在 router/endpoints/system.py。
+The active configuration directory owns one durable record. Legacy paths are
+read for migration only; an unavailable record is not an unsigned installation.
+Every worker reads fresh. No ROLE, database or browser-cache authority.
 """
 from __future__ import annotations
+import json, os, re, tempfile, time
+from typing import Any
 
-import json
-import os
-import time
-from typing import Any, Dict, Optional
+TERMS_VERSION = "v3"
+MARKER = ".disclaimer_accepted"
 
+def _marker_candidates() -> list[str]:
+    from sentinel_platform.core.config import _config_candidates, _first_existing
+    configs = [p for p in _config_candidates() if p]
+    selected = _first_existing(configs) or next((p for p in configs if not p.endswith(".example")), "")
+    # This is the same choice as load_config(), not an arbitrary first writable
+    # working directory. Native config lives in the installation's state folder.
+    canonical = os.path.join(os.path.dirname(selected), MARKER) if selected else os.path.join(os.getcwd(), "config", MARKER)
+    paths = [canonical] + [os.path.join(os.path.dirname(p), MARKER) for p in configs]
+    # An unqualified global /tmp marker can belong to a different install.
+    # Only an application's own former working root is an attributable legacy path.
+    cwd = os.path.abspath(os.getcwd())
+    app_roots = {os.path.abspath(os.path.dirname(os.path.dirname(p))) for p in configs
+                 if os.path.basename(os.path.dirname(p)) in {"config", "state"}}
+    if cwd in app_roots: paths.append(os.path.join(cwd, MARKER))
+    result, seen = [], set()
+    for path in paths:
+        path = os.path.abspath(path)
+        key = os.path.normcase(path)
+        if key not in seen:
+            seen.add(key); result.append(path)
+    return result
 
-def _marker_candidates() -> list:
-    """签署标记文件候选路径（**写和读共用这一份，杜绝路径打架**）。
-    顺序即优先级——**config 目录排第一且必含**：docker 部署下 config 是挂载卷（宿主机 docker/config），
-    容器重建/关机重启都不丢（治"VM 关机后容器 recreate 签署丢失、每次重弹"）。
-    其余（当前目录/tmp）仅作极端不可写时的兜底。所有候选枚举 _config_candidates 的每个目录，
-    保证 _config_dir 动态返回不同值时写读仍落在同一集合内（治"写A读B"）。"""
-    candidates = []
+def _read_record(path: str):
     try:
-        from sentinel_platform.core.config import _config_candidates
-        for cfg_path in _config_candidates():
-            if cfg_path:
-                p = os.path.join(os.path.dirname(cfg_path), ".disclaimer_accepted")
-                if p not in candidates:
-                    candidates.append(p)
-    except Exception:
-        pass
-    cwd_path = os.path.join(os.getcwd(), ".disclaimer_accepted")
-    if cwd_path not in candidates:
-        candidates.append(cwd_path)
-    tmp_path = "/tmp/.sentinel_disclaimer_accepted"
-    if tmp_path not in candidates:
-        candidates.append(tmp_path)
-    return candidates
+        if os.name == "nt":
+            from windows_native.update_state import open_read
+            handle = open_read(path)
+        else:
+            handle = open(path, "r", encoding="utf-8")
+        with handle:
+            raw = handle.read(16385)
+        if len(raw) > 16384:
+            raise ValueError("Oversized assent record")
+        data = json.loads(raw)
+        if not isinstance(data, dict) or not isinstance(data.get("accepted"), bool):
+            raise ValueError("Invalid assent record")
+        if not data["accepted"]:
+            return None, False
+        version = data.get("accepted_version", "")
+        at = data.get("accepted_at", "")
+        if not isinstance(version, str) or len(version) > 32 or not isinstance(at, str) or len(at) > 80:
+            raise ValueError("Invalid assent metadata")
+        return {"accepted": True, "accepted_version": version, "accepted_at": at}, False
+    except FileNotFoundError:
+        return None, False
+    except (OSError, ValueError, UnicodeError):
+        return None, True
 
+def _write_record(path: str, payload: dict):
+    if os.name == "nt":
+        # Reuse the native updater's tested FILE_SHARE_DELETE snapshot and
+        # atomic replacement; ordinary CRT readers can otherwise block rename.
+        from windows_native.update_state import write
+        write(path, payload)
+        return
+    parent = os.path.dirname(path)
+    os.makedirs(parent, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=MARKER+".", suffix=".tmp", dir=parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+            handle.flush(); os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
 
-def get_status() -> Dict[str, Any]:
-    """读签署状态。返回 {accepted, accepted_version, accepted_at}。
-    读不到任何标记文件 → accepted=False（未签署）。
+def _status(record=None, state="unaccepted", persisted=False) -> dict[str, Any]:
+    return {**(record or {"accepted": False, "accepted_version": "", "accepted_at": ""}),
+            "status": state, "current_version": TERMS_VERSION, "persisted": persisted}
 
-    与 accept() 共用 _marker_candidates() 同一份路径列表（写读一致，杜绝"写A读B"）。
-    """
-    # 遍历统一候选路径，找到第一个有效签署（与 accept 写入用同一列表）
-    for fp in _marker_candidates():
-        if fp and os.path.isfile(fp):
-            try:
-                with open(fp, "r", encoding="utf-8") as fh:
-                    data = json.loads(fh.read() or "{}")
-                if data.get("accepted"):
-                    return {
-                        "accepted": True,
-                        "accepted_version": str(data.get("accepted_version", "") or ""),
-                        "accepted_at": str(data.get("accepted_at", "") or ""),
-                    }
-            except Exception:
-                pass
-
-    return {"accepted": False, "accepted_version": "", "accepted_at": ""}
-
-
-def accept(version: str = "") -> Dict[str, Any]:
-    """记录同意：向**所有可写候选路径都写一份**（冗余持久化）。返回签署后的状态。
-    version = 前端 DISCLAIMER_VERSION（条款版本），据此判断旧签署对新条款是否仍有效。
-
-    **根治"签署后立即读不到/重启丢失"**：
-    - 写和读共用 _marker_candidates() 同一列表（config 目录持久卷排第一）；
-    - **写所有可写候选**（不止第一个）——多处冗余，get_status 任一命中即算已签，
-      不再有"写A删B/写A读B"的路径打架（旧 _cleanup_stale_markers 会误删唯一签署文件，已移除）。
-    """
-    payload = {
-        "accepted": True,
-        "accepted_version": str(version or ""),
-        "accepted_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    blob = json.dumps(payload, ensure_ascii=False)
-
-    ok_count = 0
-    for fp in _marker_candidates():
-        if not fp:
-            continue
+def get_status() -> dict[str, Any]:
+    paths = _marker_candidates()
+    canonical, unreadable = _read_record(paths[0])
+    if canonical and canonical["accepted_version"] == TERMS_VERSION:
+        return _status(canonical, "accepted", True)
+    records = [canonical] if canonical else []
+    for path in paths[1:]:
+        record, failed = _read_record(path)
+        unreadable = unreadable or failed
+        if record: records.append(record)
+    matching = [r for r in records if r["accepted_version"] == TERMS_VERSION]
+    if matching:
+        # Preserve a real historical assent, including its original timestamp.
+        record = min(matching, key=lambda r: r["accepted_at"] or "9999")
+        # A worker running an older legal version must never downgrade a newer
+        # version written during a reload. Legal content changes require review.
+        if canonical and re.fullmatch(r"v[0-9]+", canonical["accepted_version"]) and int(canonical["accepted_version"][1:]) > int(TERMS_VERSION[1:]):
+            return _status(canonical, "unavailable", True)
         try:
-            d = os.path.dirname(fp)
-            if d:
-                os.makedirs(d, exist_ok=True)
-            tmp = fp + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as fh:
-                fh.write(blob)
-            os.replace(tmp, fp)
-            ok_count += 1
-        except Exception:
-            continue
+            _write_record(paths[0], record)
+            return _status(record, "accepted", True)
+        except (OSError, ValueError):
+            return _status(record, "unavailable")
+    if unreadable:
+        return _status(canonical, "unavailable", bool(canonical))
+    return _status(canonical or (records[0] if records else None), "unaccepted", bool(canonical))
 
-    # 一个都没写进（极端只读环境）：不抛错，返回 accepted 但标记未持久化
-    return {**payload, "persisted": ok_count > 0}
-
-
+def accept(version: str = "") -> dict[str, Any]:
+    if version != TERMS_VERSION:
+        raise ValueError("Unsupported legal version")
+    status = get_status()
+    if status["status"] == "accepted":
+        return status   # Idempotent: an update or duplicate click is not a new assent.
+    if status["accepted_version"] and re.fullmatch(r"v[0-9]+", status["accepted_version"]) and int(status["accepted_version"][1:]) > int(TERMS_VERSION[1:]):
+        raise ValueError("A newer legal version is already recorded")
+    payload = {"accepted": True, "accepted_version": version,
+               "accepted_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+    try:
+        _write_record(_marker_candidates()[0], payload)
+        return _status(payload, "accepted", True)
+    except (OSError, ValueError):
+        return _status(state="unavailable")

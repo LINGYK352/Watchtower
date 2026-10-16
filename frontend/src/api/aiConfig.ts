@@ -12,6 +12,12 @@ export interface AIConfig {
   effective_concurrency?: number
 }
 
+export interface ModelSkillView {
+  stages?:string[];configured?:boolean;draft_id?:string;provider_name:string;revision:number;entry?:string
+  files:{path:string;bytes:number;sha256:string;text:boolean}[]
+  entry_preview?:{content:string;complete:boolean;next_offset:number}
+}
+
 export interface AIProvider {
   _id: string
   name: string
@@ -20,6 +26,7 @@ export interface AIProvider {
   base_url: string
   api_key: string
   model: string
+  exclusive_skill?: {stages?:string[];provider_name:string;revision:number;entry:string;file_count:number}
   reasoning_effort?: string
   enabled: boolean
   proxy_id?: string   // 问题18：入口代理=某条自定义代理_id，空/缺=直连（替代旧 use_proxy）
@@ -70,6 +77,17 @@ export const aiConfigApi = {
   saveConfig: (data: Partial<AIConfig>) => request<AIConfig>(`${base}/config`, { method: 'POST', body: JSON.stringify(data) }),
 
   providers: () => request<{ items: AIProvider[] }>(`${base}/provider`),
+  modelSkill: (id:string) => request<ModelSkillView>(`${base}/provider/${encodeURIComponent(id)}/skill`),
+  uploadModelSkill: async (id:string,file:File) => {
+    const form=new FormData();form.append('file',file)
+    const token=localStorage.getItem('Token')||''
+    const response=await fetch(`${base}/provider/${encodeURIComponent(id)}/skill/upload`,{method:'POST',headers:{Token:token},body:form})
+    const result=await response.json()
+    if(!response.ok || result.code!==200)throw new Error(result.message||'SKILL upload failed')
+    return result.data as ModelSkillView
+  },
+  saveModelSkill: (id:string,payload:{draft_id?:string;entry:string;revision:number;stages:string[];guard_confirmed:boolean}) => request<ModelSkillView>(`${base}/provider/${encodeURIComponent(id)}/skill`,{method:'POST',body:JSON.stringify(payload)}),
+  clearModelSkill: (id:string,revision:number) => request(`${base}/provider/${encodeURIComponent(id)}/skill`,{method:'DELETE',body:JSON.stringify({revision})}),
   presets: () => request<{ items: AIPreset[] }>(`${base}/presets`),
   addProvider: (data: { config: string; type?: string } | Partial<AIProvider>) => request<{ _id: string }>(`${base}/provider`, { method: 'POST', body: JSON.stringify(data) }),
   updateProvider: (id: string, data: { config: string; type?: string } | Partial<AIProvider>) => request<{ _id: string }>(`${base}/provider/${id}`, { method: 'POST', body: JSON.stringify(data) }),
@@ -83,6 +101,8 @@ export const aiConfigApi = {
   prompts: (includeBuiltin = true) => request<{ items: AIPrompt[] }>(`${base}/prompt${includeBuiltin ? '' : '?include_builtin=false'}`),
   addPrompt: (data: Partial<AIPrompt>) => request<{ _id: string }>(`${base}/prompt`, { method: 'POST', body: JSON.stringify(data) }),
   updatePrompt: (id: string, data: Partial<AIPrompt>) => request<{ _id: string }>(`${base}/prompt/${id}`, { method: 'POST', body: JSON.stringify(data) }),
+  defaultPrompt: (id: string) => request<{content:string; version:string}>(`${base}/prompt/${id}/default`),
+  resetPrompt: (id: string) => request<{content:string; version:string}>(`${base}/prompt/${id}/reset`, {method:'POST', body:JSON.stringify({confirmed:true})}),
   deletePrompt: (id: string) => request<{ _id: string }>(`${base}/prompt/${id}/delete`, { method: 'POST' }),
   seedPrompts: (force = false) => request<{ seeded: number; force: boolean; message: string }>(`${base}/prompt/seed`, { method: 'POST', body: JSON.stringify({ force }) })
 }

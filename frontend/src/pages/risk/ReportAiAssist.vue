@@ -37,7 +37,7 @@ import { intelApi, type ReportData, type ReportAiResult } from '../../api/intel'
 const props = defineProps<{ reportId: string; data: ReportData; providers: { label: string; value: string }[] }>()
 const open = ref(false), loading = ref(false), onlyEmpty = ref(true)
 const providerId = ref<string>()
-const instruction = ref('依据现有证据，按人工 NCC 报告的写法完善事件背景、原因、影响和修复建议；缺乏证据的内容请指出，不要编造。')
+const instruction = ref(translate('reportGeneric.assistDefault'))
 const result = ref<ReportAiResult | null>(null)
 const selected = ref<boolean[]>([])
 const fieldLabels: Record<string, string> = { get discovery_context() { return translate('ui.m_b7676e52a40a') }, get affected_users() { return translate('ui.m_dd29813b94a6') }, get affected_data() { return translate('ui.m_9815e76f2ff4') }, get quantification() { return translate('ui.m_289824cdbfc6') }, get trigger_path() { return translate('ui.m_619e3105afdf') }, get root_cause() { return translate('ui.m_ac4e4e6ed3cc') }, get impact() { return translate('ui.m_3a76ebfb6233') }, get verify_method() { return translate('ui.m_dfa9eef9ba28') }, get remediation() { return translate('ui.m_324227697bfc') }, get hardening() { return translate('ui.m_cc52d8fad9fd') }, get fix_validation() { return translate('ui.m_08d08f966d1e') }, get notes() { return translate('ui.m_daede9881787') }, get step_text() { return translate('ui.m_ce3597f37f12') } }

@@ -84,15 +84,70 @@ class Result(Resource):
 
 @ns.route("/traffic")
 class Traffic(Resource):
-    @ns.doc(description="光纤批量推抓包 flow（P2 抓包层）。P0 占位接收，暂不落库")
+    @ns.doc(description="Link流量批次；采集令牌+设备+包名绑定，幂等落库，保留7天")
     def post(self):
         bad = _check_key()
         if bad:
             return bad
         b = request.get_json(silent=True) or {}
-        flows = b.get("flows") or []
-        # P0：占位接收，返回收到数量；P2 落 app_traffic（capped/TTL）
-        return ok({"received": len(flows) if isinstance(flows, list) else 0, "stored": 0})
+        from sentinel_platform.modules.ai_pentest import _app_traffic
+        try:
+            if request.content_length and request.content_length > 1200000:
+                raise ValueError("Traffic batch too large")
+            return ok(_app_traffic.store(b))
+        except (ValueError, TypeError) as e:
+            return err(CODE_BAD_REQUEST, str(e))
+
+
+@ns.route("/capture")
+class Capture(Resource):
+    def post(self):
+        bad = _check_key()
+        if bad: return bad
+        from sentinel_platform.modules.ai_pentest import _app_traffic
+        b = request.get_json(silent=True) or {}
+        if not isinstance(b, dict): return err(CODE_BAD_REQUEST, 'JSON object required')
+        try:
+            op = b.get('op')
+            if op == 'start':
+                return ok(_app_traffic.start(b.get('device_id'), b.get('pkg'), b.get('egress', 'direct'), b.get('transport', 'wireless'), b.get('decrypt_https') is True))
+            if op == 'stop': return ok(_app_traffic.stop(b))
+            if op == 'heartbeat': return ok(_app_traffic.heartbeat(b))
+            raise ValueError('Invalid capture operation')
+        except (ValueError, TypeError) as e: return err(CODE_BAD_REQUEST, str(e))
+
+
+@ns.route("/relay")
+class Relay(Resource):
+    def post(self):
+        bad = _check_key()
+        if bad: return bad
+        if request.content_length and request.content_length > 100000:
+            return err(CODE_BAD_REQUEST, 'Relay frame too large')
+        from sentinel_platform.modules.ai_pentest import _app_relay
+        try:
+            r = _app_relay.relay(request.get_json(silent=True) or {})
+            return ok(r) if r.get('ok') else err(CODE_BAD_REQUEST, r.get('error', 'Relay failed'))
+        except (ValueError, TypeError) as e: return err(CODE_BAD_REQUEST, str(e))
+
+
+@ns.route('/ca')
+class CaCertificate(Resource):
+    def post(self):
+        bad = _check_key()
+        if bad: return bad
+        from sentinel_platform.modules.ai_pentest import _app_certificates
+        return ok(_app_certificates.public())
+
+
+@ns.route('/certificate')
+class Certificate(Resource):
+    def post(self):
+        bad = _check_key()
+        if bad: return bad
+        from sentinel_platform.modules.ai_pentest import _app_certificates
+        try: return ok(_app_certificates.issue(request.get_json(silent=True) or {}))
+        except (ValueError, TypeError) as e: return err(CODE_BAD_REQUEST, str(e))
 
 
 @ns.route("/fiber_version")
@@ -122,7 +177,15 @@ class FiberDownload(Resource):
             return err(CODE_BAD_REQUEST, "服务未就绪")
         scheme = request.headers.get("X-Forwarded-Proto", "") or request.scheme or "http"
         host = request.host or ""
-        r = svc.gen_fiber_apk(scheme, host)
+        configured_url=request.headers.get('X-App-Platform-Url','').strip()
+        if configured_url:
+            from urllib.parse import urlsplit
+            try:
+                parts=urlsplit(configured_url);port=parts.port
+                if len(configured_url)>2048 or parts.scheme not in ('http','https') or not parts.hostname or parts.username or parts.password or parts.path not in ('','/') or parts.query or parts.fragment:
+                    raise ValueError('Invalid platform URL')
+            except ValueError:return err(CODE_BAD_REQUEST,"Invalid platform URL")
+        r = svc.gen_fiber_apk(scheme, host, configured_url or scheme+'://'+host)
         if not r.get("ok"):
             return err(CODE_BAD_REQUEST, r.get("error", "生成失败"))
         resp = make_response(r.get("apk_bytes") or b"")

@@ -96,12 +96,12 @@ class ProxyTest(unittest.TestCase):
         self.assertEqual(ProxyServiceImpl().resolve_egress("global"), ("", False))
 
     def test_resolve_egress_smart_fallback(self):
-        # smart → allow_fallback=True（可回退直连），URL 取智能源
+        # 空订阅占位不是用户绑定：内核运行也必须真直连。
         set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890,
                            "smart_source": {"type": "subscription", "ref_id": ""}}))
         from sentinel_platform.modules.system.proxy import ProxyServiceImpl
         url, fb = ProxyServiceImpl().resolve_egress("smart")
-        self.assertEqual(url, self._expected_mihomo_url())
+        self.assertEqual(url, "")
         self.assertTrue(fb)
 
     def test_resolve_egress_legacy_source_compat(self):
@@ -375,13 +375,13 @@ class ProxyTest(unittest.TestCase):
         self.assertNotIn("error", r)
         self.assertTrue(p.get_config().get("global_mode_enabled"))
 
-    def test_save_config_smart_not_blocked_by_reachability(self):
-        """smart 模式设计上不可达自动降级直连，保存不因探测失败被拦。"""
+    def test_save_config_smart_custom_not_blocked_by_reachability(self):
+        """有效自定义smart源保留运行时不可达直连兜底；显式内核源另做fresh校验。"""
         set_repo(_MemRepo({"name": "default", "enabled": True, "http_port": 17890,
-                           "active_profile_id": "sub1"}))
+                           "url": "http://127.0.0.1:18000"}))
         from sentinel_platform.modules.system import proxy as p
         with mock.patch.object(p, "_proxy_reachable", return_value=False):
-            r = p.save_config({"smart_source": {"type": "subscription", "ref_id": "sub1"}})
+            r = p.save_config({"smart_source": {"type": "custom", "ref_id": "000000000000000000000001"}})
         self.assertNotIn("error", r)
 
     # —— 需求3：代理告警推送开关（默认开，可关） ——

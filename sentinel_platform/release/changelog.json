@@ -1,5 +1,12 @@
 [
   {
+    "ver": "v1.21.177",
+    "date": "2026-10-16",
+    "summary": "177双端新基板：独立协同工作区、成员/副主持、通用转发与密文缓存、迁移与附件；名称及环节匹配的专有SKILL、首选/备用模型与两步任务；原Word报告模板标注与报告来源选择；会话与分支攻击链、HTTP(S)/WebSocket工作流；日夜与窄窗界面、叶子手册、本地系统/补丁日志、更新与启动诊断修复。",
+    "summary_en": "New177 bases for Web and Windows: isolated collaborative workspaces, member roles, generic relay/encrypted cache, migration and attachments; model-name/stage SKILL bindings, primary/fallback models and two-step tasks; original Word template marking and report source selection; session/branching attack chains and HTTP(S)/WebSocket workflows; responsive day/night UI, detailed manual, local system/patch logs and update/startup diagnostics fixes.",
+    "upgrade_notice": "177成为双端新安装基板及回退下限。既有175/176用户可按签名相邻链升级并保留账号、配置、任务及证据；更早Web请保数据修复安装。更新前结束关键任务；首次控制组件迁移会协调重建后台进程，后续普通代码补丁沿热更新。Windows10未完成实机验收。后续改动统一为177B-1补丁。"
+  },
+  {
     "ver": "v1.21.176",
     "date": "2026-10-09",
     "summary": "双端可用性修复：Windows页面文字选择、Ctrl+C、右键复制与缩放，安装器目录浏览；AI控制台文件上传、真实进度、取消/失败重试；系统/版本/平台通告过滤及弹窗顺序；实际数据盘剩余空间与并发预算；中等DPI视口的三栏布局及输入区可见性。",
@@ -10,8 +17,7 @@
     "ver": "v1.21.175",
     "date": "2026-10-08",
     "summary": "修复更新机制兼容性缺陷：本地Docker Engine版本协商、独立签名守护修订、后台实际就绪与中断恢复。Web新175镜像基板，旧用户通过保留数据修复安装升级；Windows存量通过差异热更新进入175，无需重新安装。175以下回退禁止，之后继续相邻压缩包链式更新。",
-    "upgrade_notice": "Web请先备份并使用官网install.sh选择修复安装，保留账号、配置、任务、证据、浏览器与扩展数据。Windows不受本次Docker故障影响，可一键热更新175；更新过程有兼容台阶并自动重开窗口。旧基板在175交付校验后撤除。",
-    "installer_notes": "原地修复安装守护完全独立于业务源码，修复冻结安装器既有目录报No module named sentinel_platform；原地安装失败已验证回滚和1150个用户状态文件保留。"
+    "upgrade_notice": "Web请先备份并使用官网install.sh选择修复安装，保留账号、配置、任务、证据、浏览器与扩展数据。Windows不受本次Docker故障影响，可一键热更新175；更新过程有兼容台阶并自动重开窗口。旧基板在175交付校验后撤除。"
   },
   {
     "ver": "v1.21.172",

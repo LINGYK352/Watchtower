@@ -18,11 +18,12 @@ _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
 
 
-def http_req(url: str, method: str = "get", trust_env: bool = False, **kwargs: Any):
+def _http_req(url: str, method: str = "get", trust_env: bool = False, **kwargs: Any):
     """发 HTTP 请求。默认 verify=True、超时 (10,30)、带 UA、不自动跟随重定向。
     **默认 trust_env=False（真直连，不读环境 *_proxy 代理，防残留 env 劫持）**。
     代理由调用方**显式传 proxies=**；确需读 env 代理的场景显式传 trust_env=True。"""
     import requests
+    prepared = kwargs.pop('_prepared_request', None)
     kwargs.setdefault("verify", True)
     kwargs.setdefault("timeout", (10.1, 30.1))
     kwargs.setdefault("allow_redirects", False)
@@ -37,13 +38,42 @@ def http_req(url: str, method: str = "get", trust_env: bool = False, **kwargs: A
     # 显式传了 proxies 的调用方走其指定代理；未传则 trust_env=False 下不会回落读 env → 真直连。
     sess = requests.Session()
     sess.trust_env = bool(trust_env)
+    response = None
+    failure = ""
     try:
-        return sess.request(method, url, **kwargs)
+        if prepared is not None:
+            if prepared.url != url or prepared.method.upper() != method.upper():
+                raise ValueError('Prepared request differs from its target')
+            kwargs.pop('headers', None)
+            kwargs.pop('data', None)
+            response = sess.send(prepared, **kwargs)
+        else:
+            response = sess.request(method, url, **kwargs)
+        return response
+    except Exception as exc:
+        failure=type(exc).__name__
+        raise
     finally:
+        from .traffic_context import record,observe_response
+        # requests may follow redirects; every actual hop has its own identity.
+        hops=list(getattr(response,'history',[]) or [])+[response] if response is not None else []
+        if not hops:record(method,url,error=failure,level='network_error')
+        for hop in hops:
+            try:observe_response(hop)
+            except Exception:record(method,url,status=getattr(hop,'status_code',None),error='流量正文预览不可用 / Body preview unavailable')
         try:
             sess.close()
         except Exception:
             pass
+
+
+def http_req(url: str, method: str = 'get', trust_env: bool = False, **kwargs: Any):
+    context=kwargs.pop('_traffic_context',None)
+    if context:
+        from .traffic_context import scope,current
+        with scope(context,(current() or {}).get('source','http_helper')):
+            return _http_req(url,method,trust_env,**kwargs)
+    return _http_req(url,method,trust_env,**kwargs)
 
 
 def get_title(content: bytes) -> str:

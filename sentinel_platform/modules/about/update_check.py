@@ -133,6 +133,9 @@ def _parse(version: str) -> Tuple[int, ...]:
       正式版（无 `-N`）→ (1, 0)  （大，排后）
       预发布 `-N`      → (0, N)  （小，排前）
     故 147 正式 (1,21,147,1,0) > 147-12 预发布 (1,21,147,0,12)，修「正式版被判比测试版旧→报已最新不更新」。"""
+    from sentinel_platform.core import release_version as update_policy
+    try:return update_policy.key(str(version or '').strip())
+    except ValueError:pass  # Retain legacy short-version comparison for old records.
     s = str(version or "").strip().lstrip("vV")
     # 分离主版本 与 预发布号（首个 - 或 _ 之后为预发布）
     m = re.match(r"^([0-9.]+)(?:[-_](.+))?$", s)
@@ -172,6 +175,10 @@ def check_update(client_version: str = "") -> Dict[str, Any]:
       - has_update：**是否有可用更新**——上游可达时=上游 > 本实例（本实例落后，真·远程有新版）；
         上游不可达/未配置时降级=服务端 > 前端构建（提示刷新拿新构建，旧行为）。
     """
+    from sentinel_platform.core import release_version as update_policy
+    def visible(value):
+        try:return update_policy.display_version(value)
+        except ValueError:return value
     server = server_version()
     client = (client_version or "").strip()
     src, key, check_remote = _update_source()
@@ -182,14 +189,14 @@ def check_update(client_version: str = "") -> Dict[str, Any]:
         latest = remote if _cmp(remote, server) >= 0 else server
         has_update = _cmp(remote, server) > 0
         if has_update:
-            msg = "发现新版本 {}（本实例 {}）".format(remote, server)
+            msg = ("发现补丁更新 {}（本实例 {}）" if visible(remote)!=remote and visible(remote)==visible(server) else "发现新版本 {}（本实例 {}）").format(visible(remote), visible(server))
         else:
             fe_behind = bool(client) and _cmp(server, client) > 0
             if fe_behind:
                 has_update = True
-                msg = "本实例已是最新 {}，但当前页面构建 {} 偏旧，刷新即可。".format(server, client)
+                msg = "本实例已是最新 {}，但当前页面构建 {} 偏旧，刷新即可。".format(visible(server), visible(client))
             else:
-                msg = "当前 {} 已是最新。".format(server)
+                msg = "当前 {} 已是最新。".format(visible(server))
         return {"server_version": server, "client_version": client, "latest_version": latest,
                 "source": src, "remote_ok": True, "has_update": has_update, "message": msg}
 
@@ -208,10 +215,22 @@ def check_update(client_version: str = "") -> Dict[str, Any]:
     # 这与网络故障不同：网络故障不能把旧页面误报成可更新；本地模式则本来就只依赖这两个版本。
     has_update = bool(client) and _cmp(server, client) > 0
     if has_update:
-        msg = "本实例版本 {} 高于当前页面构建 {}，刷新即可。".format(server, client)
+        msg = "本实例版本 {} 高于当前页面构建 {}，刷新即可。".format(visible(server), visible(client))
     elif not src:
-        msg = "更新源未配置，当前本地版本为 {}。".format(server)
+        msg = "更新源未配置，当前本地版本为 {}。".format(visible(server))
     else:
-        msg = "当前 {} 已是最新。".format(server)
+        msg = "当前 {} 已是最新。".format(visible(server))
     return {"server_version": server, "client_version": client, "latest_version": server,
             "source": src, "remote_ok": False, "has_update": has_update, "message": msg}
+
+
+def release_metadata():
+    import platform
+    from sentinel_platform.core import release_version as update_policy
+    raw=server_version()
+    try:
+        value=update_policy.key(raw);system={'windows':'win','linux':'linux'}.get(platform.system().lower())
+        return {'version':raw,'display_version':update_policy.display_version(raw),
+                'release_kind':update_policy.release_kind(raw),
+                'patch_id':update_policy.patch_id(raw,system) if value[3]==2 and system else ''}
+    except ValueError:return {'version':raw,'display_version':raw,'release_kind':'legacy','patch_id':''}

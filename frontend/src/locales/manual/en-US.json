@@ -1,0 +1,345 @@
+{
+  "dashboard": {
+    "steps": [
+      "Review task, asset, finding and resource cards",
+      "Open a card to inspect its underlying records",
+      "Compare status charts with current resource use"
+    ],
+    "check": "Statistics summarize stored records. If counts seem stale, refresh and inspect the detail list before changing concurrency."
+  },
+  "attackAlert": {
+    "steps": [
+      "Check collection capability and last activity first",
+      "Filter by type, severity and source IP",
+      "Open evidence and inspect target, time, count and confidence",
+      "Review the exact scope before changing bans or allowlists"
+    ],
+    "check": "Historical alerts may remain available when automatic collection is unsupported. Check deployment and collector status separately from record counts."
+  },
+  "systemExtension": {
+    "steps": [
+      "Filter installed and store tools by category and source",
+      "Click a card to read its standard documentation",
+      "Upload a supported file or ZIP and review entry, parameters and dependencies",
+      "Enable only the tools needed by the workflow"
+    ],
+    "check": "Availability, enabled state and execution are distinct. Long documentation opens in a drawer. Inspect package structure and dependency errors after a failed upload."
+  },
+  "controlSync": {
+    "steps": [
+      "Enter a reachable IP or domain. Windows adds the receiver port automatically; explicit ports are accepted. Incomplete fields show a prompt. Node mode requires an endpoint, fingerprint and credential. Choose limited validity and categories before generating a link; no migration starts yet.",
+      "Click a record summary for its progress, stage, categories and results. Completed, failed, rejected or expired records can be removed; active or pending operations cannot. Imported business data and protocol retry receipts remain."
+    ],
+    "check": "Verify the saved state and results shown on the page."
+  },
+  "collaboration": {
+    "steps": [
+      "Create a group, share its invitation and approve participants",
+      "Enter the independent workspace and choose group or direct conversation",
+      "Manage members, names and cohost service separately from applications",
+      "Stage files below the composer, remove unwanted files and send",
+      "Preview shared findings, reports or dormant session packages",
+      "Add a workspace node, verify its fingerprint, then select a delivery policy"
+    ],
+    "check": "Direct content is limited to the two participants. Viewing the latest message marks that conversation read. Cohost service requires consent and prepared public data; it does not grant administrative approval rights."
+  },
+  "tasks": {
+    "steps": [
+      "Filter tasks and open their details",
+      "Inspect sites, ports, domains and findings separately",
+      "Confirm stop, resume or restart against the actual status",
+      "Review asset and linked-session options before deleting"
+    ],
+    "check": "Submission is not completion. Diagnose failures from task details and logs; avoid repeatedly creating the same task."
+  },
+  "taskCreate": {
+    "steps": [
+      "Name the task and choose a policy",
+      "Select the target type and enter the corresponding scope",
+      "Review exclusions, groups, scan options and resource hints",
+      "Submit and track the created task"
+    ],
+    "check": "Group links can prefill scope. Automatic AI requires a configured model; use Go to configuration to complete missing settings before submitting."
+  },
+  "policy": {
+    "steps": [
+      "Create or edit a reusable policy",
+      "Choose the required discovery and detection stages",
+      "Configure optional automatic AI behavior",
+      "Save, reopen and select the policy from a task or schedule"
+    ],
+    "check": "Check dependent schedules before deletion. Resolve validation messages and missing model configuration before saving."
+  },
+  "taskSchedule": {
+    "steps": [
+      "Enter name, policy, time and preferred model on the first step",
+      "Optionally select backup and supervisory models",
+      "Continue to the editable target and optional asset group",
+      "Submit and inspect the next execution and created task"
+    ],
+    "check": "An empty backup is valid. Group selection assists target entry. Disabling a schedule stops future triggers, not tasks already created."
+  },
+  "pentest": {
+    "steps": [
+      "Filter system, manual or workgroup session origins",
+      "Open a session and inspect scope, events, findings and reports",
+      "Continue, pause or finish according to status and permission",
+      "Review the deletion scope before confirming"
+    ],
+    "check": "Origin describes creation; status describes execution. Waiting for a model or human input is not itself a failure."
+  },
+  "pentestConsole": {
+    "steps": [
+      "Create a manual session or resume an existing one",
+      "Choose model, execution mode and scope, then send instructions",
+      "Inspect tool results, files and approvals and pause when needed",
+      "Open the browser or Burps and review traffic before replay",
+      "Upload supporting files and organize evidence at the end"
+    ],
+    "check": "Human mode waits for input. TCP/TLS replay requires an explicit port; use hex or Base64 for binary data and session-specific CA or client certificates for TLS."
+  },
+  "miniapp": {
+    "steps": [
+      "Close WeChat and clear the displayed package directory",
+      "Reopen and load the intended mini program, then upload its new wx folder",
+      "Review extracted endpoints and information",
+      "Choose intensity, autonomous or human mode and preferred or optional backup AI",
+      "Inspect HTTP/HTTPS evidence in the resulting session"
+    ],
+    "check": "Avoid mixing old packages. Extracted clues are not confirmed findings; check package completeness after parsing errors. Human mode creates a waiting session."
+  },
+  "appPentest": {
+    "steps": [
+      "Pair the device using the supported wired or wireless flow",
+      "For wireless, configure parameters and search",
+      "Choose traffic egress in the app and configure HTTPS trust as needed",
+      "Generate authorized test traffic and inspect HTTP, HTTPS, WebSocket or raw TCP",
+      "Send a record to Burps with the matching protocol and encoding"
+    ],
+    "check": "TLS plaintext requires appropriate interception and trust conditions. Pairing alone does not prove traffic capture. Diagnose device connectivity before relay status."
+  },
+  "probeManage": {
+    "steps": [
+      "Inspect probe status and last contact",
+      "Create or pair a probe and verify connection parameters",
+      "Select an available probe for the task and inspect returned evidence",
+      "Check dependent work before removal"
+    ],
+    "check": "A saved probe record does not prove a running process. For offline probes, check reachability, credentials and probe logs."
+  },
+  "aiConfig": {
+    "steps": [
+      "Collapsed by default: calls, total tokens, input/output and failed calls stay visible. Expand for model and stage breakdowns. Refresh reads statistics without calling a model; global parameters keep their layout.",
+      "Add a binding, choose a uniquely named configured model and required built-in stages, upload the bundle and select its entry. Both model name and stage must match. Guard bindings require risk confirmation. Legacy unscoped bindings need stages; built-in tool and safety constraints remain."
+    ],
+    "check": "Verify the saved state and results shown on the page."
+  },
+  "vulnCenter": {
+    "steps": [
+      "Choose AI, kernel scan or workgroup source",
+      "Filter and open an individual finding",
+      "Read evidence and impact before editing or changing verification state",
+      "Review single or batch scope for reports, sharing and deletion"
+    ],
+    "check": "Live updates retain the active filter. Unrated means available evidence cannot establish severity; it is not an informational rating."
+  },
+  "reportEdit": {
+    "steps": [
+      "Create a report template, upload Word, then choose manual marking or AI learning. Manual marking edits the original document with natural language and tags; learning can call a model. Both require review. Existing text templates remain editable."
+    ],
+    "check": "Verify the saved state and results shown on the page."
+  },
+  "poc": {
+    "steps": [
+      "Search and inspect an existing rule and prerequisites",
+      "Create or import supported metadata and validation content",
+      "Save and select it in an authorized workflow",
+      "Review policy dependencies before editing or removing"
+    ],
+    "check": "A rule is not evidence that every target is vulnerable. Diagnose format errors and check product version, path, port and network results."
+  },
+  "vulnIntel": {
+    "steps": [
+      "Search product or vulnerability identifiers and filter severity",
+      "Read affected versions, scores and source references",
+      "Inspect the locally exploitable field and available material",
+      "Match the entry to actual asset versions before validation"
+    ],
+    "check": "Unrated is incomplete source data. Locally exploitable describes available material, not guaranteed exploitation on every target."
+  },
+  "attackChain": {
+    "steps": [
+      "Locate records by session, target and organization. Targets branch to independent findings; explicit parent steps or findings create continuations. Intranet entry points are labelled separately.",
+      "Enter a source session ID, target text, organization or state and search. Reset clears filters. Target text is treated literally, not as a regular expression; source columns and node details support traceability.",
+      "Open a graph preview to pan, zoom and inspect targets, sessions and references in a movable dialog. Independent findings branch from targets; chronology alone does not imply causation. The console reuses this same graph component."
+    ],
+    "check": "Verify the saved state and results shown on the page."
+  },
+  "intel": {
+    "steps": [
+      "Choose an intelligence type and query its sources",
+      "Open records and compare dates and references",
+      "Import or maintain supported entries",
+      "Relate useful information to local assets"
+    ],
+    "check": "Source and date affect reliability. Retain references and compare identifiers before merging apparent duplicates."
+  },
+  "search": {
+    "steps": [
+      "Select an asset type and query stored records",
+      "Inspect matching fields, timestamps and ownership",
+      "Open site, port, domain or certificate details",
+      "Organize useful scope into an asset group"
+    ],
+    "check": "Searching stored assets does not start a network scan. Broaden filters and verify the asset type when no result appears."
+  },
+  "assetGroups": {
+    "steps": [
+      "Create a named scope with explicit exclusions",
+      "Open the group and inspect assets",
+      "Use its task entry and review the prefilled scope and policy",
+      "Check schedules before modifying or deleting"
+    ],
+    "check": "A group organizes scope, not scan completion. Exclusions matter; if group scope changes, refresh and confirm again before submission."
+  },
+  "assetMonitor": {
+    "steps": [
+      "Create monitoring scope, policy and interval",
+      "Check enabled state and previous or next run",
+      "Inspect added, removed or changed assets",
+      "Review future triggers before pausing or deleting"
+    ],
+    "check": "Comparison requires samples. No changes does not mean no execution; inspect the last run and errors."
+  },
+  "fingerprint": {
+    "steps": [
+      "Search recognition rules and inspect matching conditions",
+      "Create or edit product metadata and supported patterns",
+      "Save and check controlled samples for false positives",
+      "Review identified technology in later task results"
+    ],
+    "check": "Fingerprints identify clues, not vulnerabilities. Broad patterns can misidentify products; rule changes affect subsequent detection."
+  },
+  "githubTasks": {
+    "steps": [
+      "Enter search terms, scope and required API configuration",
+      "Submit and monitor status",
+      "Open repository, file, location and context for each match",
+      "Preserve required evidence before deleting"
+    ],
+    "check": "A match may be an example or stale material. Check API limits and reachability after failures; redact sensitive content in evidence."
+  },
+  "githubMonitor": {
+    "steps": [
+      "Create query scope and an interval",
+      "Enable and inspect the last run",
+      "Compare new matches with prior content",
+      "Check the next run after changing or disabling"
+    ],
+    "check": "Recurring monitoring differs from one-off search. Review execution errors before interpreting empty results; account for provider limits."
+  },
+  "userManage": {
+    "steps": [
+      "Identify the account and inspect roles",
+      "Create a user with the required minimum permissions",
+      "Review dependencies before changing password, disabling or deleting",
+      "Verify menus and actions with the resulting permissions"
+    ],
+    "check": "API permissions remain enforced in addition to menu visibility. Keep an administrator available and manage running work through its business workflow."
+  },
+  "proxy": {
+    "steps": [
+      "Select a proxy group and supported protocol",
+      "Enter host, port, authentication and intended use",
+      "Save and run the connection test",
+      "Select the proxy in the relevant workflow and verify actual egress"
+    ],
+    "check": "A single successful probe does not guarantee every target. Unsaved drafts differ from active settings; never expose authentication in troubleshooting output."
+  },
+  "networkCheck": {
+    "steps": [
+      "Choose the capability or destination to test",
+      "Run diagnostics and wait for individual results",
+      "Distinguish DNS, connection, TLS and latency failures",
+      "Correct the relevant settings and compare a new result"
+    ],
+    "check": "Tests run from the platform location, which differs from phones and remote probes. Inspect the failing stage before changing global settings."
+  },
+  "apiKeys": {
+    "steps": [
+      "Configure and save each required provider",
+      "Test access and check permission or quota",
+      "Set notification thresholds and inspect the read-only platform ID",
+      "Configure destinations and send a test"
+    ],
+    "check": "Platform ID is the activation JWT uid. Notifications include system and ID to identify origin; verify the receiver actually obtained the test."
+  },
+  "logs": {
+    "steps": [
+      "Choose log type or task and filter level or keyword",
+      "Read surrounding events in time order",
+      "Refresh or download supported logs",
+      "Repeat the query after applying a fix"
+    ],
+    "check": "Early Windows startup can fail before service.log exists. Use the startup.log path shown by the startup diagnostic screen."
+  },
+  "accessLog": {
+    "steps": [
+      "Filter requests by time, path or source",
+      "Inspect method, status, latency and identity clues",
+      "Correlate application logs at the same time",
+      "Export only the required permitted scope"
+    ],
+    "check": "HTTP status is not the entire business result. Platform access logs differ from captured traffic to a target."
+  },
+  "guardLog": {
+    "steps": [
+      "Filter traffic by action, status, target or time",
+      "Inspect request, response and decision reason",
+      "Open the related session to see whether an action was approved and sent",
+      "Keep redacted evidence for review"
+    ],
+    "check": "Raw TCP and missing responses do not invent HTTP status codes. Distinguish supervisory denial from a target response."
+  },
+  "manual": {
+    "steps": [
+      "Expand a parent and choose a menu leaf",
+      "Search a feature name or text and expand its matching group",
+      "Read purpose, features, steps and result guidance",
+      "Open the associated page or reload the chapter URL"
+    ],
+    "check": "This manual works offline. Permissions, current state and configuration still govern available actions; clear the search to restore the full directory."
+  },
+  "activation": {
+    "steps": [
+      "Review activation status and credential expiry",
+      "Use the supported activation flow to add a credential",
+      "Check the read-only platform ID below the credential list",
+      "Refresh status after renewal"
+    ],
+    "check": "Platform ID is the JWT uid, not an editable nickname. Keep credentials private and check product type, expiry and system time after errors."
+  },
+  "updateCheck": {
+    "steps": [
+      "Read current version and available update status",
+      "Review compatibility and active work",
+      "Start the update and wait through check, download, validation and restart",
+      "Verify version, accounts, settings and data"
+    ],
+    "check": "A test iteration is not formal publication. Never bypass signature errors; use the update recovery flow after interruption and the version distribution contract for patch rules."
+  },
+  "changelog": {
+    "steps": [
+      "History is read from files delivered with the installed version, without fetching remote history. System updates open by default; switch to patch updates for fixes to existing features.",
+      "Feature additions/removals belong to system versions; existing-feature fixes belong to patches. Patch serials stay hidden in the main version label. Test iterations are development builds, not formal releases."
+    ],
+    "check": "Verify the saved state and results shown on the page."
+  },
+  "developer": {
+    "steps": [
+      "Read project information and supplied links",
+      "Prepare version, reproduction steps and redacted logs before feedback"
+    ],
+    "check": "External links require connectivity. Include the actual error and stage, but exclude tokens, credentials and private data."
+  }
+}

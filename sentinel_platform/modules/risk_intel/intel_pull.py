@@ -61,6 +61,10 @@ def _save_progress(ts, remote_cnt, pulled):
 
 
 def pull_and_upsert():
+    from ._intel_notifications import intake_batch
+    with intake_batch('central') as identity:return _pull_and_upsert(identity)
+
+def _pull_and_upsert(notification_batch):
     """拉中心情报增量 → upsert_vuln 入本地库。返回 {ok, pulled, new, merged} 或 {ok:False, reason}。"""
     from .vuln_intel import upsert_vuln
     # 1) 版本比对
@@ -102,7 +106,7 @@ def pull_and_upsert():
             "source_raw_id": src0.get("raw_id", ""), "published_date": it.get("published_date", ""),
         }
         try:
-            action, _ = upsert_vuln(vdict)
+            action, _ = upsert_vuln(vdict,notification_batch=notification_batch)
         except Exception:
             continue
         if action == "new":

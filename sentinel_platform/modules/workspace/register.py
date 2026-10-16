@@ -11,3 +11,7 @@ def register(registry) -> None:
     # dashboard：态势总览设备监控（无 ROLE，字符串键）
     from .dashboard import get_service as _dashboard_service
     registry.register("dashboard_service", _dashboard_service())
+    from .control_sync import get_service as _control_sync_service
+    registry.register("control_sync_service", _control_sync_service())
+    from .collaboration import get_service as _collaboration_service
+    registry.register('collaboration_service',_collaboration_service())
