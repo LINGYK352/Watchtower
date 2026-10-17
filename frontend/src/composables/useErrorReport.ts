@@ -1,5 +1,6 @@
 import { t as translate } from '../i18n'
 import { reactive } from 'vue'
+import {restartingFailure} from './useRestartState'
 import { APP_VERSION } from '../config/brand'
 
 /**
@@ -38,6 +39,7 @@ function _fingerprint(path: string, message: string): string {
 
 /** request.ts 调：捕获一条业务异常。会做去重+冷却，命中冷却则静默不弹。 */
 export function captureError(info: { path: string; method?: string; status?: number; message: string }) {
+  if(restartingFailure(info.status||0)){state.pending=null;return}
   const fp = _fingerprint(info.path, info.message)
   const now = Date.now()
   const last = _lastShown[fp] || 0

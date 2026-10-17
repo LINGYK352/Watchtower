@@ -17,7 +17,9 @@
     "runtime": "Preparing the local runtime",
     "webview": "Preparing the browser component",
     "failureLog": "Failed stage: {stage}\nDiagnostic log: {path}\nKeep the log for troubleshooting. Existing data is retained.",
-    "failureNoLog": "Startup failed and neither diagnostic directory was writable. Check directory permissions. Existing data is retained."
+    "failureNoLog": "Startup failed and neither diagnostic directory was writable. Check directory permissions. Existing data is retained.",
+    "interface": "Loading workspace interface",
+    "interface_reload": "Reloading workspace interface"
   },
   "menu": {
     "application": "Application",

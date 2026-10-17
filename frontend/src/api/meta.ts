@@ -100,6 +100,11 @@ export interface DisclaimerStatus {
   accepted_at: string
 }
 
+/** First persisted installation assent remains valid across every update. */
+export function hasPersistedAssent(status: DisclaimerStatus): boolean {
+  return status.accepted && status.persisted !== false && status.status !== 'unavailable'
+}
+
 /** 免责声明签署状态（服务端持久化，重启/换浏览器保留，仅重装需重签） */
 export async function getDisclaimerStatus(signal?: AbortSignal): Promise<DisclaimerStatus> {
   // A restart/timeout is unknown, not unsigned. This public read has one bounded

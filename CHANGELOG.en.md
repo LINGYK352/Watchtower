@@ -1,3 +1,5 @@
-# v1.21.177
+# v1.21.178
 
-New177 bases for Web and Windows: isolated collaborative workspaces, member roles, generic relay/encrypted cache, migration and attachments; model-name/stage SKILL bindings, primary/fallback models and two-step tasks; original Word template marking and report source selection; session/branching attack chains and HTTP(S)/WebSocket workflows; responsive day/night UI, detailed manual, local system/patch logs and update/startup diagnostics fixes.
+178 consolidates all published177 patches and current fixes: native Save As downloads and TLS/update compatibility; preserved agreement acceptance; pairing/cancellation and insert-only identity-aware migration; replacement-only builtin stages and duplicate repair; guarded unattended defaults for old/imported sessions; fenced concurrent workspace receipt and reconnect-safe drafts; authenticated restart overlay and Windows update finalization/recovery; preserving repair installation; visible operation modes, user-selected nested ZIP entries locally and in cloud review, unknown blank targets remaining dormant, and actual model/stage SKILL context across all console paths and explicit fallback.
+
+ The complete Windows installer now includes platform branding, install/preserving repair/uninstall, and verified offline WebView2/.NET prerequisites. Hidden health probes return structured failures without blocking dialogs. Blank windows get one bounded reload and an independent diagnostic with software-renderer recovery; shared runtimes and personal data are retained by default.

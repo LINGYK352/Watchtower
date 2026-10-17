@@ -12,7 +12,8 @@ import json
 import re
 import time
 from typing import Any, Dict, List, Tuple
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from sentinel_platform.core.distribution_tls import urlopen
 
 from sentinel_platform.core import get_config, get_logger
 
@@ -189,7 +190,11 @@ def check_update(client_version: str = "") -> Dict[str, Any]:
         latest = remote if _cmp(remote, server) >= 0 else server
         has_update = _cmp(remote, server) > 0
         if has_update:
-            msg = ("发现补丁更新 {}（本实例 {}）" if visible(remote)!=remote and visible(remote)==visible(server) else "发现新版本 {}（本实例 {}）").format(visible(remote), visible(server))
+            if update_policy.release_kind(remote)=='patch':
+                import platform
+                system='win' if platform.system().lower()=='windows' else 'linux'
+                msg='发现补丁更新 {}（本实例 {}）'.format(update_policy.patch_id(remote,system),visible(server))
+            else:msg='发现新版本 {}（本实例 {}）'.format(visible(remote),visible(server))
         else:
             fe_behind = bool(client) and _cmp(server, client) > 0
             if fe_behind:

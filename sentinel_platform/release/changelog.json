@@ -1,9 +1,10 @@
 [
   {
-    "ver": "v1.21.177-1000001",
-    "date": "2026-10-16",
-    "summary": "177B-1补丁：Windows全部下载统一另存为；修复Linux节点、报告/附件/证书与资产/PoC导出，等待保存期间保留Blob并在完成/取消后释放；已有签署后台核验，首次未签署正常显示条款。 发现补丁与更新检测显示完整补丁编号，保留补丁至177基板的回退入口。",
-    "summary_en": "177B-1: all Windows downloads use Save As. Fix Linux node, report/attachment/certificate and asset/PoC exports; keep blob URLs until completion/cancellation. Existing assent is checked silently; genuinely unsigned installs show the terms."
+    "ver": "v1.21.178",
+    "date": "2026-10-17",
+    "summary": "178合并177全部已发布补丁与本轮修复：Windows下载统一另存为、证书与更新兼容、首次协议签署保持；配对确认/撤销清理、增量同步业务身份合并、内置环节仅覆盖同步及重复清理；旧/迁移会话受闸刀监管的挂机模式与入口；工作区多进程收信租约和独立临时目录修复并发503，后台重连保留消息和草稿；修复重启遮罩鉴权和页面不可点击、Windows99%状态与更新恢复互斥，完整安装器新增保留账号配置/业务资料的修复安装；新建会话模式选中态、多目录ZIP解压后由用户选入口（本地和云端）、未填目标显示未知且继续待命；专有SKILL在同步/流式/后台会话中沿实际模型及环节传给工具，兼容显式备用、网络重试及绑定撤销。 Windows完整安装器采用平台图标和日夜配色，包含安装、保留资料修复及卸载入口，内置经哈希及微软签名校验的WebView2与.NET离线依赖。修复隐藏健康探针被异常弹窗阻塞、35秒超时和缺失文件收尾；空白窗口限次自刷新，仍失败时显示独立诊断并保留资料，下一次使用软件渲染恢复。系统卸载默认保留个人资料，共享依赖不会被卸载。 安装依赖按未预装环境复核：Python、数据库、浏览器和工具随包提供；新增数据库私有VC++运行库，随完整安装和热更新到达，无需客户提前装VC++；清理无关Python3.9/3.10二进制。构建缺少必要Python依赖时立即终止。",
+    "summary_en": "178 consolidates all published177 patches and current fixes: native Save As downloads and TLS/update compatibility; preserved agreement acceptance; pairing/cancellation and insert-only identity-aware migration; replacement-only builtin stages and duplicate repair; guarded unattended defaults for old/imported sessions; fenced concurrent workspace receipt and reconnect-safe drafts; authenticated restart overlay and Windows update finalization/recovery; preserving repair installation; visible operation modes, user-selected nested ZIP entries locally and in cloud review, unknown blank targets remaining dormant, and actual model/stage SKILL context across all console paths and explicit fallback. The complete Windows installer now includes platform branding, install/preserving repair/uninstall, and verified offline WebView2/.NET prerequisites. Hidden health probes return structured failures without blocking dialogs. Blank windows get one bounded reload and an independent diagnostic with software-renderer recovery; shared runtimes and personal data are retained by default. Native runtime dependency audit adds private Microsoft VC++ libraries for the database, removes unused Python3.9/3.10 binaries, and rejects incomplete build environments.",
+    "upgrade_notice": "177、177B-1、177B-2均直接升级178，不再单独提示这些补丁。178为新安装基板及回退下限，保留账号、配置、会话与资料。无法进入更新页的Windows用户请用官网完整安装器选择修复现有安装并指定原目录。"
   },
   {
     "ver": "v1.21.177",

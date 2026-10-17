@@ -1,6 +1,6 @@
 """Native startup screen, with bundled artwork and independent locale assets."""
 from pathlib import Path
-import base64,html,json
+import base64,html,json,threading
 ASSETS=Path(__file__).with_name('assets')
 
 def locale(root):
@@ -12,13 +12,19 @@ def messages(root):
     return json.loads((ASSETS/'locales'/(locale(root)+'.json')).read_text(encoding='utf-8'))
 
 class Api:
-    def __init__(self,root):self.root=Path(root)
+    def __init__(self,root,diagnostic=None):self.root=Path(root);self.diagnostic=diagnostic;self._report_lock=threading.Lock()
     def get_locale(self):return locale(self.root)
     def set_locale(self,value):
         if value not in ('zh-CN','en-US'):raise ValueError('Unsupported language')
         from windows_native.update_state import write
         write(self.root/'state/ui-language.json',{'locale':value})
         return {'ok':True}
+    def report_startup_failure(self):
+        if self.diagnostic is None or not self.diagnostic.error_type or not self._report_lock.acquire(blocking=False):return {'ok':False}
+        try:
+            from windows_native.diagnostic_dialog import show
+            show(self.diagnostic,locale=locale(self.root));return {'ok':True}
+        finally:self._report_lock.release()
 
 def render(root,failed=False,diagnostic=None):
     from windows_native.guardian import display_version
@@ -51,4 +57,8 @@ h1{font-size:44px;line-height:1.1;font-weight:700;letter-spacing:.4px;margin:42p
     version_text=text['version'] if '-' in version else text.get('stableVersion','{version}')
     values={'LANG':locale(root),'IMAGE':image,'CAPTION':text['caption'],'PROGRESS':text['progress'],'STATUS':status,'HINT':hint,'VERSION':version_text.replace('{version}',version)}
     for key,value in values.items():page=page.replace('__'+key+'__',html.escape(value,quote=True))
+    if failed:
+        label='查看 / 上传错误日志' if locale(root)=='zh-CN' else 'Review / upload error report'
+        button='<button type="button" style="padding:11px 22px;border-radius:8px;border:1px solid #4e81b2;background:#173c61;color:#edf4ff;font:inherit;margin-bottom:22px;cursor:pointer" onclick="window.pywebview?.api.report_startup_failure()">'+label+'</button>'
+        page=page.replace('<div class="version">',button+'<div class="version">',1)
     return page

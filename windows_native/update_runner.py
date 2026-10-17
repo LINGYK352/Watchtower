@@ -21,18 +21,19 @@ def launch(root,request):
     return process
 
 def recover_launch(root):
-    root=Path(root).resolve();candidates=[]
-    for path in (root/'state').glob('.update-helper-*'):
-        try:
-            path.resolve().relative_to((root/'state').resolve());marker=json.loads((path/'helper.json').read_text(encoding='utf-8'))
-            if marker.get('product')=='watchtower-native-update-helper':candidates.append((marker['created'],path))
-        except (OSError,ValueError,KeyError):continue
-    if not candidates:raise RuntimeError('Interrupted update helper is missing')
-    helper=max(candidates,key=lambda item:item[0])[1]
+    import sys
+    root=Path(root).resolve();helper=root/'state'/('.update-helper-'+uuid.uuid4().hex[:12]);helper.mkdir()
+    if getattr(sys,'frozen',False) and Path(sys.executable).name.casefold() in ('watchtowernative.exe','watchtowerrecovery.exe'):
+        shutil.copy2(sys.executable,helper/'WatchtowerRecovery.exe');executable=helper/'WatchtowerRecovery.exe'
+    else:
+        from windows_native.guardian import service
+        from windows_native.update_channel import link
+        shutil.copytree(service(root),helper,dirs_exist_ok=True,copy_function=link);executable=helper/'NativeService.exe'
+    update_state.write(helper/'helper.json',{'created':time.time(),'product':'watchtower-native-update-helper'})
     with (root/'state/native-update-helper.log').open('ab') as log:
-        return subprocess.Popen([str(helper/'NativeService.exe'),'--root',str(root),'--boot',uuid.uuid4().hex,'--recover-update'],stdout=log,stderr=log,cwd=root,creationflags=subprocess.CREATE_NO_WINDOW|subprocess.CREATE_NEW_PROCESS_GROUP)
+        return subprocess.Popen([str(executable),'--root',str(root),'--recover-update'],stdout=log,stderr=log,cwd=root,creationflags=subprocess.CREATE_NO_WINDOW|subprocess.CREATE_NEW_PROCESS_GROUP)
 
-def cleanup_helpers(root):
+def _cleanup_helpers_locked(root):
     import psutil
     state=(Path(root)/'state').resolve();active=[]
     for process in psutil.process_iter(['exe']):
@@ -44,10 +45,26 @@ def cleanup_helpers(root):
             if marker.get('product')=='watchtower-native-update-helper' and not path.is_symlink():shutil.rmtree(path)
         except (OSError,ValueError):continue
 
+def cleanup_helpers(root):
+    try:
+        with update_state.lock(root):_cleanup_helpers_locked(root)
+    except update_state.UpdateBusyError:return
+
 def recover_progress(root):
+    try:
+        with update_state.lock(root):return _recover_progress_locked(root)
+    except update_state.UpdateBusyError:return
+
+def _recover_progress_locked(root):
     import psutil
     root=Path(root).resolve();progress=update_state.get_progress(root)
     if (root/'state/native-update-command.json').exists() or progress.get('phase') not in update_state.ACTIVE:return
+    from windows_native.update_recovery import helper_running
+    if helper_running(progress):return
+    try:
+        journal=update_state.read(root/'state/native-update-journal.json')
+        if journal.get('phase') in ('committing','done'):return
+    except (OSError,ValueError):pass
     try:
         if Path(psutil.Process(progress['owner_pid']).exe()).resolve()==Path(progress['helper_exe']).resolve():return
     except (KeyError,psutil.Error):pass
@@ -142,8 +159,11 @@ def run(root,request_file=None):
         return result.returncode==0 and checked.get('ok') and checked.get('core_version')==release['version']
     try:
         if recover_only:
-            stop();update_transaction.recover(root)
-            if not start():raise RuntimeError('Recovered native application did not start')
+            try:
+                with update_state.lock(root):
+                    stop();update_transaction._recover_locked(root)
+                    if not start():raise RuntimeError('Recovered native application did not start')
+            except update_state.UpdateBusyError:return 0
             return 0
         if request.get('sdk_handoff') is True:
             stop()

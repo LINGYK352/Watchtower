@@ -261,7 +261,83 @@ class CollaborationService(CollaborationFiles,CollaborationRooms):
             result[kind]=[{'_id':str(d['_id']),'title':d.get('title') or d.get('vuln_type') or str(d['_id'])} for d in self.repo.collection(collection).find(query).limit(100)]
         return result
 
+    def finding_candidates(self,user,page,keyword):
+        import re,heapq,itertools
+        from sentinel_platform.modules.risk_intel import vuln_center
+        admin=user.get('role')=='admin' or 'pentest:view_all' in user.get('permissions',[])
+        sessions=[] if admin else [str(row['_id']) for row in self.repo.collection(Collections.PENTEST_SESSION).find({'owner':user['username']},{'_id':1})]
+        tasks=[] if admin else [str(row['_id']) for row in self.repo.collection(Collections.TASK).find({'owner':user['username']},{'_id':1})]
+        streams=[];cursors=[];total=0
+        def mapped(cursor,source):
+            for record in cursor:
+                normalized=vuln_center._norm_unified(record,source);ident=str(record['_id'])
+                yield {'_id':ident if source=='ai' else source+':'+ident,'title':record.get('title') or normalized['name'] or ident,'target':normalized.get('target') or '',
+                       'severity':normalized.get('severity') or 'info','source':normalized.get('origin_category') or ('ai' if source=='ai' else 'kernel'),
+                       'component':str(record.get('component') or ''),'description':str(record.get('description') or '')[:1000],
+                       'session':str(record.get('session_id') or record.get('task_id') or ''),'time':str(record.get('save_date') or ''),'sort_id':(1 if isinstance(record['_id'],ObjectId) else 0,ident)}
+        try:
+            for source,collection,fields in [('ai',Collections.INTEL_FINDING,('title','vuln_type','target','unit','component')),('poc',Collections.VULN,('vul_name','plg_name','target')),('nuclei',Collections.NUCLEI_RESULT,('vuln_name','template_id','vuln_url','target'))]:
+                clauses=[] if admin else [{'session_id' if source=='ai' else 'task_id':{'$in':sessions if source=='ai' else tasks}}]
+                if source=='poc':clauses.append(dict(vuln_center._POC_EXCLUDE_IDENTIFY))
+                if keyword:clauses.append({'$or':[{field:{'$regex':re.escape(str(keyword)[:120]),'$options':'i'}} for field in fields]})
+                query={'$and':clauses} if clauses else {};coll=self.repo.collection(collection);total+=coll.count_documents(query)
+                projection={field:1 for field in set(fields)|{'severity','manual_severity','vuln_severity','chain_severity','cvss_vector','vector','cvss_score','cvss','baseScore','save_date','session_id','workspace_id','task_id','description','vuln_type','vul_name','plg_name','vuln_name','template_id','target','vuln_url'}}
+                cursor=coll.find(query,projection).sort('_id',-1).batch_size(30);cursors.append(cursor);streams.append(mapped(cursor,source))
+            # Merge sorted streams with O(page size) memory. No Mongo version
+            # upgrade/union feature or whole-history materialization is required.
+            selected=itertools.islice(heapq.merge(*streams,key=lambda row:row['sort_id'],reverse=True),(page-1)*15,page*15)
+            return {'items':[{k:v for k,v in row.items() if k!='sort_id'} for row in selected],'total':total,'page':page,'size':15}
+        finally:
+            for cursor in cursors:cursor.close()
+
+    def package_kernel_finding(self,object_id,user):
+        source,ident=object_id.split(':',1)
+        if source not in ('poc','nuclei') or not ObjectId.is_valid(ident):raise ControlSyncError('漏洞标识无效 / Invalid finding identifier')
+        collection=Collections.VULN if source=='poc' else Collections.NUCLEI_RESULT
+        record=self.repo.collection(collection).find_one({'_id':ObjectId(ident)})
+        if not record:raise ControlSyncError('漏洞不存在 / Finding not found',404)
+        if user.get('role')!='admin' and 'pentest:view_all' not in user.get('permissions',[]):
+            task=self.repo.collection(Collections.TASK).find_one({'_id':oid(record.get('task_id')),'owner':user['username']})
+            if not task:raise ControlSyncError('无权分享此漏洞 / Cannot share this finding',403)
+        from sentinel_platform.modules.risk_intel import vuln_center
+        value=vuln_center._norm_unified(record,source)
+        # Store the exact raw fields plus canonical list fields. The receiving
+        # system displays it under workgroup provenance, without pretending the
+        # remote task/session belongs to a local running task.
+        record.update(vuln_type=value['name'],title=value['name'],target=value.get('target') or '',severity=value.get('severity') or 'info',verified=value.get('verified',False),original_source=source)
+        stream=io.BytesIO()
+        with zipfile.ZipFile(stream,'w',zipfile.ZIP_DEFLATED) as archive:archive.writestr('data.json',json_util.dumps({'schema':1,'kind':'finding','record':record}).encode('utf-8'))
+        return stream.getvalue(),{'source_object_id':object_id,'original_source':source}
+
+    def candidate_page(self,user,kind,page=1,keyword=''):
+        import re
+        if kind not in ('finding','report','session'):raise ControlSyncError('资料类型无效 / Invalid data type')
+        try:page=int(page)
+        except (ValueError,TypeError):raise ControlSyncError('页码无效 / Invalid page')
+        if not 1<=page<=100000:raise ControlSyncError('页码无效 / Invalid page')
+        if kind=='finding':return self.finding_candidates(user,page,keyword)
+        admin=user.get('role')=='admin' or 'pentest:view_all' in user.get('permissions',[])
+        query={}
+        if not admin:
+            if kind=='session':query={'owner':user['username']}
+            else:
+                ids=[str(row['_id']) for row in self.repo.collection(Collections.PENTEST_SESSION).find({'owner':user['username']},{'_id':1})]
+                query={'session_id' if kind=='finding' else 'source_session':{'$in':ids}}
+        if keyword:
+            query={'$and':[query,{'$or':[{field:{'$regex':re.escape(str(keyword)[:120]),'$options':'i'}} for field in ('title','vuln_type','site','target','task_name','system_name','component')]}]}
+        if kind=='session':query={'$and':[query,{'collaboration_data_anchor':{'$ne':True}}]}
+        collection=self.repo.collection({'finding':Collections.INTEL_FINDING,'report':Collections.PENTEST_REPORT,'session':Collections.PENTEST_SESSION}[kind])
+        fields={field:1 for field in ('title','vuln_type','severity','site','target','url','component','status','save_date','created_at','task_name','system_name','session_id','source_session','workspace_id','description')}
+        rows=[]
+        for row in collection.find(query,fields).sort('_id',-1).skip((page-1)*15).limit(15):
+            rows.append({'_id':str(row['_id']),'title':str(row.get('title') or row.get('vuln_type') or row.get('task_name') or row.get('system_name') or row.get('site') or row['_id']),
+                         'target':str(row.get('target') or row.get('url') or row.get('site') or ''),'severity':str(row.get('severity') or 'info'),
+                         'status':str(row.get('status') or ''),'component':str(row.get('component') or ''),'description':str(row.get('description') or '')[:1000],
+                         'session':str(row.get('session_id') or row.get('source_session') or ''),'time':str(row.get('save_date') or row.get('created_at') or '')})
+        return {'items':rows,'total':collection.count_documents(query),'page':page,'size':15}
+
     def _package(self,kind,object_id,user):
+        if kind=='finding' and ':' in object_id:return self.package_kernel_finding(object_id,user)
         if kind=='session':
             service=get_registry().get(ROLE.PENTEST_DISPATCH)
             if not service or not hasattr(service,'export_session_package'):raise ControlSyncError('会话交接服务未就绪 / Session handoff unavailable',503)
@@ -346,7 +422,8 @@ class CollaborationService(CollaborationFiles,CollaborationRooms):
     def receive(self,gid,iid,user,provider_id='',resume=False):
         access=self._access(gid,user)
         received=self.cache.received.find_one({'owner':user['username'],'group_id':gid,'item_id':iid})
-        if received and not self.cache._entry(received).get('legacy'):
+        modern=bool(received and not self.cache._entry(received).get('legacy'))
+        if modern:
             item,raw=self.cache.fetch_package(gid,iid,user)
         elif access['host']:
             item=self._item(gid,iid,access['member_id'],True);raw=self._folder(gid,iid).joinpath('package.zip').read_bytes()
@@ -361,7 +438,7 @@ class CollaborationService(CollaborationFiles,CollaborationRooms):
         if item['kind']=='file':
             meta,_=inspect_package(raw)
             return {'item':item,'preview':meta}
-        if not access['host']:atomic_file(self._folder(gid,iid).joinpath('package.zip'),raw)
+        if not access['host'] and not modern:atomic_file(self._folder(gid,iid).joinpath('package.zip'),raw)
         if item['kind']=='session':
             service=get_registry().get(ROLE.PENTEST_DISPATCH)
             if resume:
@@ -372,8 +449,57 @@ class CollaborationService(CollaborationFiles,CollaborationRooms):
         with zipfile.ZipFile(io.BytesIO(raw)) as archive:
             if archive.namelist()!=['data.json'] or archive.getinfo('data.json').file_size>256*1024*1024:raise ControlSyncError('共享数据包格式无效 / Invalid data package')
             data=json_util.loads(archive.read('data.json').decode('utf-8'))
-        if data.get('schema')!=1 or data.get('kind')!=item['kind']:raise ControlSyncError('共享数据契约无效 / Invalid shared data contract')
+        if not isinstance(data,dict) or data.get('schema')!=1 or data.get('kind')!=item['kind'] or not isinstance(data.get('record'),dict):raise ControlSyncError('共享数据契约无效 / Invalid shared data contract')
         return json.loads(json_util.dumps({'item':item,'preview':data['record']}))
+
+    def save_item(self,gid,iid,user):
+        # Preview/fetch performs current membership, audience and integrity checks.
+        access=self._access(gid,user);result=self.receive(gid,iid,user);item=result['item'];kind=item['kind']
+        if kind not in ('finding','report','session'):raise ControlSyncError('此资料使用文件下载 / Download this file instead')
+        if item.get('sender')==access['member_id']:raise ControlSyncError('资料已在发送端系统中 / Data already belongs to the sender',409)
+        key=hashlib.sha256((user['username']+':'+gid+':'+iid).encode()).hexdigest()
+        claims=self.repo.collection('collaboration_imports');now=self.clock();nonce=secrets.token_hex(16)
+        try:claims.update_one({'_id':key},{'$setOnInsert':{'state':'pending','owner':user['username']}},upsert=True)
+        except DuplicateKeyError:pass
+        old=claims.find_one({'_id':key})
+        if old.get('state')=='complete':return old['result']
+        claim=claims.find_one_and_update({'_id':key,'state':{'$ne':'complete'},'$or':[{'lease_until':{'$exists':False}},{'lease_until':{'$lte':now}}]}, {'$set':{'lease_until':now+300,'nonce':nonce}})
+        if not claim:raise ControlSyncError('资料正在保存，请稍后查看 / Data is being saved; check again shortly',409)
+        try:
+            if kind=='session':
+                received=self.cache.received.find_one({'owner':user['username'],'group_id':gid,'item_id':iid})
+                raw=self.cache.fetch_package(gid,iid,user)[1] if received and not self.cache._entry(received).get('legacy') else self._folder(gid,iid).joinpath('package.zip').read_bytes()
+                if len(raw)!=item['bytes'] or hashlib.sha256(raw).hexdigest()!=item['sha256']:raise ControlSyncError('会话包完整性校验失败 / Session package integrity failed',409)
+                from sentinel_platform.modules.ai_pentest import _handoff
+                value=_handoff.restore(raw,user['username'],'group:'+gid,'',item.get('source'),archive_only=True,import_key=key)
+                saved={'kind':kind,'id':value['session_id'],'path':'/pentest','resume_key':value['resume_key']}
+            else:
+                record=json_util.loads(json.dumps(result['preview']));original=str(record.get('_id',''))
+                # Deterministic _id and setOnInsert make repeated clicks/workers
+                # converge without replacing previously imported/user-edited data.
+                record.update(_id=ObjectId(key[:24]),owner=user['username'],workspace_id='group:'+gid,collaboration_origin=item.get('source') or {},source_record_id=original,save_date=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'))
+                for field in ('duplicate_of','point_key','point_index_version','first_seen_at','occurrence_count'):record.pop(field,None)
+                if kind=='finding':
+                    # Unified vulnerability lists require the internal collection
+                    # discriminator even for legacy packages that omitted it.
+                    record['source']='ai'
+                    record['vuln_type']=record.get('vuln_type') or record.get('title') or 'Imported finding'
+                    record['target']=record.get('target') or record.get('url') or record.get('site') or ''
+                record['collaboration_import_id']=key
+                collection=Collections.INTEL_FINDING if kind=='finding' else Collections.PENTEST_REPORT
+                # An ownership anchor prevents stale foreign session IDs from
+                # hiding the imported record from its receiving user.
+                sid=ObjectId(hashlib.sha256(('anchor:'+key).encode()).hexdigest()[:24])
+                self.repo.collection(Collections.PENTEST_SESSION).update_one({'_id':sid},{'$setOnInsert':{'owner':user['username'],'task_name':item.get('title') or 'Workgroup data','system_name':item.get('title') or 'Workgroup data','workspace_id':'group:'+gid,'creation_origin':'group','status':'done','console_created':False,'collaboration_data_anchor':True,'collaboration_origin':item.get('source') or {}}},upsert=True)
+                record['session_id' if kind=='finding' else 'source_session']=str(sid)
+                self.repo.collection(collection).update_one({'_id':record['_id']},{'$setOnInsert':record},upsert=True)
+                if kind=='finding':
+                    from sentinel_platform.modules.ai_pentest._handoff import _notify_finding_change
+                    _notify_finding_change()
+                saved={'kind':kind,'id':str(record['_id']),'path':'/vuln-center' if kind=='finding' else '/report-edit'}
+            claims.update_one({'_id':key,'nonce':nonce},{'$set':{'state':'complete','result':saved},'$unset':{'lease_until':'','nonce':''}})
+            return saved
+        finally:claims.update_one({'_id':key,'nonce':nonce},{'$unset':{'lease_until':'','nonce':''}})
 
     def peer(self,action,packet,via_peer=None):
         if action=='service':return self.cache.replicas.peer(packet,via_peer)

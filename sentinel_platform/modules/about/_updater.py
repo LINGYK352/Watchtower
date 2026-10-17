@@ -22,7 +22,8 @@ import py_compile
 import re
 import urllib.error
 from contextlib import contextmanager
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from sentinel_platform.core.distribution_tls import urlopen
 from urllib.parse import quote
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

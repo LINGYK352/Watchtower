@@ -469,10 +469,38 @@ def release_session_all(session_id: str) -> None:
 # 兜底清理（scheduler 周期调）+ 统计（监控）
 # ============================================================================
 
+def cleanup_cancelled_session_reservations(repo) -> int:
+    """Shared Mongo cleanup for deleted/cancelled session holders, never real pauses.
+
+    Valid24-hex session IDs only: recon/task reservations use another namespace.
+    CAS on the ledger revision preserves holders acquired by a concurrent worker.
+    """
+    import re
+    from bson import ObjectId
+    from sentinel_platform.core.session_lifecycle import is_cancelled
+    released=0
+    collection=repo.collection(Collections.TOOL_RESOURCES)
+    for ledger in collection.find({"holders.0":{"$exists":True}}):
+        holders=ledger.get("holders") or []
+        raw_ids={str(h.get("session_id","")) for h in holders if re.fullmatch("[0-9a-fA-F]{24}",str(h.get("session_id","")))}
+        ids={sid.lower() for sid in raw_ids}
+        if not ids:continue
+        rows=repo.collection(Collections.PENTEST_SESSION).find({"_id":{"$in":list(raw_ids|ids)+[ObjectId(sid) for sid in ids]}},{"status":1,"stop_requested":1})
+        sessions={}
+        for row in rows:sessions.setdefault(str(row["_id"]).lower(),[]).append(row)
+        obsolete={sid for sid in ids if not sessions.get(sid) or all(is_cancelled(row) for row in sessions[sid])}
+        stale=[h["hid"] for h in holders if str(h.get("session_id","")).lower() in obsolete and h.get("hid")]
+        if not stale:continue
+        query={"_id":ledger["_id"],"rev":ledger["rev"] if "rev" in ledger else {"$exists":False}}
+        changed=collection.update_one(query,{"$pull":{"holders":{"hid":{"$in":stale}}},"$inc":{"rev":1}})
+        if getattr(changed,"modified_count",0):released+=len(stale)
+    return released
+
+
 def cleanup_stale_resources() -> int:
     """scheduler 周期兜底：超时抢占僵尸 holder(不看会话状态，治崩溃永久排队)。返回清理数。"""
     try:
-        return len(_sweep_stale(time.time()))
+        return cleanup_cancelled_session_reservations(get_repo()) + len(_sweep_stale(time.time()))
     except Exception as exc:
         logger.error("cleanup_stale_resources failed: %s", exc)
         return 0

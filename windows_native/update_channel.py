@@ -39,7 +39,8 @@ class OriginRedirect(HTTPRedirectHandler):
         validate_url(url)
         if (urlsplit(url).scheme,urlsplit(url).netloc)!=(urlsplit(req.full_url).scheme,urlsplit(req.full_url).netloc):raise ValueError('Authenticated update redirect changes origin')
         return super().redirect_request(req,fp,code,msg,headers,url)
-OPENER=build_opener(OriginRedirect())
+from windows_native.https_trust import VerifiedOpener
+OPENER=VerifiedOpener(OriginRedirect)
 
 def source(root):
     root=Path(root)
@@ -129,6 +130,8 @@ def catalog(root):
 def manifest(root,target,full=False):
     version(target)
     from sentinel_platform.core import update_bundle,update_policy
+    # Retain verified payload transport even when the business core is rolled back.
+    update_bundle.OPENER=OPENER
     request_headers=headers(root);base=request_headers.get('X-Client-Version','')
     policy=chain(root,target if base and update_policy.key(target)<update_policy.key(base) else '')
     update_policy.allow(base,target,policy)

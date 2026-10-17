@@ -1,11 +1,12 @@
-"""Installation assent to a substantive legal version, independent of software builds.
+"""First installation consent is durable, independent of build and legal display versions.
 
-The active configuration directory owns one durable record. Legacy paths are
-read for migration only; an unavailable record is not an unsigned installation.
-Every worker reads fresh. No ROLE, database or browser-cache authority.
+Keep the original accepted_version/accepted_at as evidence. A valid historical
+assent remains accepted across upgrades and rollback. Unknown storage is never
+treated as unsigned. Workers read the same configuration-owned file fresh.
 """
 from __future__ import annotations
-import json, os, re, tempfile, time
+import json, os, tempfile, time
+from contextlib import contextmanager
 from typing import Any
 
 TERMS_VERSION = "v3"
@@ -77,6 +78,32 @@ def _write_record(path: str, payload: dict):
     finally:
         if os.path.exists(temporary): os.unlink(temporary)
 
+@contextmanager
+def _record_lock(path: str):
+    """An installation file lock also serializes separate workers/processes."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".lock", "a+b") as handle:
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0, os.SEEK_END)
+            if not handle.tell(): handle.write(b"0"); handle.flush()
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    handle.seek(0); msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline: raise
+                    time.sleep(.05)
+            try: yield
+            finally:
+                handle.seek(0); msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try: yield
+            finally: fcntl.flock(handle, fcntl.LOCK_UN)
+
 def _status(record=None, state="unaccepted", persisted=False) -> dict[str, Any]:
     return {**(record or {"accepted": False, "accepted_version": "", "accepted_at": ""}),
             "status": state, "current_version": TERMS_VERSION, "persisted": persisted}
@@ -84,42 +111,44 @@ def _status(record=None, state="unaccepted", persisted=False) -> dict[str, Any]:
 def get_status() -> dict[str, Any]:
     paths = _marker_candidates()
     canonical, unreadable = _read_record(paths[0])
-    if canonical and canonical["accepted_version"] == TERMS_VERSION:
+    if canonical:
         return _status(canonical, "accepted", True)
-    records = [canonical] if canonical else []
+    records = []
     for path in paths[1:]:
         record, failed = _read_record(path)
         unreadable = unreadable or failed
         if record: records.append(record)
-    matching = [r for r in records if r["accepted_version"] == TERMS_VERSION]
-    if matching:
-        # Preserve a real historical assent, including its original timestamp.
-        record = min(matching, key=lambda r: r["accepted_at"] or "9999")
-        # A worker running an older legal version must never downgrade a newer
-        # version written during a reload. Legal content changes require review.
-        if canonical and re.fullmatch(r"v[0-9]+", canonical["accepted_version"]) and int(canonical["accepted_version"][1:]) > int(TERMS_VERSION[1:]):
-            return _status(canonical, "unavailable", True)
+    if records:
+        record = min(records, key=lambda r: r["accepted_at"] or "9999")
+        # Migration never re-signs, upgrades the signed legal version, resets
+        # the original timestamp, or overwrites another worker's first assent.
         try:
-            _write_record(paths[0], record)
-            return _status(record, "accepted", True)
+            with _record_lock(paths[0]):
+                fresh, failed = _read_record(paths[0])
+                if fresh: return _status(fresh, "accepted", True)
+                if not failed: _write_record(paths[0], record)
         except (OSError, ValueError):
-            return _status(record, "unavailable")
-    if unreadable:
-        return _status(canonical, "unavailable", bool(canonical))
-    return _status(canonical or (records[0] if records else None), "unaccepted", bool(canonical))
+            pass  # A valid, durable legacy record is still real assent.
+        return _status(record, "accepted", True)
+    return _status(state="unavailable" if unreadable else "unaccepted")
 
 def accept(version: str = "") -> dict[str, Any]:
+    status = get_status()
+    if status["status"] in {"accepted", "unavailable"}:
+        return status
     if version != TERMS_VERSION:
         raise ValueError("Unsupported legal version")
-    status = get_status()
-    if status["status"] == "accepted":
-        return status   # Idempotent: an update or duplicate click is not a new assent.
-    if status["accepted_version"] and re.fullmatch(r"v[0-9]+", status["accepted_version"]) and int(status["accepted_version"][1:]) > int(TERMS_VERSION[1:]):
-        raise ValueError("A newer legal version is already recorded")
-    payload = {"accepted": True, "accepted_version": version,
-               "accepted_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+    path = _marker_candidates()[0]
     try:
-        _write_record(_marker_candidates()[0], payload)
-        return _status(payload, "accepted", True)
+        with _record_lock(path):
+            # Fresh read after the OS lock: a concurrent click cannot replace
+            # the first signature, even across gunicorn workers.
+            record, failed = _read_record(path)
+            if record: return _status(record, "accepted", True)
+            if failed: return _status(state="unavailable")
+            payload = {"accepted": True, "accepted_version": version,
+                       "accepted_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+            _write_record(path, payload)
+            return _status(payload, "accepted", True)
     except (OSError, ValueError):
         return _status(state="unavailable")

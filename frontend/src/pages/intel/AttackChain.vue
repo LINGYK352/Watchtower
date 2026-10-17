@@ -1,5 +1,5 @@
 <template>
-  <PageContainer :title="translate('ui.m_c14a89bcd889')" kicker="Sessions & Attack Chains"
+  <PageContainer class="attack-chain-page" :title="translate('ui.m_c14a89bcd889')" kicker="Sessions & Attack Chains"
     :description="translate('ui.m_513bc8798f81')">
     <template #extra><a-button @click="loadAll">{{ translate('ui.m_aee887434131') }}</a-button></template>
 
@@ -24,7 +24,7 @@
       </a-popconfirm>
     </div>
 
-    <AppTable :columns="columns" :data="rows" :loading="loading" selectable :scroll="{x:1100}"
+    <AppTable class="chain-table" data-testid="attack-chain-table" :columns="columns" :data="rows" :loading="loading" selectable table-layout="fixed" :scroll="{x:1600}"
       v-model:selectedRowKeys="selectedKeys"
       :page="query.page" :size="query.size" :total="total" row-key="_id" @change="onPage">
       <template #bodyCell="{ column, record }">
@@ -32,8 +32,8 @@
           <a class="chain-title" :title="record.title" @click="showDetail(record)">{{ record.title }}</a>
           <a-tag v-if="record.cross_session" color="purple" style="margin-left:6px">{{ translate('ui.m_385ea2980e24') }}</a-tag>
         </template>
-        <template v-else-if="column.key === 'session'"><div class="source-cell" v-for="id in record.sessions||[]" :key="id"><CopyText :text="id" /></div></template>
-        <template v-else-if="column.key === 'target'"><div class="source-cell" v-for="target in Array.from(new Set((record.steps||[]).map((step:any)=>step.source_site||step.target).filter(Boolean)))" :key="String(target)">{{ target }}</div></template>
+        <template v-else-if="column.key === 'session'"><div class="chain-sources"><div class="source-cell" v-for="id in record.sessions||[]" :key="id" :title="id"><CopyText :text="id" /></div></div></template>
+        <template v-else-if="column.key === 'target'"><div class="chain-sources"><div class="source-cell" v-for="target in Array.from(new Set((record.steps||[]).map((step:any)=>step.source_site||step.target).filter(Boolean)))" :key="String(target)" :title="String(target)">{{ target }}</div></div></template>
         <template v-else-if="column.key === 'step_count'">
           <a-badge :count="record.step_count" :number-style="{ backgroundColor: '#1677ff' }" />
         </template>
@@ -46,7 +46,7 @@
         <template v-else-if="column.key === 'outline'">
           <button class="chain-preview-button" @click="openGraph(record)" :aria-label="translate('chainView.open')" data-testid="chain-open-graph">
             <span class="preview-label"><NodeIndexOutlined /> {{ translate('chainView.title') }} · {{ record.step_count || 0 }}</span>
-            <span class="preview-flow"><span v-for="(step,i) in (record.steps || []).slice(0,3)" :key="i" :class="'preview-'+normSev(step.severity)">{{ step.vuln_type || step.action || translate('chainView.unnamed') }}</span></span>
+            <span class="preview-flow"><span v-for="(step,i) in (record.steps || []).slice(0,3)" :key="i" :class="'preview-'+normSev(step.severity)" :title="step.vuln_type || step.action || translate('chainView.unnamed')">{{ step.vuln_type || step.action || translate('chainView.unnamed') }}</span></span>
             <span v-if="record.steps?.length>3" class="preview-more">{{ translate('chainView.more',{n:record.steps.length-3}) }}</span>
           </button>
         </template>
@@ -125,14 +125,14 @@ const query = reactive({ session_id:'',target:'',min_severity:'',unit: '', statu
 
 const statusOptions = [{ get label() { return translate('ui.m_5c55a67935af') }, value: '' }, { get label() { return translate('ui.m_2be422c43f34') }, value: 'building' }, { get label() { return translate('ui.m_f28461bb49c8') }, value: 'done' }]
 const columns = [
-  { get title() { return translate('ui.m_31f1f49cdb27') }, key: 'title' },
-  {get title(){return translate('revision17.session')},key:'session',width:190},
-  {get title(){return translate('revision17.target')},key:'target',width:220},
-  { get title() { return translate('ui.m_28475230f056') }, key: 'step_count', width: 70 },
-  { get title() { return translate('ui.m_aea0fc420948') }, key: 'max_severity', width: 100 },
-  { get title() { return translate('ui.m_6320b4a8722a') }, key: 'status', width: 90 },
-  { get title() { return translate('ui.m_a1038bbab8b4') }, key: 'outline' },
-  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width: 120 }
+  { get title() { return translate('ui.m_31f1f49cdb27') }, key: 'title', width:240 },
+  {get title(){return translate('revision17.session')},key:'session',width:216},
+  {get title(){return translate('revision17.target')},key:'target',width:260},
+  { get title() { return translate('ui.m_28475230f056') }, key: 'step_count', width: 80 },
+  { get title() { return translate('ui.m_aea0fc420948') }, key: 'max_severity', width: 140 },
+  { get title() { return translate('ui.m_6320b4a8722a') }, key: 'status', width: 140 },
+  { get title() { return translate('ui.m_a1038bbab8b4') }, key: 'outline', width:320 },
+  { get title() { return translate('ui.m_ed31fbb483ee') }, key: 'action', width:160 }
 ]
 
 const detailOpen = ref(false)
@@ -209,9 +209,18 @@ onMounted(loadAll)
 </script>
 
 <style scoped>
-.source-cell{max-width:220px;overflow-wrap:anywhere;font-size:12px;margin:3px 0}
+.chain-table :deep(.ant-table-thead>tr>th){white-space:nowrap;word-break:normal}
+.chain-table :deep(.ant-table-cell){vertical-align:top}
+.chain-table :deep(.ant-table-tbody .ant-tag),.chain-table :deep(.ant-table-tbody .ant-btn),.chain-table :deep(.ant-table-tbody .ant-space){white-space:nowrap}
+.chain-sources{min-width:0;max-width:100%;max-height:108px;overflow-x:hidden;overflow-y:auto}
+.source-cell{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:22px;margin:3px 0}
+.source-cell :deep(.copy-text){display:block;min-width:0;max-width:100%}
+.source-cell :deep(code){display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box}
+.chain-table .preview-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chain-table .chain-preview-button{box-sizing:border-box;max-width:100%;overflow:hidden}
+.chain-table .preview-flow{width:100%;max-width:100%;overflow:hidden}
 /* 问题17：列表标题过长时截断省略，避免顶破单元格；hover(title 属性)看全名 */
-.chain-title { font-weight: 600; cursor: pointer; display: inline-block; max-width: 360px;
+.chain-title { font-weight: 600; cursor: pointer; display: inline-block; max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .outline { color: #888; font-size: 12px; }
 .chain-timeline { margin-top: 8px; }

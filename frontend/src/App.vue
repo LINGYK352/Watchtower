@@ -2,6 +2,7 @@
   <a-config-provider :theme="antdTheme" :locale="componentLocale">
     <router-view />
     <ErrorReportModal />
+    <SystemRestartNotice />
   </a-config-provider>
 </template>
 
@@ -9,6 +10,7 @@
 import { computed } from 'vue'
 import { theme } from 'ant-design-vue'
 import { useTheme } from './composables/useTheme'
+import SystemRestartNotice from './components/SystemRestartNotice.vue'
 import ErrorReportModal from './components/ErrorReportModal.vue'
 import { componentLocale } from './i18n'
 const { isDark } = useTheme()

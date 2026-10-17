@@ -1,0 +1,122 @@
+# 哨兵 Sentinel 平台配置样例
+# 用法：复制为 config/config.yaml 并填入真实值（config.yaml 不入库，勿提交密钥）。
+# 加载：core/config.py 按候选顺序找 config/config.yaml → 本样例兜底；
+#       或设环境变量 SENTINEL_PLATFORM_CONFIG=/绝对路径/config.yaml。
+# 各模块经 get_config().section("段","键") 读取；缺键回退默认，不因配置不全崩。
+
+# —— MongoDB（平台与侦察引擎共用同一实例/库，读写相同集合）——
+MONGO:
+  URI: 'mongodb://127.0.0.1:27017/'
+  DB: 'sentinel'
+
+# —— 鉴权（router 网关据此校验；关则全放行，仅限内网调试）——
+# 段名 SENTINEL 优先，兼容旧 ARL 段（迁移期）
+SENTINEL:
+  AUTH: true
+  # master key：Token 头等于此值即 admin 直通（生产务必改成强随机）
+  API_KEY: "CHANGE_ME_TO_A_RANDOM_SECRET"
+  # 口令哈希盐（user_manage 用；生产务必改）
+  SALT: "CHANGE_ME_SALT"
+  # 激活硬门控：未激活/激活过期时，网关对核心业务端点（AI 渗透/扫描任务/情报/小程序/
+  # 探针/PoC/GitHub 采集/调度）直接返回 402，只读展示类（仪表盘/设置/日志/代理/激活页）不拦。
+  # 无宽限期，到期即拦。默认 true（不配即强制）；仅特殊部署/调试才设 false 临时关闭。
+  ACTIVATION_ENFORCE: true
+
+# —— 系统版本（about/update_check 读；ops 升级时改，前端比对提示更新）——
+SYSTEM:
+  VERSION: "v1.21.25"
+
+# —— 更新检测/远程更新源（about/update_check 默认查此源比对；拉取式 update_client 也用）——
+# SOURCE_URL 配上游更新源地址（运营方的 update_source serve，默认端口 5080）；配了则"更新检测"
+# 默认查上游 /version 比对，能如实报出上游新版本。留空=退回纯本地比对（服务端 vs 前端构建）。
+# CHECK_REMOTE:false 可显式关闭查上游（强制本地比对）。KEY=授权 key（捐赠者实例填，走 X-Update-Key 头）。
+UPDATE:
+  SOURCE_URL: ""          # 例: "https://watchtowers.info"
+  KEY: ""
+  CHECK_REMOTE: true
+  INTEL_PULL: true        # 漏洞情报从分发系统中心拉取(默认开)；false=各实例本地直拉外部源(旧行为)。中心不可达自动降级本地
+  # RELOAD_CMD：一键更新写完文件后执行的重启命令（systemd 部署重启 worker/scheduler 让新代码生效）。
+  # 留空则不执行（docker/gunicorn --reload 会自动热重载 web，前端产物落盘后浏览器刷新即生效）。
+  RELOAD_CMD: ""          # 例: "systemctl restart sentinel-worker-v20260607001942 sentinel-scheduler"
+
+# —— AI 扩展（实例本地运行时目录，不进入核心更新分发）——
+AI_EXTENSION:
+  ROOT: ""                # 留空使用 <项目根>/shared/ai_extensions
+  UPLOAD_MAX_MB: 512      # 上传资源策略，可按部署资源调整；不是扩展数量上限
+  STORE_PUBLIC_KEY: ""    # 扩展商店 Ed25519 公钥(base64)，商店安装强制验签
+
+# —— 外部测绘源（kernel/ext_source · leak）——
+FOFA:
+  URL: "https://fofa.info"
+  KEY: ""
+  PAGE_SIZE: 2000
+  # 0=持续翻页直到源端无更多结果；正数仅用于调用方主动限制页数
+  MAX_PAGE: 0
+HUNTER:
+  URL: "https://hunter.qianxin.com"
+  KEY: ""
+
+# —— GitHub 敏感搜索（asset/github_task · github_monitor）——
+GITHUB:
+  TOKEN: ""
+  # 周期监控最小间隔（秒）；0=不限（默认，禁硬编码上限，ops 需防扫描风暴才设）
+  MONITOR_MIN_INTERVAL_SEC: 0
+
+# —— 计划任务（task_plan/task_schedule）——
+SCHEDULE:
+  # 周期扫描最小间隔（秒）；0=不限（默认）
+  MIN_INTERVAL_SEC: 0
+
+# —— 资源水位（并发宽度/在途槽位，不截断任务或目标总数）——
+RESOURCE:
+  MEMORY_LOW: 60
+  MEMORY_HIGH: 80
+  MEMORY_CRITICAL: 90
+  # CPU / 磁盘水位告警阈值（%）：达 *_HIGH=tight（推送预警），达 *_CRITICAL=critical（弹窗+推送）。
+  # 综合水位取「内存/CPU/磁盘」最严重维度；缺省即用下列默认，可按机器调整。
+  CPU_HIGH: 85
+  CPU_CRITICAL: 95
+  DISK_HIGH: 85
+  DISK_CRITICAL: 95
+  # 仪表盘「资源运行可靠性」磁盘维用**绝对剩余空间**评分（需求导向：平台一直写扫描产出/mongo/日志/
+  # 镜像，一次大扫描可产出 1~2GB，绝对余量比百分比更能反映"还能不能写"）。剩余≥EXCELLENT 充裕/
+  # ≥GOOD 良好/≥TIGHT 偏紧/<CRIT 告急（且写入可能失败）。与 DISK_HIGH/CRITICAL(%) 取更差者。缺省即用下列默认。
+  DISK_FREE_EXCELLENT_GB: 20
+  DISK_FREE_GOOD_GB: 8
+  DISK_FREE_TIGHT_GB: 3
+  DISK_FREE_CRIT_GB: 1.5
+  RELAXED_TASK_SLOTS: 5
+  NORMAL_TASK_SLOTS: 3
+  TIGHT_TASK_SLOTS: 1
+  CRITICAL_TASK_SLOTS: 0
+  RELAXED_IO_CONCURRENCY: 16
+  NORMAL_IO_CONCURRENCY: 10
+  TIGHT_IO_CONCURRENCY: 5
+  CRITICAL_IO_CONCURRENCY: 2
+  RELAXED_SCAN_PARALLELISM: 6
+  NORMAL_SCAN_PARALLELISM: 4
+  TIGHT_SCAN_PARALLELISM: 2
+  CRITICAL_SCAN_PARALLELISM: 1
+  # scheduler tick 间隔（秒）
+  TICK_SECONDS: 30
+  # 任务僵尸判定阈值（秒）：running 超过此时间无响应 → 标 error 回收（防线程死导致 running 永挂）
+  TASK_STALL_SECONDS: 7200
+
+# —— 通知（integration/notify）——
+FEISHU:
+  WEBHOOK: ""
+  SECRET: ""
+WXWORK:
+  WEBHOOK_URL: ""
+
+# —— 代理中心（system/proxy）——
+PROXY:
+  HTTP_URL: ""
+
+# —— Celery（phase-2：worker/scheduler 驱动 orchestration；本期未接可留默认）——
+CELERY:
+  # ⚠️ 双斜杠不是笔误：compose 的 RABBITMQ_DEFAULT_VHOST=/sentinelhost 建的 vhost 名带前导斜杠(`/sentinelhost`)，
+  # AMQP URL 里 host:port 后第一个 `/` 是分隔符，故连 `/sentinelhost` 必须写 `//sentinelhost`；
+  # 写成单斜杠会解析成 vhost `sentinelhost`(无斜杠)→worker 报 530 vhost not found→任务永卡 queued。
+  BROKER_URL: "amqp://sentinel:sentinelpassword@rabbitmq:5672//sentinelhost"
+  ACTIVE_QUEUE_VERSION: "v1"

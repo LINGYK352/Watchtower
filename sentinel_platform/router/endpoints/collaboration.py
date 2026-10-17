@@ -27,7 +27,17 @@ def body():
     if not isinstance(value,dict):raise ControlSyncError('JSON对象必填 / JSON object required')
     return value
 def call(fn):
-    try:return envelope(data=fn(service(),user())),200
+    try:
+        actor=user()  # Only this local login check may issue HTTP401.
+        try:result=fn(service(),actor)
+        except (ControlSyncError,ValueError) as exc:
+            status=getattr(exc,'status',400)
+            if status==401:
+                return envelope(code=403,message='工作组通信认证失效，请刷新连接 / Workgroup transport authentication failed; refresh the connection'),403
+            if status==402:
+                return envelope(code=424,message='工作组对端服务受限，请检查对端状态 / Workgroup peer service is restricted; check the peer'),424
+            raise
+        return envelope(data=result),200
     except (ControlSyncError,ValueError) as exc:
         status=getattr(exc,'status',400);return envelope(code=status,message=str(exc)),status
     except Exception:
@@ -151,7 +161,7 @@ class RenameDecision(Resource):
     def post(self,gid,mid):return call(lambda s,u:s.rename_member(gid,mid,u,body(),True))
 @ns.route('/candidates')
 class Candidates(Resource):
-    def get(self):return call(lambda s,u:s.candidates(u))
+    def get(self):return call(lambda s,u:s.candidate_page(u,request.args['kind'],request.args.get('page',1),request.args.get('keyword','')) if request.args.get('kind') else s.candidates(u))
 @ns.route('/groups/<string:gid>/share')
 class Share(Resource):
     def post(self,gid):return call(lambda s,u:s.share(gid,u,body()))
@@ -180,6 +190,9 @@ class AttachmentDownload(Resource):
 @ns.route('/groups/<string:gid>/items/<string:iid>/receive')
 class Receive(Resource):
     def post(self,gid,iid):return call(lambda s,u:s.receive(gid,iid,u))
+@ns.route('/groups/<string:gid>/items/<string:iid>/import')
+class ImportItem(Resource):
+    def post(self,gid,iid):return call(lambda s,u:s.save_item(gid,iid,u))
 @ns.route('/groups/<string:gid>/items/<string:iid>/restore')
 class Restore(Resource):
     def post(self,gid,iid):return call(lambda s,u:s.receive(gid,iid,u,body().get('provider_id',''),resume=True))

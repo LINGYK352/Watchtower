@@ -1,4 +1,8 @@
 {
+  "patch177B2": {
+    "dynamicAssets": "动态",
+    "dynamicHint": "动态采集会导致资产统计数量更新有延迟。"
+  },
   "language": {
     "name": "简体中文",
     "switch": "切换语言",
@@ -2962,13 +2966,13 @@
     "actions": "操作",
     "revokeConfirm": "确定撤销？后续调用会立即被拒绝。",
     "revoke": "撤销",
-    "syncNote": "由被同步方生成限时配对Key；输入目标地址后，双方分别确认。配置、凭据和数据可独立选择，主机运行环境不会被复制。",
-    "receiveTitle": "被同步方：生成临时配对Key",
+    "syncNote": "配对监听方生成限时Key，连接方输入地址和Key，双方分别确认。配对角色不限制数据方向：Windows连接VM后选择“拉取”，即可把VM数据同步到Windows，无需开放Windows入站端口。",
+    "receiveTitle": "本机生成配对Key（监听方）",
     "pairMinutes": "配对有效期（1–60分钟）",
     "linkMinutes": "配对后连接有效期（分钟）",
     "allowedCategories": "允许同步的内容",
     "createPair": "生成配对Key",
-    "connectTitle": "发起方：连接目标",
+    "connectTitle": "连接其他系统（连接方）",
     "target": "目标IP / 域名 + 端口",
     "peerKey": "被同步方提供的配对Key",
     "connect": "发起配对",
@@ -2985,9 +2989,9 @@
     "incremental": "增量同步",
     "overwrite": "覆盖同步",
     "contents": "同步内容",
-    "overwriteNote": "覆盖所选数据库内容；先保留备份。已运行任务和本机端口、路径、激活、登录及控制凭据不覆盖。附件覆盖同名文件，保留其他文件。",
-    "incrementalNote": "补充缺失记录；相同ID存在内容差异时保留本机并统计冲突，不静默覆盖。",
-    "requestSync": "请求同步并等待对端确认",
+    "overwriteNote": "覆盖所选数据库内容；先保留备份。已运行任务和本机端口、路径、激活、登录及控制凭据不覆盖。附件覆盖同名文件，保留其他文件。 任务环节和内置配置按来源整组替换，不追加重复内置项。",
+    "incrementalNote": "增量同步可在任务运行或暂停时进行：只新增缺失数据，保留本机已有记录、配置、凭据和文件；冲突会统计，运行或暂停中的任务与会话不会作为历史传输。 任务环节和内置配置只支持覆盖同步，增量同步不会传入或新增这些项目。",
+    "requestSync": "请求同步",
     "transfers": "同步进度与记录",
     "noTransfers": "暂无同步计划",
     "result": "结果：",
@@ -3050,7 +3054,8 @@
       "failed": "失败，可重试",
       "joining": "正在申请（可重试）",
       "join_failed": "申请失败（可修改后重试）",
-      "connecting": "配对申请待回应"
+      "connecting": "等待确认",
+      "preparing": "正在准备"
     },
     "stages": {
       "awaiting_peer_confirmation": "等待对端确认具体计划",
@@ -3064,7 +3069,8 @@
       "peer_rejected": "对端拒绝了计划",
       "peer_failed": "对端同步失败",
       "cancelled": "同步已取消",
-      "retry_available": "可以重试"
+      "retry_available": "可以重试",
+      "preparing_snapshot": "正在准备快照，准备完成后再确认"
     },
     "delete": "删除",
     "deleteConfirm": "永久删除此Key？后续调用立即失效，操作审计保留。",
@@ -3081,7 +3087,9 @@
     "nodeUrl": "维持节点地址",
     "nodeFingerprint": "节点 TLS 指纹",
     "nodeKey": "节点管理凭据",
-    "nodeNote": "使用通用Linux维持节点转发加密迁移流量。程序启动无需IP/域名，默认监听7443；在此填写可达地址、核验启动时的指纹并输入私有接入凭据。每个配对有独立中转域，密文、双方确认和断点恢复保持。"
+    "nodeNote": "使用通用Linux维持节点转发加密迁移流量。程序启动无需IP/域名，默认监听7443；在此填写可达地址、核验启动时的指纹并输入私有接入凭据。每个配对有独立中转域，密文、双方确认和断点恢复保持。",
+    "preparingSnapshot": "已收到同步请求，正在准备快照；完整清单就绪后开始30秒确认，当前不会传输数据。",
+    "requestPreparing": "正在发送同步请求并准备快照…"
   },
   "intel": {
     "identifier": "编号",
@@ -3118,7 +3126,7 @@
     "sessionNote": "完整包包含消息、推理、工具历史与会话目录文件。请先暂停会话；接收端选择同协议模型后恢复，平台专属工具仍需适配。",
     "send": "发送到工作区",
     "shared": "工作区共享资料",
-    "preview": "接收并预览",
+    "preview": "预览",
     "restore": "恢复并继续会话",
     "restoreNote": "选用本机已配置的同协议模型。恢复生成独立会话和文件目录，保留原始历史及来源标记；不会自动发起攻击。",
     "keyNote": "请安全保管邀请链接和Key。可在邀请Key管理中再次查看；一次性Key在成功提交申请后失效。",
@@ -3153,7 +3161,8 @@
     "deleteConnection": "删除工作组连接",
     "deleteGroupNote": "解散后成员不能再访问本组。已接收的数据和已恢复的独立会话保留；本组历史资料归档。此操作不可撤销。",
     "deleteConnectionNote": "删除本机连接并撤销本机凭证，在线时通知主持者退出。已接收的数据和独立会话保留。",
-    "deleteOffline": "本机连接已删除并失效。远端退出通知未确认，主持端原凭证仍按原有效期失效。"
+    "deleteOffline": "本机连接已删除并失效。远端退出通知未确认，主持端原凭证仍按原有效期失效。",
+    "refreshTimeout": "工作区请求超时，当前消息保留，稍后自动重试。"
   },
   "console": {
     "model": "AI模型",
@@ -3271,13 +3280,13 @@
     "commonPlatform": "跨平台通用",
     "localNote": "本地程序不会上传或公开到商店，自动按本机平台处理。",
     "cloudNote": "先选择平台，再上传主体。云端提交需有效激活凭证，审核通过后才会上架。",
-    "zipNote": "主体必须为ZIP，程序入口放在压缩包根目录；解压阶段只检查，不执行程序。",
+    "zipNote": "上传ZIP后安全解压并展示全部文件，由你选择程序入口；本地安装与云端审核使用相同流程，检查时不执行程序。",
     "chooseZip": "选择ZIP主体",
     "inspectZip": "上传解压并选择入口",
     "uploading": "正在上传主体…",
     "unpacking": "正在安全解压与检查…",
-    "prepareReady": "发现 {count} 个根文件，请选择入口。暂存有效期 {minutes} 分钟。",
-    "entry": "根目录程序入口",
+    "prepareReady": "已解压 {count} 个文件，请选择程序入口；暂存保留 {minutes} 分钟。",
+    "entry": "程序入口（从解压文件列表选择）",
     "entryType": "入口运行类型",
     "binary": "原生二进制",
     "launcher": "可执行启动入口",
@@ -3319,7 +3328,8 @@
     "codeRequired": "请先获取注册邮箱验证码并填写六位数字。",
     "cloudSubmitting": "正在向云端传输并进行隔离检查，请等待审核提交结果。",
     "noDescription": "未提供工具说明",
-    "standardDescription": "此说明来自扩展标准中的详细说明和AI使用文档，人工上传与商店工具采用相同规则。"
+    "standardDescription": "此说明来自扩展标准中的详细说明和AI使用文档，人工上传与商店工具采用相同规则。",
+    "selectEntry": "请选择入口文件（支持子目录）"
   },
   "requestApproval": {
     "title": "疑似高危请求审批",
@@ -3372,7 +3382,7 @@
     "promptEmptyNotice": "该自定义场景没有系统默认正文，重置将清空正文；模型绑定与启用状态保留。",
     "promptEditable": "全部提示词正文可编辑；编辑与重置需要确认，重置基准来自当前运行版本。",
     "afk": "挂机模式",
-    "afkActive": "挂机模式 · AI 无人值守自主推进",
+    "afkActive": "挂机模式",
     "afkWarningTitle": "开启挂机模式",
     "afkWarning": "AI 将基于当前目标和已有指令持续深入，切页或断开连接也会继续。开启期间不允许输入或上传；可随时关闭挂机，当前工具在安全边界停止。规则开启时疑似高危请求仍需人工审核，30秒未审核将拦截。",
     "afkFullWarning": "进入全权授权挂机，AI将无人值守持续深入，仅受skill约束，不经过拦截规则或人工审批。可能影响业务并持续消耗Token。期间禁止输入和上传；取消挂机后恢复人工会话。确认开启？",
@@ -3382,7 +3392,8 @@
     "afkFull": "全权授权挂机",
     "afkGuarded": "拦截策略挂机",
     "afkOff": "取消挂机",
-    "afkGuardedWarning": "进入无人值守，AI持续推进已有目标。请求按当前模式的拦截策略自动判断，监管不可用的疑似写操作自动拦截；不是等待人工审核。期间禁止输入与上传，可取消挂机恢复人工会话。"
+    "afkGuardedWarning": "进入无人值守，AI持续推进已有目标。请求按当前模式的拦截策略自动判断，监管不可用的疑似写操作自动拦截；不是等待人工审核。期间禁止输入与上传，可取消挂机恢复人工会话。",
+    "automaticAfkHelp": "系统会话采用闸刀监管的挂机模式；关闭挂机需先接管会话。查看历史不会自动启动任务。"
   },
   "pentestState": {
     "manual_idle": "人工会话 · 待命",
@@ -3960,5 +3971,92 @@
     "target": "目标",
     "transport": "流量类型",
     "rawTransport": "高级：原始TCP/TLS"
+  },
+  "caSetup": {
+    "title": "HTTPS证书设置",
+    "applicationReady": "平台内已自动信任本平台CA",
+    "applicationNote": "Burps重放与APP平台出口使用本平台CA校验HTTPS，保留域名及证书有效期校验。",
+    "windows": "Windows当前用户信任",
+    "trusted": "已信任",
+    "notInstalled": "尚未安装",
+    "unavailable": "此部署不支持系统安装",
+    "scope": "系统安装仅作用于运行Windows端的当前用户，不修改计算机级证书库。仅可移除本平台通过此入口安装的证书。",
+    "install": "安装到当前用户",
+    "remove": "移除本平台安装的证书",
+    "phone": "手机端证书",
+    "phoneNote": "在Watchtower Link中启用HTTPS解密后会检查平台CA。缺少证书时自动准备安装文件并打开系统安装流程；Android 11及之后须在系统设置确认，返回后重新检查。目标App的证书固定或不信任用户CA仍需单独处理。",
+    "check": "重新检查",
+    "close": "关闭",
+    "confirmInstall": "信任本平台的HTTPS审计证书？",
+    "confirmRemove": "移除本平台安装的证书？",
+    "confirmNote": "此操作会更改当前Windows用户的受信任根证书。请核对上方指纹，仅在授权评估环境使用。",
+    "confirm": "确认",
+    "updated": "证书状态已更新"
+  },
+  "syncReadiness": {
+    "blocked": "覆盖同步要求空闲：本机{types}",
+    "tasks": "扫描任务 {count} 条",
+    "sessions": "AI渗透会话 {count} 条",
+    "schedules": "已启用的计划任务 {count} 条",
+    "paused": "（其中暂停 {count} 条）",
+    "keepWork": "仅覆盖同步需要先结束相关业务工作；可改用增量同步并保留现有任务。系统不会自动停止或删除暂停会话。",
+    "receiverHelp": "如何同步数据",
+    "receiverNote": "本机是该配对的监听方。请到连接本机的另一端选择同步方向：推送是另一端→本机，拉取是本机→另一端。VM数据同步到Windows时，可由Windows连接VM，再在Windows选择拉取，无需开放Windows入站端口。",
+    "receiverStopped": "Windows接收端口尚未启用",
+    "receiverStoppedNote": "请先在本页启用同步接收端口，再生成直接连接的配对Key。若无法开放Windows入站端口，可在VM生成Key，由Windows主动连接VM并选择拉取。",
+    "taskBlock": "扫描任务尚未结束",
+    "sessionBlock": "AI渗透会话尚未结束",
+    "scheduleBlock": "计划任务仍在启用",
+    "unknownBlock": "仍有业务工作未结束",
+    "openTasks": "查看本机扫描任务",
+    "openSessions": "查看本机AI渗透会话",
+    "openSchedules": "查看本机计划任务"
+  },
+  "repair128": {
+    "confirmCountdown": "剩余 {seconds} 秒，超时自动拒绝",
+    "requestSent": "请求已发送，等待对端确认",
+    "restarting": "系统正在重启中",
+    "restartNote": "服务恢复后提示会自动关闭。未完成的操作请恢复后再试。",
+    "selectData": "选择本机资料",
+    "saveSystem": "保存到系统",
+    "saved": "已保存到对应功能列表",
+    "search": "搜索名称、目标或类型",
+    "firewallBlocked": "Windows防火墙存在阻止此程序入站的规则",
+    "firewallNote": "端口已在本机监听，但部分网络可能无法连接。请在Windows防火墙中核对本程序权限；也可由Windows主动连接对端，选择拉取，或使用维持节点。",
+    "fields": {
+      "target": "目标",
+      "url": "URL",
+      "site": "站点",
+      "component": "组件",
+      "vuln_type": "漏洞类型",
+      "status": "状态",
+      "save_date": "记录时间",
+      "session_id": "来源会话",
+      "source_session": "来源会话",
+      "description": "说明",
+      "impact": "漏洞危害",
+      "evidence": "证据",
+      "request": "请求",
+      "response": "响应",
+      "poc": "复现验证",
+      "content": "报告内容",
+      "summary": "摘要",
+      "reproduce": "复现",
+      "reproduce_steps": "复现步骤",
+      "severity": "风险等级"
+    },
+    "severities": {
+      "critical": "严重",
+      "high": "高危",
+      "medium": "中危",
+      "low": "低危",
+      "info": "信息",
+      "none": "无风险",
+      "unknown": "未定级"
+    },
+    "completeData": "完整资料"
+  },
+  "sessionRepair": {
+    "unknownTarget": "未知"
   }
 }

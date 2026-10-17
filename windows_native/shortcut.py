@@ -28,3 +28,16 @@ $link.Save()
     with tempfile.TemporaryDirectory(prefix='watchtower-shortcut-') as folder:
         path=Path(folder)/'shortcut.ps1';path.write_text(script,encoding='utf-8-sig')
         subprocess.run(['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(path)],env=env,check=True,capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
+
+def remove(destination):
+    script=r'''$path = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Watchtower.lnk'
+if (Test-Path -LiteralPath $path) {
+ $shell=New-Object -ComObject WScript.Shell
+ $link=$shell.CreateShortcut($path)
+ $root=[IO.Path]::GetFullPath($env:WATCHTOWER_SHORTCUT_ROOT).TrimEnd('\')+'\'
+ $target=[IO.Path]::GetFullPath($link.TargetPath)
+ if ($target.StartsWith($root,[StringComparison]::OrdinalIgnoreCase) -and [IO.Path]::GetFileName($target) -eq 'WatchtowerNative.exe') { Remove-Item -LiteralPath $path }
+}
+'''
+    env=dict(os.environ,WATCHTOWER_SHORTCUT_ROOT=str(Path(destination).resolve()))
+    subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',script],env=env,check=True,capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)

@@ -26,7 +26,8 @@ import json
 import os
 import time
 from typing import Any, Dict, Optional
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from sentinel_platform.core.distribution_tls import urlopen
 from urllib.error import HTTPError
 
 DEFAULT_SOURCE_URL = "https://watchtowers.info"

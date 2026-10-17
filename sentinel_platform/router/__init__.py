@@ -114,6 +114,8 @@ def create_app() -> Any:
     _mount_namespaces(api)
     api.init_app(app)            # 挂载后再 init，确保 Namespace 都进 swagger
     install_gateway(app)         # 网关最后装（before_request）
+    from sentinel_platform.core.native_frontend import install as install_native_frontend
+    install_native_frontend(app)
     from .endpoints.control_sync import transport_routes
     app.register_blueprint(transport_routes)
     from .endpoints.collaboration import peer_routes

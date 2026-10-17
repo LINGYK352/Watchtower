@@ -6,7 +6,13 @@ from release_tools.workspace_paths import development_paths
 paths=development_paths(root);package=paths['native'];work=paths['validation']/'native-build';dist=paths['validation']/'native-dist';spec=paths['validation']/'native-spec'
 if '--paths-only' in sys.argv:
  print(json.dumps({key:str(value) for key,value in {'source':root,'package':package,'work':work,'dist':dist,'spec':spec}.items()},ensure_ascii=False));raise SystemExit()
+import importlib.util
+required=('waitress','webview','flask_restx','sqlite3','psutil','pymongo','requests','yaml','win32com.client','pythonnet')
+missing=[name for name in required if importlib.util.find_spec(name) is None]
+if missing:raise RuntimeError('Native build dependencies missing: '+', '.join(missing))
 spec.mkdir(parents=True,exist_ok=True)
+(root/'windows_native/assets/distribution_tls.py').unlink(missing_ok=True)
+shutil.copy2(root/'sentinel_platform/core/distribution_tls.py',root/'windows_native/assets/distribution_tls.py')
 for name,source,mode in [('NativeService','backend.py','--onedir'),('WatchtowerNative','gui.py','--onefile'),('WatchtowerSetup','setup_gui.py','--onefile')]:
  if '--service-only' in sys.argv and name!='NativeService':continue
  if '--gui-only' in sys.argv and name!='WatchtowerNative':continue
@@ -14,7 +20,7 @@ for name,source,mode in [('NativeService','backend.py','--onedir'),('WatchtowerN
  command=[sys.executable,'-m','PyInstaller','--noconfirm','--clean',mode,'--name',name,'--icon',str(root/'windows_native/assets/watchtower.ico'),'--add-data',str(root/'windows_native/assets')+';windows_native/assets','--paths',str(root),'--exclude-module','sentinel_platform','--distpath',str(dist),'--workpath',str(work/name),'--specpath',str(spec)]
  for module in ['torch','torchvision','onnxruntime','scipy','numpy','pandas','sympy','matplotlib','IPython','networkx','fsspec','botocore','boto3','tensorflow']:command+=['--exclude-module',module]
  for module in ['playwright','greenlet','pyee']:command+=['--exclude-module',module]
- if name=='NativeService':command+=['--collect-all','flask_restx','--hidden-import','requests','--hidden-import','yaml','--hidden-import','pymongo','--hidden-import','psutil','--hidden-import','waitress','--hidden-import','jinja2.meta','--hidden-import','win32com.client','--hidden-import','pythoncom']
+ if name=='NativeService':command+=['--collect-all','flask_restx','--hidden-import','sqlite3','--hidden-import','requests','--hidden-import','yaml','--hidden-import','pymongo','--hidden-import','psutil','--hidden-import','waitress','--hidden-import','jinja2.meta','--hidden-import','win32com.client','--hidden-import','pythoncom']
  else:command+=['--windowed']
  command+=[str(root/'windows_native'/source)]
  result=subprocess.run(command,cwd=root,capture_output=True)

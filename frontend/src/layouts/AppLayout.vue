@@ -91,7 +91,7 @@
       </a-form>
     </a-modal>
 
-    <!-- 后台核验已有签署；仅确认未签署或条款过期时显示签署页面。 -->
+    <!-- 后台核验已有签署；仅确认从未签署时显示签署页面。 -->
     <DisclaimerModal />
     <ControlSyncConfirm />
 

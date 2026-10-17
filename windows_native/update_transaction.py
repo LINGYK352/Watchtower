@@ -61,10 +61,10 @@ def prepare(root,target,full=False):
         if (candidate/'app/version.txt').read_text(encoding='utf-8').strip()!=target:raise ValueError('Release version marker mismatch')
         return {'release':release,'stage':stage,'changed':changed,'removed':removed,'old':old,'base':local_version(root)}
     except Exception:
-        stage.resolve().relative_to(state.resolve());shutil.rmtree(stage);raise
+        _cleanup_stage(root,stage);raise
 
 def _restore(root,journal):
-    backup=Path(journal['backup']);backup.resolve().relative_to(Path(channel.long_path(Path(root)/'state/update-backups')).resolve())
+    backup=Path(channel.long_path(journal['backup']));backup.resolve().relative_to(Path(channel.long_path(Path(root)/'state/update-backups')).resolve())
     errors=[]
     for name,existed in reversed(list(journal['operations'].items())):
         target=_inside(root,name)
@@ -76,7 +76,7 @@ def _restore(root,journal):
     if errors:raise RuntimeError('Update recovery could not restore managed files: '+', '.join(errors[:5]))
     update_state.write(Path(root)/'state/native-release-receipt.json',journal['receipt'])
 
-def recover(root):
+def _recover_locked(root):
     path=Path(root)/'state/native-update-journal.json'
     try:journal=update_state.read(path)
     except (OSError,ValueError):return
@@ -84,10 +84,22 @@ def recover(root):
         _restore(root,journal);journal['phase']='recovered';update_state.write(path,journal)
         update_state.progress(root,phase='error',msg='上次更新中断，已自动恢复原版本',error='Interrupted native update recovered',terminal=True)
 
+def recover(root):
+    with update_state.lock(root):_recover_locked(root)
+
+def _cleanup_stage(root,stage):
+    if stage is None:return
+    stage=Path(channel.long_path(stage));stage.resolve().relative_to(Path(channel.long_path(Path(root)/'state')).resolve())
+    try:shutil.rmtree(stage)
+    except FileNotFoundError:pass
+    except OSError as exc:
+        try:update_state.write(Path(root)/'state/native-update-cleanup.json',{'stage':str(stage),'error_type':type(exc).__name__,'deferred':True})
+        except OSError:pass
+
 def apply(root,target,health,start,stop,full=False):
     root=Path(root);stage=None;stop_attempted=False;completed=None
     with update_state.lock(root):
-        recover(root)
+        _recover_locked(root)
         prepared=prepare(root,target,full);stage=prepared['stage'];backup=Path(channel.long_path(root/'state/update-backups'))/uuid.uuid4().hex;backup.mkdir(parents=True)
         journal={'phase':'preparing','base':prepared['base'],'target':target,'backup':str(backup),'operations':{},'receipt':prepared['old'],'owner_pid':os.getpid(),'helper_exe':sys.executable}
         journal_path=root/'state/native-update-journal.json'
@@ -128,5 +140,5 @@ def apply(root,target,health,start,stop,full=False):
             update_state.progress(root,phase='error',msg='Windows 更新失败，已恢复原版本',error=type(exc).__name__+': '+str(exc)[:180],terminal=True)
             raise
         finally:
-            if stage:stage.resolve().relative_to(Path(channel.long_path(root/'state')).resolve());shutil.rmtree(stage)
             if completed:update_state.progress(root,**completed)
+            _cleanup_stage(root,stage)

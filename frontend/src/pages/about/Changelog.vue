@@ -8,7 +8,7 @@
       <a-timeline v-else class="cl-timeline">
         <a-timeline-item v-for="(log, i) in visibleLogs" :key="log.ver" :color="i === 0 ? 'blue' : 'gray'">
           <div class="cl-head">
-            <a-tag :color="i === 0 ? 'blue' : 'default'">{{ displayVersion(log.ver) }}</a-tag>
+            <a-tag data-testid="changelog-version" :color="i === 0 ? 'blue' : 'default'">{{ updateVersionLabel(log.ver) }}</a-tag>
             <span class="cl-date">{{ log.date }}</span>
             <a-tag v-if="i === 0" color="green" style="margin-left:4px">{{ translate('ui.m_cb62ebd689ee') }}</a-tag>
           </div>
@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { displayVersion, isPatchVersion } from "../../config/releaseVersion"
+import { updateVersionLabel, isPatchVersion } from "../../config/releaseVersion"
 import { t as translate } from '../../i18n'
 
 import { ref, computed, onMounted } from 'vue'

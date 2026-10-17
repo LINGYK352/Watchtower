@@ -40,6 +40,12 @@ def current(root):
 def install(root):
     root=Path(root).resolve()
     if not getattr(sys,'frozen',False):return
+    try:
+        from windows_native.maintenance import register
+        register(root)
+    except Exception as exc:
+        try:update_state.write(root/'state/maintenance-registration-error.json',{'error_type':type(exc).__name__})
+        except OSError:pass
     previous=current(root)
     version=(root/'app/version.txt').read_text().strip()
     if previous:

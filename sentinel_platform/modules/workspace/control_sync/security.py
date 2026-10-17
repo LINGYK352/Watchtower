@@ -24,9 +24,44 @@ except ModuleNotFoundError:
 
 
 class ControlSyncError(ValueError):
-    def __init__(self, message: str, status: int = 400):
+    def __init__(self, message: str, status: int = 400, reason: str = ""):
         super().__init__(message)
         self.status = status
+        self.reason = reason
+
+
+
+def idle_error(reasons, *, peer=False):
+    """Rebuild a bounded business explanation; never display arbitrary peer text."""
+    rows=[]
+    if isinstance(reasons,(list,tuple)):
+        for row in reasons[:8]:
+            if not isinstance(row,dict) or row.get("kind") not in ("tasks","sessions","schedules"):
+                continue
+            count=row.get("count")
+            if type(count) is not int or not 0<count<=1000000000:
+                continue
+            item={"kind":row["kind"],"count":count}
+            paused=row.get("paused")
+            if row["kind"]=="sessions" and type(paused) is int and 0<=paused<=count:
+                item["paused"]=paused
+            rows.append(item)
+    side,en=("对方","The peer") if peer else ("本机","This system")
+    names={"sessions":("AI渗透会话","unfinished AI penetration sessions"),"tasks":("扫描任务","unfinished scan tasks"),"schedules":("已启用的计划任务","enabled scheduled tasks")}
+    zh=[];english=[];steps=[];en_steps=[]
+    for row in rows:
+        kind=row["kind"];count=row["count"];name,eng=names[kind]
+        zh.append(name+str(count)+"条"+("（其中暂停"+str(row['paused'])+"条）" if row.get('paused') else ""))
+        english.append(str(count)+" "+eng+(" ("+str(row['paused'])+" paused)" if row.get('paused') else ""))
+        if kind=='sessions':steps.append('在'+side+'「渗透控制台 → 渗透会话」结束或删除不再需要的会话');en_steps.append('finish or delete unneeded sessions in '+('the peer’s' if peer else 'this system’s')+' Penetration sessions page')
+        elif kind=='tasks':steps.append('在'+side+'「任务与计划 → 任务列表」等待扫描完成或停止扫描');en_steps.append('finish or stop scans in '+('the peer’s' if peer else 'this system’s')+' Task list')
+        else:steps.append('在'+side+'「任务与计划 → 计划任务」停用相关计划');en_steps.append('disable schedules on '+('the peer' if peer else 'this system'))
+    if rows:
+        message=side+'存在未结束的业务工作，暂不能同步：'+'；'.join(zh)+'。'+'；'.join(dict.fromkeys(steps))+'。 / '+en+' blocks sync: '+'; '.join(english)+'. '+'; '.join(dict.fromkeys(en_steps))+'.'
+    else:
+        message=side+'暂不能同步：请检查'+side+'AI渗透会话、扫描任务或已启用计划；该端版本未返回具体类别和数量。 / '+en+' blocks sync. Check AI penetration sessions, scan tasks or enabled schedules there; this version did not return category counts.'
+    error=ControlSyncError(message,409,reason='sync_not_idle');error.blockers=rows
+    return error
 
 
 def ttl(value, minimum: int, maximum: int) -> int:

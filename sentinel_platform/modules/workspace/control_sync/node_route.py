@@ -8,7 +8,7 @@ from ..collaboration_cache import crypto,relay_waits,rpc
 from ..collaboration_cache.client import NodeClient,request,endpoint
 from ..collaboration_cache.policy import CacheError,normalize,identifier
 
-ACTIONS={'pair','status','confirm','reject','propose','run_status','chunk_status','receive_chunk','receive_commit','export_chunk','complete'}
+ACTIONS={'pair','status','confirm','reject','prepare','cancel_prepare','propose','run_status','chunk_status','receive_chunk','receive_commit','export_chunk','complete'}
 
 class NodeRoutes:
     def __init__(self,pairing):
@@ -87,7 +87,8 @@ class NodeRoutes:
         if response.get('error'):raise ControlSyncError(response['error'],response.get('status',400))
         remote=response['link']
         if remote.get('local',{}).get('instance_id')==pairing.instance_id:raise ControlSyncError('不能同步到当前系统 / Cannot pair with the same system')
-        values={key:remote.get(key) for key in ('state','pair_expires_at','connection_expires_at','categories','source_confirmed','receiver_confirmed','paired_at')}
+        values={key:remote.get(key) for key in ('state','pair_expires_at','connection_expires_at','categories','source_confirmed','receiver_confirmed','paired_at','confirm_expires_at','reject_reason')}
+        values['confirm_expires_at']=self.clock()+max(0,min(30,remote.get('confirmation_remaining',30)))
         values['remote']=remote['local']
         rows.update_one({'_id':lid,'owner':user['username'],'state':'connecting'},
             {'$set':values,'$unset':{'pair_secret':'','pair_hash':'','peer_error':'','peer_retry_at':''}})

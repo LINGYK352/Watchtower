@@ -14,11 +14,14 @@ def check(root,client):
     server=local_version(root);url=channel.source(root)
     try:
         cat=channel.catalog(root);plan=channel.chain(root);latest=plan['target']
-        return {'server_version':server,'client_version':client,'latest_version':latest,'source':url,'remote_ok':True,'has_update':_cmp(latest,server)>0,'message':('发现 Windows 新版本 '+latest) if _cmp(latest,server)>0 else '当前 Windows 版本已是最新','runtime_abi':channel.ABI,'channel':cat.get('channel'),'requires_restart':True}
+        from sentinel_platform.core import release_version
+        patch=release_version.patch_id(latest,'win') if release_version.release_kind(latest)=='patch' else ''
+        label=('发现补丁更新 '+patch) if patch else ('发现 Windows 新版本 '+latest)
+        return {'patch_id':patch,'server_version':server,'client_version':client,'latest_version':latest,'source':url,'remote_ok':True,'has_update':_cmp(latest,server)>0,'message':label if _cmp(latest,server)>0 else '当前 Windows 版本已是最新','runtime_abi':channel.ABI,'channel':cat.get('channel'),'requires_restart':True}
     except HTTPError as exc:
-        kind='unauthorized' if exc.code==403 else 'channel_unavailable' if exc.code==404 else 'network'
+        kind='unauthorized' if exc.code in (401,403) else 'channel_unavailable' if exc.code in (400,404,409,410) else 'network'
     except Exception:kind='network'
-    return {'server_version':server,'client_version':client,'latest_version':server,'source':url,'remote_ok':False,'has_update':False,'error_type':kind,'message':'Windows 更新通道未就绪，请检查网络或凭证','runtime_abi':channel.ABI}
+    return {'server_version':server,'client_version':client,'latest_version':server,'source':url,'remote_ok':False,'has_update':False,'error_type':kind,'message':('当前版本不在可用的Windows更新计划中，请核对安装版本与分发通道' if kind=='channel_unavailable' else 'Windows更新凭证无效，请检查激活状态' if kind=='unauthorized' else 'Windows 更新通道未就绪，请检查网络或凭证'),'runtime_abi':channel.ABI}
 
 def versions(root):
     cat=channel.catalog(root)
@@ -61,7 +64,9 @@ def install(app,root):
             if request.method=='GET' and path=='/api/about/check':data=check(root,request.args.get('client',''))
             elif request.method=='GET' and path=='/api/about/versions':data=versions(root)
             elif request.method=='GET' and path=='/api/about/changes':data=changes(root,request.args.get('version',''))
-            elif request.method=='GET' and path=='/api/about/progress':data=update_state.get_progress(root)
+            elif request.method=='GET' and path=='/api/about/progress':
+                from windows_native.update_recovery import reconcile_completed
+                data=reconcile_completed(root)
             elif request.method=='POST' and path in {'/api/about/apply','/api/about/rollback'}:
                 body=request.get_json(silent=True) or {};full=body.get('full',False)
                 if type(full) is not bool:raise ValueError('full 必须为布尔值')

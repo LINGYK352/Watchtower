@@ -14,6 +14,64 @@
     </script>
   </head>
   <body>
+    <style>
+      html,body{margin:0;min-height:100%;background:#0c1422}html[data-theme=light],html[data-theme=light] body{background:#edf2f8}
+      #watchtower-boot{--boot-bg:#0c1422;--boot-card:#101d30;--boot-border:#26364d;--boot-text:#edf4ff;--boot-muted:#9bacc4;position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:radial-gradient(ellipse at 50% 40%,#16305244,transparent 65%),var(--boot-bg);color:var(--boot-text);font:14px "Segoe UI","Microsoft YaHei",sans-serif}
+      html[data-theme=light] #watchtower-boot{--boot-bg:#edf2f8;--boot-card:#f9fbff;--boot-border:#d6e1ef;--boot-text:#20324d;--boot-muted:#596f8d;background:radial-gradient(ellipse at 50% 40%,#cbdcf088,transparent 65%),var(--boot-bg)}
+      #watchtower-boot .boot-card{box-sizing:border-box;width:min(100%,480px);padding:30px;border:1px solid var(--boot-border);border-radius:16px;background:var(--boot-card);box-shadow:0 16px 60px #00000014}
+      #watchtower-boot .boot-brand{display:flex;align-items:center;gap:12px;margin-bottom:30px}#watchtower-boot img{width:42px;height:42px;border-radius:10px}#watchtower-boot strong{display:block;font-size:19px;letter-spacing:.3px}#watchtower-boot .boot-brand small{display:block;color:var(--boot-muted);margin-top:4px;font-size:12px}
+      #watchtower-boot .boot-heading{display:flex;gap:10px;align-items:center;margin-bottom:12px}#watchtower-boot-stage{margin:0;font-size:16px;font-weight:600;line-height:1.5}#watchtower-boot .boot-spinner{flex:none;width:14px;height:14px;border:2px solid #476ca24d;border-top-color:#6d9fff;border-radius:50%;animation:wt-boot-spin 1s linear infinite}#watchtower-boot[data-failed=true] .boot-spinner{animation:none;border-color:#d9a64a;background:#d9a64a22}
+      #watchtower-boot details{margin-top:14px;color:var(--boot-muted);font-size:12px}#watchtower-boot summary{cursor:pointer}#watchtower-boot pre{max-height:130px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#6d9fff0a;border:1px solid var(--boot-border);border-radius:8px;padding:10px;line-height:1.6;scrollbar-width:thin}#watchtower-boot .boot-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}#watchtower-boot-message{margin:0;color:var(--boot-muted);line-height:1.8;min-height:52px;overflow-wrap:anywhere}#watchtower-boot .boot-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:24px;padding-top:18px;border-top:1px solid var(--boot-border)}#watchtower-boot-elapsed{color:var(--boot-muted);font-size:12px;font-variant-numeric:tabular-nums}
+      #watchtower-boot button{border:1px solid var(--boot-border);border-radius:8px;padding:7px 13px;background:transparent;color:var(--boot-text);cursor:pointer;font:inherit;transition:border-color .15s,background .15s}#watchtower-boot button:hover{border-color:#6d9fff;background:#6d9fff12}#watchtower-boot button:focus-visible{outline:2px solid #6d9fff;outline-offset:3px}#watchtower-boot button[hidden]{display:none}
+      @keyframes wt-boot-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){#watchtower-boot .boot-spinner{animation:none}}
+    </style>
+    <div id="watchtower-boot" role="status" aria-live="polite"><section class="boot-card"><div class="boot-brand"><img src="/logo.png" alt="Watchtower"/><div><strong>瞭望塔 Watchtower</strong><small>工作台启动 / Workspace startup</small></div></div><div class="boot-heading"><span class="boot-spinner" aria-hidden="true"></span><p id="watchtower-boot-stage">正在读取界面资源</p></div><p id="watchtower-boot-message"></p><details id="watchtower-boot-details" hidden><summary id="watchtower-boot-details-title">查看失败详情</summary><pre id="watchtower-boot-detail-text"></pre></details><div class="boot-footer"><small id="watchtower-boot-elapsed" aria-live="off"></small><div class="boot-actions"><button id="watchtower-boot-report" hidden type="button">上传错误日志</button><button id="watchtower-boot-retry" hidden type="button">重新加载</button></div></div></section></div>
+    <script>
+      (function(){
+        window.__watchtowerAppReady=false;
+        var english=false;try{english=localStorage.getItem('watchtower.locale')==='en-US';}catch(_){}
+        function local(text){var i=text.indexOf(' / ');return i<0?text:english?text.slice(i+3):text.slice(0,i);}
+        function t(zh,en){return english?en:zh;}
+        var started=Date.now(),failed=false,checking=false,service='',detail='正在从本机服务加载界面脚本与样式，完成后自动进入登录页或工作台。 / Loading local scripts and styles.';
+        var stage=document.getElementById('watchtower-boot-stage'),message=document.getElementById('watchtower-boot-message'),elapsed=document.getElementById('watchtower-boot-elapsed'),retry=document.getElementById('watchtower-boot-retry'),report=document.getElementById('watchtower-boot-report'),details=document.getElementById('watchtower-boot-details'),detailsText=document.getElementById('watchtower-boot-detail-text'),failure={reason:'',detail:''};
+        stage.textContent=t('正在读取界面资源','Loading interface resources');retry.textContent=t('重新加载','Reload');report.textContent=t('上传错误日志','Upload report');document.getElementById('watchtower-boot-details-title').textContent=t('查看失败详情','View failure details');document.querySelector('.boot-brand small').textContent=t('工作台启动','Workspace startup');
+        function draw(){if(!failed)message.textContent=local(detail)+(service?' '+local(service):'');var seconds=Math.floor((Date.now()-started)/1000);elapsed.textContent=t('已用 '+seconds+' 秒',seconds+' seconds elapsed');}
+        window.__watchtowerBootStatus=function(title,description){if(failed)return;stage.textContent=local(title);detail=description;draw();};
+        function cleanError(value){return String(value||'').replace(/(https?:\/\/[^\s?]+)\?[^\s]+/g,'$1?[redacted]').slice(0,700);}
+        async function diagnoseResourceFailure(id,browserError){
+          var paths=[],seen={};
+          function add(value){try{var u=new URL(value,location.href);if(u.origin===location.origin&&u.pathname.indexOf('/assets/')===0&&/\.(m?js|css)$/i.test(u.pathname)&&!seen[u.pathname]){seen[u.pathname]=true;paths.push(u.pathname);}}catch(_){}}
+          var urls=browserError.match(/https?:\/\/[^\s)"'<>]+/g)||[];urls.forEach(add);
+          document.querySelectorAll('script[src],link[rel="modulepreload"],link[rel="stylesheet"]').forEach(function(node){add(node.src||node.href);});paths=paths.slice(0,8);
+          var next=0,results=[];
+          async function worker(){while(next<paths.length){var path=paths[next++],controller=new AbortController(),timer=setTimeout(function(){controller.abort();},3500);try{var response=await fetch(path,{method:'HEAD',cache:'no-store',redirect:'error',signal:controller.signal}),type=(response.headers.get('Content-Type')||'').split(';')[0].trim().toLowerCase(),status=response.headers.get('X-Watchtower-Resource-Status')||'',valid=/\.css$/i.test(path)?type==='text/css':['text/javascript','application/javascript','application/x-javascript','text/ecmascript','application/ecmascript'].indexOf(type)>=0;results.push({path:path,http:response.status,type:type,status:status,bad:!response.ok||!valid});}catch(error){results.push({path:path,http:0,type:'',status:cleanError(error.name),bad:true});}finally{clearTimeout(timer);}}}
+          await Promise.all([worker(),worker(),worker()]);
+          if(window.__watchtowerAppReady||failure.id!==id||!document.getElementById('watchtower-boot'))return;
+          var bad=results.filter(function(r){return r.bad;}),primary=bad[0],summary='';
+          if(primary){if(!primary.http)summary=t('未收到本机资源响应：','No local resource response: ')+primary.path;else if(primary.http===404)summary=t('本机缺少界面资源：','Local UI resource is missing: ')+primary.path;else if(primary.http>=400)summary=t('本机资源读取失败，HTTP ','Local resource failed, HTTP ')+primary.http+' · '+primary.path;else summary=t('脚本或样式响应类型不正确：','Invalid script or style response type: ')+(primary.type||t('未提供','not supplied'))+' · '+primary.path;}
+          else summary=t('资源现已响应，请重新加载；浏览器原始错误见详情。','Resources are responding now. Reload and review the original browser error below.');
+          failure.reason=summary;message.textContent=summary+t('。账号与资料保留。','. Your data is retained.');
+          var lines=results.sort(function(a,b){return Number(b.bad)-Number(a.bad);}).map(function(r){return r.path+' · HTTP '+(r.http||'no response')+' · Content-Type: '+(r.type||'-')+(r.status?' · '+r.status:'');});
+          failure.detail=lines.join(' | ')+' | '+browserError;detailsText.textContent=lines.join('\n')+'\n\n'+browserError;
+        }
+        window.__watchtowerBootFail=function(reason,error){
+          if(window.__watchtowerAppReady)return;failed=true;document.getElementById('watchtower-boot').dataset.failed='true';stage.textContent=t('界面资源加载失败','Interface resource failed');message.textContent=local(reason||'脚本或页面未能完成加载 / Script or page loading failed')+t('。正在核对本机资源响应…',' Checking local resource responses…');retry.hidden=false;details.hidden=false;report.hidden=false;failure.reason=local(reason||'界面资源加载失败 / Interface resource failed');failure.id=(failure.id||0)+1;failure.detail=cleanError(error&&error.message||error||reason);detailsText.textContent=failure.detail||failure.reason;diagnoseResourceFailure(failure.id,failure.detail).catch(function(){});
+        };
+        retry.onclick=function(){location.reload();};
+        report.onclick=function(){if(window.chrome&&window.chrome.webview){window.chrome.webview.postMessage({type:'watchtower-startup-diagnostic',action:'review',reason:failure.reason,detail:failure.detail});return;}details.open=true;detailsText.textContent=failure.detail+'\n'+t('原生诊断通道暂不可用。持续失败时原生窗口会显示可上传的错误报告。','Native diagnostics are not available yet. Persistent failure will open a native error report.');};
+        addEventListener('error',function(e){if(e.target&&e.target.tagName==='SCRIPT'){var path='';try{path=new URL(e.target.src,location.href).pathname;}catch(_){}window.__watchtowerBootFail(t('脚本请求失败','Script request failed')+': '+path);}},true);
+        draw();
+        var timer=setInterval(function(){
+          if(window.__watchtowerAppReady||!document.getElementById('watchtower-boot')){clearInterval(timer);return;}
+          draw();var seconds=Math.floor((Date.now()-started)/1000);
+          if(seconds>=5)retry.hidden=false;
+          if(!failed&&seconds>=5&&seconds%10===5&&!checking){
+            checking=true;var controller=new AbortController(),timeout=setTimeout(function(){controller.abort();},3000);
+            fetch('/favicon.ico',{method:'HEAD',cache:'no-store',signal:controller.signal}).then(function(response){service=response.ok?'本机服务已响应，仍在等待上述加载阶段。 / Local service responded; waiting for this stage.':t('本机服务返回 HTTP ','Local HTTP response ')+response.status;}).catch(function(){service='当前未收到本机服务响应，正在等待恢复。 / No response from the local service.';}).finally(function(){clearTimeout(timeout);checking=false;draw();});
+          }
+        },1000);
+      })();
+    </script>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

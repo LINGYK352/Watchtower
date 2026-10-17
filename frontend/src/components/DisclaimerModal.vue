@@ -36,13 +36,13 @@ import { t as translate } from '../i18n'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { clearToken } from '../api/request'
-import { getDisclaimerStatus, acceptDisclaimer } from '../api/meta'
+import { getDisclaimerStatus, acceptDisclaimer, hasPersistedAssent } from '../api/meta'
 import { DISCLAIMER_SECTIONS, DISCLAIMER_TITLE, DISCLAIMER_AGREE_TEXT, DISCLAIMER_VERSION } from '../config/disclaimer'
 
 const sections = DISCLAIMER_SECTIONS
 const title = DISCLAIMER_TITLE
 const agreeText = DISCLAIMER_AGREE_TEXT
-// Signed status is checked silently; only a confirmed missing/outdated record opens terms.
+// Signed status is checked silently; only a confirmed missing record opens terms.
 const visible = ref(false)
 const agreed = ref(false)
 const submitting = ref(false)
@@ -69,11 +69,11 @@ async function checkStatus() {
     const status = await getDisclaimerStatus(controller.signal)
     if (disposed || current !== generation) return
     if (status.status === 'unavailable' || (status.accepted && status.persisted === false)) throw new Error('Assent storage unavailable')
-    if (status.accepted && status.accepted_version === DISCLAIMER_VERSION) {
+    if (hasPersistedAssent(status)) {
       visible.value = false
       return
     }
-    // Only a successfully verified missing/outdated assent opens the terms.
+    // Only a successfully verified missing assent opens the terms.
     visible.value = true
     startCountdown()
   } catch {
@@ -92,7 +92,7 @@ async function onAgree() {
   submitting.value = true
   try {
     const status = await acceptDisclaimer(DISCLAIMER_VERSION)
-    if (!status.accepted || status.accepted_version !== DISCLAIMER_VERSION || status.persisted === false || status.status === 'unavailable') {
+    if (!hasPersistedAssent(status)) {
       throw new Error(translate('disclaimerStatus.saveFailed'))
     }
     if (!disposed) visible.value = false

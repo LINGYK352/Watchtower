@@ -75,13 +75,13 @@ import {
   ExclamationCircleOutlined, CheckCircleOutlined, ReadOutlined,
 } from '@ant-design/icons-vue'
 
-import { DISCLAIMER_SECTIONS, DISCLAIMER_VERSION } from '../../config/disclaimer'
-import { getDisclaimerStatus } from '../../api/meta'
+import { DISCLAIMER_SECTIONS } from '../../config/disclaimer'
+import { getDisclaimerStatus, hasPersistedAssent } from '../../api/meta'
 
 // 免责声明签署状态（服务端持久化）——章节顶部显示已签署淡绿徽标。
 const disc = reactive({ accepted: false, accepted_version: '', accepted_at: '' })
 onMounted(async () => {
-  try { const status=await getDisclaimerStatus();Object.assign(disc,status,{accepted:status.accepted && status.accepted_version===DISCLAIMER_VERSION && status.status!=='unavailable'}) } catch { /* unknown is not accepted */ }
+  try { const status=await getDisclaimerStatus();Object.assign(disc,status,{accepted:hasPersistedAssent(status)}) } catch { /* unknown is not accepted */ }
 })
 
 interface Verse { cipai?: string; title?: string; stanzas: string[][]; author?: string }

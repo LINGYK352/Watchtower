@@ -73,13 +73,23 @@ def progress(root,**data):
     data.setdefault('ts',time.time());data.setdefault('terminal',data.get('phase') in {'done','error'})
     try:chain=read(Path(root)/'state/native-update-chain.json')
     except (OSError,ValueError):chain={}
-    if chain.get('id'):
-        data.update(current_version=(Path(root)/'app/version.txt').read_text().strip(),target_version=chain['target'],
-                    hop_version=chain['steps'][chain['cursor']] if chain['cursor']<len(chain['steps']) else chain['target'],
-                    hop=min(chain['cursor']+1,len(chain['steps'])),hops=len(chain['steps']),completed=chain['completed'],
-                    resumable=chain['cursor']<len(chain['steps']),chain_active=chain.get('active',False),run_id=chain['id'])
-        if data['phase']=='done' and chain.get('active'):
-            data.update(phase='checking',terminal=False,msg='本级更新完成，正在确认运行并准备下一级')
+    if isinstance(chain,dict) and chain.get('id'):
+        steps=chain.get('steps');cursor=chain.get('cursor');target=chain.get('target')
+        valid=isinstance(steps,list) and all(isinstance(v,str) and v for v in steps) and type(cursor) is int and 0<=cursor<=len(steps) and isinstance(target,str) and bool(target)
+        if valid:
+            try:
+                with open_read(Path(root)/'app/version.txt') as handle:current_version=handle.read().strip()
+            except (OSError,UnicodeError):current_version=''
+            completed=chain.get('completed',[])
+            data.update(current_version=current_version,target_version=target,
+                        hop_version=steps[cursor] if cursor<len(steps) else target,
+                        hop=min(cursor+1,len(steps)),hops=len(steps),completed=completed if isinstance(completed,list) else [],
+                        resumable=cursor<len(steps),chain_active=bool(chain.get('active',False)),run_id=chain['id'])
+            if not current_version:data['program_version_unavailable']=True
+            if data.get('phase')=='done' and chain.get('active'):
+                data.update(phase='checking',terminal=False,msg='本级更新完成，正在确认运行并准备下一级')
+        else:
+            data.update(chain_state_invalid=True,resumable=False,chain_active=False)
     write(Path(root)/'state/native-update-progress.json',data)
 
 def get_progress(root):

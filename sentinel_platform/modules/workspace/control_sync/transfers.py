@@ -16,6 +16,7 @@ from .security import ControlSyncError, b64, text, unb64
 from .snapshots import MAX_ARCHIVE
 
 CHUNK_SIZE = 2 * 1024 * 1024
+CONFIRMATION_TIMEOUT = "对端30秒内未确认，请重新请求同步 / Peer did not approve within30 seconds; request sync again"
 
 
 class Transfers:
@@ -40,7 +41,7 @@ class Transfers:
         os.replace(tmp, path)
 
     def public(self, doc):
-        out = {k: doc.get(k) for k in ("_id", "link_id", "kind", "flow", "mode", "categories", "state", "created_at", "expires_at", "summary", "result", "error", "stage", "completed_at", "transferred_bytes")}
+        out = {k: doc.get(k) for k in ("_id", "link_id", "kind", "flow", "mode", "categories", "state", "created_at", "expires_at", "summary", "result", "error", "stage", "completed_at", "transferred_bytes", "confirm_expires_at")}
         if doc.get("state") not in ("complete", "rejected", "failed") and self.clock() >= doc.get("expires_at", 0):
             out["state"] = "expired"
         return out
@@ -100,7 +101,14 @@ class Transfers:
             tmp.unlink(missing_ok=True)
         return path
 
+    def expire_confirmations(self):
+        now=self.clock()
+        self.runs.update_many({'kind':'receiver','state':'preparing','prepare_expires_at':{'$lte':now}}, {'$set':{'state':'failed','stage':'prepare_timeout','error':'快照准备超时，请重试 / Snapshot preparation timed out; retry'}})
+        self.runs.update_many({'kind':'receiver','state':'pending','confirm_expires_at':{'$exists':False}}, {'$set':{'confirm_expires_at':now+30}})
+        self.runs.update_many({'kind':'receiver','state':'pending','confirm_expires_at':{'$lte':now}}, {'$set':{'state':'rejected','stage':'confirmation_timeout','error':CONFIRMATION_TIMEOUT}})
+
     def list(self):
+        self.expire_confirmations()
         return [self.public(d) for d in self.runs.find({"history_deleted_at":{"$exists":False}}).sort("created_at", -1).limit(100)]
 
     def history_detail(self,run_id):
@@ -128,6 +136,7 @@ class Transfers:
         return {'deleted':True}
 
     def get(self, run_id, link_id=None):
+        self.expire_confirmations()
         query = {"_id": text(run_id, 32)}
         if link_id is not None:
             query["link_id"] = link_id
@@ -138,7 +147,53 @@ class Transfers:
             raise ControlSyncError("同步计划已过期，请重新创建 / Transfer plan expired", 410)
         return doc
 
-    def start(self, user, body):
+    def start(self,user,body):
+        token=body.get('request_id')
+        if token is None:return self._start(user,body)
+        if not isinstance(token,str) or len(token)!=32 or any(c not in '0123456789abcdef' for c in token):
+            raise ControlSyncError('同步请求编号无效 / Invalid sync request identifier')
+        link=self.pairing.require_link(body.get('link_id'),paired=True)
+        selected=categories(body.get('categories'))
+        run_id=hashlib.sha256((user['username']+':'+link['_id']+':'+token).encode()).hexdigest()[:32]
+        def existing():
+            row=self.runs.find_one({'_id':run_id})
+            if row and (row.get('owner')!=user['username'] or row.get('link_id')!=link['_id'] or row.get('flow')!=body.get('flow') or row.get('mode')!=body.get('mode') or row.get('categories')!=selected):
+                raise ControlSyncError('同步请求编号已用于不同计划 / Request identifier belongs to another plan',409)
+            return row
+        old=existing()
+        if old:return self.public(old)
+        claims=self.repo.collection('control_sync_request_claims');nonce=secrets.token_hex(16);now=self.clock()
+        try:
+            claimed=claims.find_one_and_update({'_id':run_id,'$or':[{'lease_until':{'$exists':False}},{'lease_until':{'$lte':now}}]}, {'$set':{'nonce':nonce,'lease_until':now+300}},upsert=True,return_document=ReturnDocument.AFTER)
+        except DuplicateKeyError:
+            raise ControlSyncError('同一同步请求正在准备，请稍后查看记录 / The same request is being prepared; check its record shortly',409) from None
+        try:
+            old=existing()
+            return self.public(old) if old else self._start(user,body,run_id)
+        finally:claims.delete_one({'_id':run_id,'nonce':nonce})
+
+    def _propose(self, link, doc):
+        plan={k:doc[k] for k in ('_id','flow','mode','categories','expires_at')}
+        # Optional early notification. Old peers reject the unknown action;
+        # they still receive the original, fully validated final proposal.
+        try:self.pairing.request(link,'prepare',plan)
+        except ControlSyncError as error:
+            if error.status not in (400,404):raise
+        if doc['flow']=='push' and not doc.get('summary'):
+            try:raw,summary=self.snapshots.export(doc['categories'],mode=doc['mode'])
+            except Exception:
+                try:self.pairing.request(link,'cancel_prepare',{'run_id':doc['_id']})
+                except Exception:pass
+                raise
+            self._save(doc['_id'],raw);doc['summary']=summary
+            self.runs.update_one({'_id':doc['_id']},{'$set':{'summary':summary}})
+        try:return self.pairing.request(link,'propose',{**plan,**({'summary':doc['summary']} if doc.get('summary') else {})})
+        except Exception:
+            try:self.pairing.request(link,'cancel_prepare',{'run_id':doc['_id']})
+            except Exception:pass
+            raise
+
+    def _start(self, user, body, run_id=None):
         link = self.pairing.require_link(body.get("link_id"), paired=True)
         if link["kind"] != "initiator":
             raise ControlSyncError("请在发起端选择方向 / Select direction on the initiating system")
@@ -148,19 +203,14 @@ class Transfers:
         flow, mode = body.get("flow"), body.get("mode")
         if flow not in ("push", "pull") or mode not in ("incremental", "overwrite"):
             raise ControlSyncError("同步方向或模式无效 / Invalid direction or mode")
-        if self.snapshots.active_work():
-            raise ControlSyncError("本机存在活跃/周期任务，请先停止 / Stop active and scheduled work first", 409)
-        run_id = secrets.token_hex(16)
+        if mode=="overwrite":self.snapshots.require_idle()
+        run_id = run_id or secrets.token_hex(16)
         doc = {"_id": run_id, "link_id": link["_id"], "kind": "initiator", "flow": flow, "mode": mode,
                "categories": selected, "owner": user["username"], "state": "pending", "stage": "awaiting_peer_confirmation",
                "created_at": self.clock(), "expires_at": min(self.clock() + 1800, link["connection_expires_at"])}
-        if flow == "push":
-            raw, summary = self.snapshots.export(selected)
-            self._save(run_id, raw)
-            doc["summary"] = summary
         self.runs.insert_one(doc)
         try:
-            response = self.pairing.request(link, "propose", {k: doc[k] for k in ("_id", "flow", "mode", "categories", "expires_at", "summary") if k in doc})
+            response = self._propose(link,doc)
             self.runs.update_one({"_id": run_id}, {"$set": {"summary": response["run"]["summary"]}})
         except ControlSyncError as exc:
             self.runs.update_one({"_id": run_id}, {"$set": {"state": "failed", "error": str(exc), "stage": "proposal_failed"}})
@@ -173,7 +223,11 @@ class Transfers:
             raise ControlSyncError("此计划需对端确认 / This plan needs peer confirmation")
         self.pairing.require_link(doc["link_id"], paired=True)
         state = "approved" if accepted is True else "rejected"
-        self.runs.update_one({"_id": run_id, "state": "pending"}, {"$set": {"state": state, "decided_by": user["username"], "stage": "ready" if accepted else "cancelled"}})
+        if doc.get("state")=="preparing" and accepted is True:raise ControlSyncError("快照尚未就绪，请等待完整清单 / Wait for the complete snapshot manifest",409)
+        if doc.get("state")=="preparing" and accepted is False:
+            self.runs.update_one({"_id":run_id,"state":"preparing"},{"$set":{"state":"rejected","stage":"cancelled"}})
+            return self.public(self.get(run_id))
+        self.runs.update_one({"_id": run_id, "state": "pending", "confirm_expires_at":{"$gt":self.clock()}}, {"$set": {"state": state, "decided_by": user["username"], "stage": "ready" if accepted else "cancelled"}})
         return self.public(self.get(run_id))
 
     def status(self, run_id):
@@ -182,7 +236,7 @@ class Transfers:
             link = self.pairing.require_link(doc["link_id"], paired=True)
             remote = self.pairing.request(link, "run_status", {"run_id": run_id})["run"]
             if remote["state"] == "rejected":
-                self.runs.update_one({"_id": run_id}, {"$set": {"state": "rejected", "stage": "peer_rejected"}})
+                self.runs.update_one({"_id": run_id}, {"$set": {"state": "rejected", "stage": "confirmation_timeout" if remote.get("stage")=="confirmation_timeout" else "peer_rejected", "error":CONFIRMATION_TIMEOUT if remote.get("stage")=="confirmation_timeout" else ""}})
             elif remote["state"] in ("approved", "complete") and doc["state"] == "pending":
                 self.runs.update_one({"_id": run_id, "state": "pending"}, {"$set": {"state": "ready", "stage": "ready"}})
             elif remote["state"] == "failed":
@@ -200,7 +254,7 @@ class Transfers:
             self.pairing.require_link(doc["link_id"], paired=True)
             if doc['state']=='failed' and doc.get('stage')=='proposal_failed':
                 link=self.pairing.require_link(doc['link_id'],paired=True)
-                response=self.pairing.request(link,'propose',{k:doc[k] for k in ('_id','flow','mode','categories','expires_at','summary') if k in doc})
+                response=self._propose(link,doc)
                 self.runs.update_one({'_id':run_id,'state':'failed','stage':'proposal_failed'},
                     {'$set':{'summary':response['run']['summary'],'state':'pending','stage':'awaiting_peer_confirmation','error':''}})
                 doc=self.get(run_id)
@@ -275,7 +329,7 @@ class Transfers:
         return stopped
 
     def peer(self, link, action, body):
-        if action == "propose":
+        if action in ("prepare","propose"):
             run_id = body.get("_id")
             self._file(run_id)
             selected = categories(body.get("categories"))
@@ -289,23 +343,38 @@ class Transfers:
             if old:
                 if any(old.get(k) != body.get(k) for k in ("flow", "mode", "categories")) or old["link_id"] != link["_id"]:
                     raise ControlSyncError("同步计划重复且不一致 / Transfer id conflict", 409)
-                return {"run": self.public(old)}
-            if self.snapshots.active_work():
-                raise ControlSyncError("对端存在活跃/周期任务 / Peer has active or scheduled work", 409)
+                if action=='prepare' and old.get('state')=='failed' and old.get('stage') in ('prepare_failed','prepare_timeout'):
+                    self.runs.update_one({'_id':run_id,'state':'failed','stage':old['stage']},{'$set':{'state':'preparing','stage':'preparing_snapshot','prepare_expires_at':min(expiry,self.clock()+120)},'$unset':{'error':'','confirm_expires_at':''}})
+                    return {'run':self.public(self.get(run_id,link['_id']))}
+                if action=='prepare' or old.get('state')!='preparing':return {"run":self.public(old)}
+            if mode=="overwrite":self.snapshots.require_idle()
+            if action=='prepare':
+                doc={"_id":run_id,"link_id":link['_id'],"kind":"receiver","flow":flow,"mode":mode,"categories":selected,"state":"preparing","stage":"preparing_snapshot","created_at":self.clock(),"expires_at":expiry,"prepare_expires_at":min(expiry,self.clock()+120)}
+                try:self.runs.insert_one(doc)
+                except DuplicateKeyError:
+                    existing=self.get(run_id,link['_id'])
+                    if any(existing.get(k)!=doc[k] for k in ('flow','mode','categories')):raise ControlSyncError("同步计划重复且不一致 / Transfer id conflict",409)
+                    doc=existing
+                return {'run':self.public(doc)}
             summary = body.get("summary")
             if flow == "pull":
-                raw, summary = self.snapshots.export(selected)
+                raw, summary = self.snapshots.export(selected, mode=mode)
                 self._save(run_id, raw)
             if not isinstance(summary, dict) or not isinstance(summary.get("sha256"), str) or len(summary["sha256"]) != 64 or any(c not in "0123456789abcdef" for c in summary["sha256"]) or isinstance(summary.get("bytes"), bool) or not isinstance(summary.get("bytes"), int) or not 0 < summary["bytes"] <= MAX_ARCHIVE:
                 raise ControlSyncError("同步清单无效 / Invalid snapshot summary")
             doc = {"_id": run_id, "link_id": link["_id"], "kind": "receiver", "flow": flow, "mode": mode, "categories": selected,
-                   "state": "pending", "stage": "awaiting_local_confirmation", "created_at": self.clock(), "expires_at": expiry, "summary": summary}
-            try:
-                self.runs.insert_one(doc)
-            except DuplicateKeyError:
-                raise ControlSyncError("同步计划已创建 / Transfer already created", 409) from None
+                   "state": "pending", "stage": "awaiting_local_confirmation", "confirm_expires_at":self.clock()+30, "created_at": self.clock(), "expires_at": expiry, "summary": summary}
+            if old and old.get('state')=='preparing':
+                updated=self.runs.update_one({'_id':run_id,'link_id':link['_id'],'state':'preparing'},{'$set':doc,'$unset':{'prepare_expires_at':''}})
+                if not updated.matched_count:raise ControlSyncError("同步准备已取消，请重新请求 / Preparation cancelled; request again",409)
+            else:
+                try:self.runs.insert_one(doc)
+                except DuplicateKeyError:raise ControlSyncError("同步计划已创建 / Transfer already created",409) from None
             return {"run": self.public(doc)}
         doc = self.get(body.get("run_id"), link["_id"])
+        if action=='cancel_prepare':
+            self.runs.update_one({'_id':doc['_id'],'state':'preparing'},{'$set':{'state':'failed','stage':'prepare_failed','error':'快照准备未完成，请重试 / Snapshot preparation failed; retry'}})
+            return {'ok':True}
         if action == "run_status":
             return {"run": self.public(doc)}
         if doc["state"] == "complete" and action == "receive_commit":

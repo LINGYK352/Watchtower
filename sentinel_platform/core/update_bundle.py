@@ -59,7 +59,8 @@ class OriginRedirect(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, url)
 
 
-OPENER = build_opener(OriginRedirect())
+from sentinel_platform.core.distribution_tls import VerifiedOpener
+OPENER = VerifiedOpener(OriginRedirect)
 
 
 def verify(plan, product, target, base, validate_name):

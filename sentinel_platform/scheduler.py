@@ -345,6 +345,14 @@ def _tick_sessions() -> dict:
     max_dispatch_reclaim = _sess_cfg("MAX_DISPATCH_RECLAIM", 3)   # 连续派发都起不来的降级上限，防无限抖动
     out = {"queued": 0, "resumed": 0, "stalled": 0, "degraded": 0, "revived": 0}
     try:
+        from sentinel_platform.core.session_lifecycle import reconcile_cancelled
+        reconcile_cancelled(get_repo())
+        from sentinel_platform.contracts import get_registry, ROLE
+        service=get_registry().get(ROLE.PENTEST_DISPATCH)
+        if service and hasattr(service,"reconcile_authorization"):
+            service.reconcile_authorization()
+        if service and hasattr(service,"reconcile_deleted_sessions"):
+            service.reconcile_deleted_sessions()
         coll = get_repo().collection("intel_pentest_session")
         now_epoch = _t.time()
         # ① 回收 running 心跳超时：只回到 queued，稍后与其他候选共享槽位
