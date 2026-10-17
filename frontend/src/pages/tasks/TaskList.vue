@@ -59,6 +59,9 @@
           </template>
           <template v-else-if="column.key === 'policy'">{{ (record.options || {}).policy_name || '-' }}</template>
           <template v-else-if="column.key === 'statistic'">
+            <a-tooltip v-if="hasDynamicAssets(record)" :title="translate('patch177B2.dynamicHint')">
+              <a-tag color="cyan" data-testid="dynamic-asset-tag">{{ translate('patch177B2.dynamicAssets') }}</a-tag>
+            </a-tooltip>
             <a-space size="small" wrap>
               <a-tag>{{ translate('ui.m_222952431147') }} {{ stat(record, 'domain_cnt') }}</a-tag>
               <a-tag>IP {{ stat(record, 'ip_cnt') }}</a-tag>
@@ -166,6 +169,7 @@
 </template>
 
 <script setup lang="ts">
+import { hasDynamicAssets } from './collectionLabel'
 import { t as translate } from '../../i18n'
 
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'

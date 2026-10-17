@@ -7,11 +7,11 @@ import { t as translate } from '../i18n'
  *
  * v3（2026-09-30）：由单份笼统免责声明，替换为一套三份正式法律文本——
  *   一、注册用户协议与风险告知  二、隐私告知与个人信息处理规则  三、激活使用承诺书。
- * 平台首登为「整体阅读、一次同意」：三份文本一并呈现、一次勾选确认；条款实质变更时递增版本触发重签。
+ * 平台首登为「整体阅读、一次同意」：三份文本一并呈现、一次勾选确认；首次签署持久保存，软件更新、补丁、重启及条款展示版本变化均不触发重签。
  * 服务提供者为个人开发者（公开署名 LINGYK），联系邮箱 lingyangkang352@163.com，官网 https://watchtowers.info/。
  */
 
-export const DISCLAIMER_VERSION = 'v3'   // 条款版本：条款实质变更时递增（v3=替换为注册协议+隐私规则+激活承诺三份正式文本，旧 v2 签署失效需重签）
+export const DISCLAIMER_VERSION = 'v3'   // 条款展示版本，仅供新签署记录与文本说明；历史签署始终有效。
 
 export const DISCLAIMER_TITLE = computed(() => translate('ui.m_82e60434b08f'))
 

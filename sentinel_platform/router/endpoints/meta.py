@@ -227,7 +227,8 @@ class Activation(Resource):
         try:
             from sentinel_platform.core.activation_client import metadata
             client_metadata, client_headers = metadata('web')
-            resp = requests.post(f"{source_url}/activate", json={"token": reg_token, **client_metadata}, headers=client_headers, timeout=15)
+            from sentinel_platform.core.distribution_tls import post as verified_post
+            resp = verified_post(f"{source_url}/activate", json={"token": reg_token, **client_metadata}, headers=client_headers, timeout=15)
             result = resp.json()
         except Exception as e:
             return err(CODE_ERROR, f"无法连接分发服务器: {e}")

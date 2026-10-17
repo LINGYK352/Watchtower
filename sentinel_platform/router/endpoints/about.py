@@ -11,7 +11,8 @@ import os
 import subprocess
 import time
 import urllib.error
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from sentinel_platform.core.distribution_tls import urlopen
 
 from flask_restx import Namespace, Resource
 
@@ -332,6 +333,28 @@ class _Changelog(Resource):
         from sentinel_platform.modules.about import _changelog
         return ok(_changelog.current(_project_root(),
                   lambda: _forward_get("/changelog", timeout=10)[0]))
+
+
+@ns.route('/available-changelog')
+class AvailableChangelog(Resource):
+    def get(self):
+        # Installed history stays local. Only a discovered immutable release is
+        # fetched, then shared across workers in Mongo for subsequent checks.
+        from flask import request
+        from urllib.parse import quote
+        from sentinel_platform.core import release_version,get_repo
+        value=request.args.get('version','')
+        try:release_version.key(value)
+        except ValueError:return err(400,'Invalid release version')
+        cache=get_repo().collection('available_release_changelog')
+        old=cache.find_one({'_id':value})
+        if old:return ok(old['items'])
+        rows,error=_forward_get('/changelog?version='+quote(value,safe=''),timeout=10)
+        if error or not isinstance(rows,list):return err(503,'Update contents temporarily unavailable')
+        rows=[{'ver':r['ver'],'date':str(r.get('date','')),'summary':r['summary']} for r in rows if isinstance(r,dict) and isinstance(r.get('ver'),str) and isinstance(r.get('summary'),str)]
+        if not any(r['ver']==value for r in rows):return err(503,'Release contents are not ready')
+        cache.update_one({'_id':value},{'$setOnInsert':{'items':rows}},upsert=True)
+        return ok(rows)
 
 
 @ns.route("/announcements")

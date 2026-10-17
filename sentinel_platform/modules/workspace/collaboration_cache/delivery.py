@@ -312,10 +312,9 @@ class DeliveryService:
             if peer == mid or peer not in active:
                 raise CacheError('接收成员不存在或失效 / Recipient unavailable', 403)
             participants = sorted((mid, peer)); selected = [active[m] for m in participants]
-            trust=self.trust.find_one({'owner':user['username'],'group_id':gid,'member_id':peer})
             peer_pub=active[peer].get('source',{}).get('crypto_public')
-            if not peer_pub or not trust or trust.get('fingerprint')!=crypto.fingerprint(peer_pub):
-                raise CacheError('首次单点发送前请核验对方通信指纹 / Verify the peer fingerprint before your first private send',428)
+            if not peer_pub:raise CacheError('成员通信身份尚未就绪 / Member cryptographic identity unavailable',409)
+            self.pin_peer(gid,peer,user,peer_pub)
         else:
             selected = list(active.values())
         recipients = {}
@@ -438,6 +437,10 @@ class DeliveryService:
         return entry
 
     def incoming(self, gid, user):
+        from .incoming_gate import run
+        return run(self,gid,user,lambda guard,token:self._incoming(gid,user,guard,token))
+
+    def _incoming(self,gid,user,guard,token):
         access, snapshot = self._snapshot(gid, user); members = {m['_id']: m for m in snapshot['members']}
         client = self._client(gid, user, access)
         clients=[client]
@@ -449,6 +452,7 @@ class DeliveryService:
                 if config:clients.append(self._client(gid,user,explicit=config))
         records=[]
         for source in clients:
+            guard()
             marker='delivery-scan:'+hashlib.sha256((user['username']+gid+source.config['node_public']).encode()).hexdigest()
             scan=self.collaboration.nonces.find_one({'_id':marker}) or {}
             page=source.call('list',{'limit':25});records.extend((source,item) for item in page['items'])
@@ -457,6 +461,7 @@ class DeliveryService:
                 history=source.call('list',{'limit':25,'before':cursor});records.extend((source,item) for item in history['items'])
                 self.collaboration.nonces.update_one({'_id':marker},{'$set':{'cursor':history.get('next'),'expires':datetime.fromtimestamp(self.clock()+3600,timezone.utc)}},upsert=True)
         for client,summary in records:
+            guard()
             if summary['state'] != 'stored':
                 continue
             known=self.received.find_one({'owner':user['username'],'group_id':gid,'item_id':summary['id']})
@@ -464,23 +469,32 @@ class DeliveryService:
                 continue
             meta = client.call('metadata', {'id': summary['id']})
             entry = self._decode_caption(gid, meta, user, members)
+            guard()
             row = self._save_entry(gid, user, entry['_id'], entry, cached_manifest=meta['manifest'],
                                    route=self.save_config(entry['_id'], 'route', client.config), expires_at=meta['expires_at'])
             if entry['kind'] == 'message' or entry['sender'] == access['member_id']:
                 if entry['kind'] == 'message' and row.get('complete') is not True:
-                    folder = self._folder(user, entry['_id'], 'incoming')
-                    downloaded = client.download(entry['_id'], folder / 'payload.bin')
-                    content = crypto.open_object(meta['manifest']['envelope'], (folder / 'payload.bin').read_bytes(), self.key(user),expected_issuer=client.config['issuer_public'],now=self.clock())
-                    if json.loads(content.decode()) != entry:
-                        raise CacheError('消息正文与说明不一致 / Message payload does not match caption', 409)
-                    self.received.update_one({'_id': row['_id'], 'owner': user['username']}, {'$set': {'complete': True}})
-                    client.acknowledge(entry['_id'], 'object', downloaded.get('read_lease'))
-                    folder.resolve().relative_to((self.directory/'incoming').resolve());shutil.rmtree(str(folder))
+                    parent=self._folder(user,entry['_id'],'incoming');folder=parent/('message-'+token)
+                    folder.resolve().relative_to((self.directory/'incoming').resolve());folder.mkdir(exist_ok=True)
+                    try:
+                        downloaded=client.download(entry['_id'],folder/'payload.bin',guard=guard)
+                        content=crypto.open_object(meta['manifest']['envelope'],(folder/'payload.bin').read_bytes(),self.key(user),expected_issuer=client.config['issuer_public'],now=self.clock())
+                        if json.loads(content.decode())!=entry:raise CacheError('消息正文与说明不一致 / Message payload does not match caption',409)
+                        guard();self.collaboration._access(gid,user)
+                        self.received.update_one({'_id':row['_id'],'owner':user['username']},{'$set':{'complete':True}})
+                        guard();client.acknowledge(entry['_id'],'object',downloaded.get('read_lease'))
+                    finally:
+                        # The invocation owns this leaf, even after losing its lease.
+                        folder.resolve().relative_to((self.directory/'incoming').resolve())
+                        try:shutil.rmtree(str(folder))
+                        except FileNotFoundError:pass
+                        try:parent.rmdir()
+                        except OSError:pass  # Another invocation may still own a nonempty leaf.
                 else:
                     client.acknowledge(entry['_id'], 'object')
             else:
                 client.acknowledge(entry['_id'], 'message')
-            self.received.update_one({'_id':row['_id'],'owner':user['username']},{'$set':{'acknowledged':True}})
+            guard();self.received.update_one({'_id':row['_id'],'owner':user['username']},{'$set':{'acknowledged':True}})
         return [r for _,r in records]
 
     def read_room(self, gid, user, body):
@@ -559,7 +573,35 @@ class DeliveryService:
                 if getattr(exc, 'status', 0) not in (502, 503, 504):
                     raise
 
-    def fetch_package(self, gid, iid, user):
+    def fetch_package(self,gid,iid,user):
+        import time,threading
+        iid=identifier(iid);self.collaboration._access(gid,user)
+        lock_id=hashlib.sha256((user['username']+':'+gid+':'+iid).encode()).hexdigest()
+        token=secrets.token_hex(16);deadline=time.monotonic()+15
+        while True:
+            now=self.clock()
+            try:
+                self.receive_locks.find_one_and_update({'_id':lock_id,'$or':[{'until':{'$exists':False}},{'until':{'$lte':now}}]},
+                    {'$set':{'token':token,'until':now+180,'expires':datetime.fromtimestamp(now+360,timezone.utc)}},upsert=True,return_document=ReturnDocument.AFTER)
+                break
+            except DuplicateKeyError:
+                if time.monotonic()>=deadline:raise CacheError('资料正在收取，请稍后再次预览 / This package is being received; preview it again shortly',409) from None
+                time.sleep(.08)
+        stop=threading.Event()
+        def renew():
+            while not stop.wait(10):
+                try:self.receive_locks.update_one({'_id':lock_id,'token':token},{'$set':{'until':self.clock()+180,'expires':datetime.fromtimestamp(self.clock()+360,timezone.utc)}})
+                except Exception:pass  # The fresh guard below still fails closed.
+        def guard():
+            if not self.receive_locks.find_one({'_id':lock_id,'token':token,'until':{'$gt':self.clock()}}):
+                raise CacheError('收取已由其他请求接续，请重新预览 / Another request resumed this receipt; preview again',409)
+        threading.Thread(target=renew,daemon=True,name='collaboration-receive-lease').start()
+        try:return self._fetch_package(gid,iid,user,guard)
+        finally:
+            stop.set();self.receive_locks.delete_one({'_id':lock_id,'token':token})
+
+    def _fetch_package(self, gid, iid, user, guard):
+        guard()
         access = self.collaboration._access(gid, user)
         row = self.received.find_one({'owner': user['username'], 'group_id': gid, 'item_id': identifier(iid)})
         if not row:
@@ -588,7 +630,7 @@ class DeliveryService:
                 if len(raw)!=item['bytes'] or hashlib.sha256(raw).hexdigest()!=item['sha256']:
                     raise CacheError('本机原件完整性校验失败 / Local source integrity failed',409)
                 from ..collaboration import atomic_file
-                atomic_file(target,raw)
+                guard();atomic_file(target,raw)
                 self.received.update_one({'_id':row['_id'],'owner':user['username'],'group_id':gid},{'$set':{'complete':True,'source_copy_at':self.clock()}})
                 row={**row,'complete':True}
         if not row.get('complete') or not target.is_file():
@@ -596,7 +638,7 @@ class DeliveryService:
                 raise CacheError('原件尚未交付或本机副本已回收，请稍后重试 / Original not delivered or local source reclaimed; retry later',409)
             config = json.loads(self.control.secrets.open(row['route'], iid + ':route'))
             client = self._client(gid, user, access, config)
-            downloaded = client.download(iid, folder / 'payload.bin')
+            downloaded = client.download(iid, folder / 'payload.bin',guard=guard)
             lease = downloaded.get('read_lease')
             try:
                 raw = crypto.open_object(row['cached_manifest']['envelope'], (folder / 'payload.bin').read_bytes(), self.key(user),expected_issuer=client.config['issuer_public'],now=self.clock())
@@ -604,17 +646,17 @@ class DeliveryService:
                     raise CacheError('解密包完整性校验失败 / Decrypted package integrity failed', 409)
                 archive_manifest(raw)
                 from ..collaboration import atomic_file
-                atomic_file(target, raw)
+                guard();atomic_file(target, raw)
                 self.received.update_one({'_id': row['_id'], 'owner': user['username']}, {'$set': {'complete': True, 'received_at': self.clock()}})
                 client.acknowledge(iid, 'object', lease)
-                (folder/'payload.bin').unlink(missing_ok=True)
+                guard();(folder/'payload.bin').unlink(missing_ok=True)
                 parts=folder/'payload.bin.parts'
                 if parts.is_dir():parts.resolve().relative_to(folder.resolve());shutil.rmtree(str(parts))
             except Exception:
                 if lease:
                     client.call('end_read', {'id': iid, 'lease': lease})
                 raise
-        raw = target.read_bytes(); archive_manifest(raw)
+        guard();raw = target.read_bytes(); archive_manifest(raw)
         if len(raw) != item['bytes'] or hashlib.sha256(raw).hexdigest() != item['sha256']:
             raise CacheError('本地已收文件损坏，请重新收取 / Received local file damaged; fetch again', 409)
         return item, raw

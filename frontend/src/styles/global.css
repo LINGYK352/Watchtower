@@ -326,3 +326,7 @@ html[data-theme="light"] .manual-nav{background:#f2f6fd;border-radius:10px;paddi
 }
 
 .app-content .ant-segmented{max-width:100%;overflow-x:auto}
+
+/* Selected operation mode must survive the shared day/night control palette. */
+.cc-modal .ns-mode.on { background: var(--dt-primary-soft,rgba(24,144,255,.15)) !important; border-color: var(--dt-primary,#1677ff) !important; color: var(--dt-primary,#1677ff) !important; box-shadow: inset 0 0 0 1px currentColor; font-weight: 650; }
+.cc-modal .ns-mode:focus-visible { outline: 2px solid var(--dt-primary,#1677ff); outline-offset: 3px; }

@@ -1,4 +1,8 @@
 {
+  "patch177B2": {
+    "dynamicAssets": "Dynamic",
+    "dynamicHint": "Dynamic collection can delay asset count updates."
+  },
   "language": {
     "name": "English",
     "switch": "Switch language",
@@ -2962,13 +2966,13 @@
     "actions": "Actions",
     "revokeConfirm": "Revoke this Key? Subsequent calls will be rejected.",
     "revoke": "Revoke",
-    "syncNote": "The receiving system creates an expiring pairing Key. Both systems must approve. Choose data, configuration and credentials separately; host runtime environments are excluded.",
-    "receiveTitle": "Receiving system: create a pairing Key",
+    "syncNote": "The listening peer creates an expiring Key; the connecting peer enters its address and Key. Both approve. These roles do not limit data direction: connect from Windows to the VM and choose Pull to receive VM data without opening an inbound Windows port.",
+    "receiveTitle": "Create a pairing Key here (listening peer)",
     "pairMinutes": "Pairing validity (1–60 minutes)",
     "linkMinutes": "Connection validity after pairing (minutes)",
     "allowedCategories": "Permitted categories",
     "createPair": "Generate pairing Key",
-    "connectTitle": "Initiating system: connect to target",
+    "connectTitle": "Connect to another system (connecting peer)",
     "target": "Target IP / domain and port",
     "peerKey": "Pairing Key from receiving system",
     "connect": "Request pairing",
@@ -2985,9 +2989,9 @@
     "incremental": "Incremental",
     "overwrite": "Overwrite",
     "contents": "Categories",
-    "overwriteNote": "Replace selected database content after backup. Active work, host ports/paths, activation, login and control credentials are excluded. Same-name attachments are replaced; other files are retained.",
-    "incrementalNote": "Add missing records. Preserve local records on same-ID conflicts and report the conflict count.",
-    "requestSync": "Request sync and await peer approval",
+    "overwriteNote": "Replace selected database content after backup. Active work, host ports/paths, activation, login and control credentials are excluded. Same-name attachments are replaced; other files are retained. Task stages and builtin configuration are replaced from the source set rather than appended.",
+    "incrementalNote": "Incremental sync can run alongside active or paused work. It adds missing data and preserves existing local records, settings, credentials and files. Conflicts are counted; active and paused tasks/sessions are not transferred as history. Task stages and builtin configuration require replacement sync and are excluded from incremental sync.",
+    "requestSync": "Request sync",
     "transfers": "Transfer progress and history",
     "noTransfers": "No transfers yet",
     "result": "Result:",
@@ -3050,7 +3054,8 @@
       "failed": "Failed; retry available",
       "joining": "Joining (retry available)",
       "join_failed": "Join failed (retry with corrected details)",
-      "connecting": "Awaiting pairing reply"
+      "connecting": "Awaiting confirmation",
+      "preparing": "Preparing"
     },
     "stages": {
       "awaiting_peer_confirmation": "Awaiting peer approval of the plan",
@@ -3064,7 +3069,8 @@
       "peer_rejected": "Peer rejected the plan",
       "peer_failed": "Peer transfer failed",
       "cancelled": "Transfer cancelled",
-      "retry_available": "Retry available"
+      "retry_available": "Retry available",
+      "preparing_snapshot": "Preparing snapshot; approval follows the complete manifest"
     },
     "delete": "Delete",
     "deleteConfirm": "Permanently delete this Key? Subsequent calls will fail; the audit trail is retained.",
@@ -3081,7 +3087,9 @@
     "nodeUrl": "Maintenance node URL",
     "nodeFingerprint": "Node TLS fingerprint",
     "nodeKey": "Node administration credential",
-    "nodeNote": "Use the generic Linux maintenance node for encrypted migration. Start it without IP/domain setup; it listens on7443. Enter its reachable address, verify the printed fingerprint and use its private credential. Each pairing has a separate relay realm, preserving encryption, approval and resume."
+    "nodeNote": "Use the generic Linux maintenance node for encrypted migration. Start it without IP/domain setup; it listens on7443. Enter its reachable address, verify the printed fingerprint and use its private credential. Each pairing has a separate relay realm, preserving encryption, approval and resume.",
+    "preparingSnapshot": "Sync request received. Preparing snapshot; the30-second approval window starts when its complete manifest is ready. No data is transferred yet.",
+    "requestPreparing": "Sending sync request and preparing snapshot…"
   },
   "intel": {
     "identifier": "Identifier",
@@ -3118,7 +3126,7 @@
     "sessionNote": "The complete package includes messages, reasoning, tool history and session files. Pause first. The recipient selects a matching-protocol model; platform-specific tools still require adaptation.",
     "send": "Send to workspace",
     "shared": "Shared workspace material",
-    "preview": "Receive and preview",
+    "preview": "Preview",
     "restore": "Restore and continue session",
     "restoreNote": "Select a locally configured matching-protocol model. Restoration creates a separate session/file directory and retains original history and provenance. Execution starts only on your instruction.",
     "keyNote": "Keep invitation links and Keys private. View them again in Invitation Keys; one-time Keys expire after a successful application.",
@@ -3153,7 +3161,8 @@
     "deleteConnection": "Delete workgroup connection",
     "deleteGroupNote": "Members lose access to this group. Received data and restored independent sessions are kept; group history is archived. This cannot be undone.",
     "deleteConnectionNote": "Remove this connection and revoke local credentials. Notify the coordinator when reachable. Received data and independent sessions are kept.",
-    "deleteOffline": "Local connection removed and revoked. Remote departure was not confirmed; coordinator credentials retain their original expiry."
+    "deleteOffline": "Local connection removed and revoked. Remote departure was not confirmed; coordinator credentials retain their original expiry.",
+    "refreshTimeout": "Workspace request timed out. Current messages are retained; retrying shortly."
   },
   "console": {
     "model": "AI model",
@@ -3271,13 +3280,13 @@
     "commonPlatform": "Cross-platform common",
     "localNote": "Local programs stay on this system and are not uploaded or published in the store. The local platform is used automatically.",
     "cloudNote": "Choose a platform before uploading. Cloud submission needs a valid activation credential and is published only after review.",
-    "zipNote": "Upload a ZIP with its program entry at the archive root. Inspection never executes the program.",
+    "zipNote": "The ZIP is safely extracted and all files are listed for you to choose the program entry. Local installation and cloud review use the same flow; inspection never runs the program.",
     "chooseZip": "Choose program ZIP",
     "inspectZip": "Upload, unpack and choose entry",
     "uploading": "Uploading the program…",
     "unpacking": "Safely unpacking and inspecting…",
-    "prepareReady": "Found {count} root files. Choose an entry. Staging expires in {minutes} minutes.",
-    "entry": "Program entry at ZIP root",
+    "prepareReady": "{count} files extracted. Choose the program entry; staging expires in {minutes} minutes.",
+    "entry": "Program entry (choose from extracted files)",
     "entryType": "Entry runtime type",
     "binary": "Native binary",
     "launcher": "Executable launcher",
@@ -3319,7 +3328,8 @@
     "codeRequired": "Request a registered-email verification code and enter six digits.",
     "cloudSubmitting": "Transferring to the cloud and inspecting in isolation. Please wait for the submission result.",
     "noDescription": "No tool documentation provided.",
-    "standardDescription": "Documentation uses the extension standard description and AI instructions, including manually uploaded and store tools."
+    "standardDescription": "Documentation uses the extension standard description and AI instructions, including manually uploaded and store tools.",
+    "selectEntry": "Choose an entry file (subdirectories supported)"
   },
   "requestApproval": {
     "title": "Suspected high-risk request review",
@@ -3372,7 +3382,7 @@
     "promptEmptyNotice": "This custom scene has no system default text. Reset clears its text; provider binding and enabled state are preserved.",
     "promptEditable": "All prompt text is editable. Editing and resetting require confirmation; reset defaults come from the running version.",
     "afk": "Unattended mode",
-    "afkActive": "UNATTENDED · AI continues autonomously",
+    "afkActive": "Unattended mode",
     "afkWarningTitle": "Start unattended mode",
     "afkWarning": "AI continues exploring the current target using existing instructions, including while you are away. Input and uploads are disabled. You may turn it off at any time; the current tool stops at a safe boundary. With rules enabled, risky requests still require human review and expire after 30 seconds.",
     "afkFullWarning": "AI will continue unattended with skills-only constraints, bypassing rules and human review. This may affect services and continue consuming tokens. Input/uploads are disabled. Cancel unattended mode to return to manual operation. Start?",
@@ -3382,7 +3392,8 @@
     "afkFull": "Authorized unattended",
     "afkGuarded": "Guarded unattended",
     "afkOff": "Cancel unattended",
-    "afkGuardedWarning": "AI continues unattended on the existing target. Current mode rules automatically allow or block requests; uncertain writes are blocked when the guard is unavailable. It does not wait for human review. Input/uploads are disabled; cancel to return to manual operation."
+    "afkGuardedWarning": "AI continues unattended on the existing target. Current mode rules automatically allow or block requests; uncertain writes are blocked when the guard is unavailable. It does not wait for human review. Input/uploads are disabled; cancel to return to manual operation.",
+    "automaticAfkHelp": "Automatic sessions use guarded unattended mode. Take over the session to turn it off. Viewing history does not start work."
   },
   "pentestState": {
     "manual_idle": "Manual session · Ready",
@@ -3960,5 +3971,92 @@
     "target": "Target",
     "transport": "Traffic type",
     "rawTransport": "Advanced: raw TCP/TLS"
+  },
+  "caSetup": {
+    "title": "HTTPS certificate settings",
+    "applicationReady": "This platform CA is trusted inside the application",
+    "applicationNote": "Burps replay and the APP platform egress trust this CA while retaining hostname and validity checks.",
+    "windows": "Windows current-user trust",
+    "trusted": "Trusted",
+    "notInstalled": "Not installed",
+    "unavailable": "System installation unavailable",
+    "scope": "Installation affects only the Windows application user, never the machine store. Only a certificate installed through this platform can be removed.",
+    "install": "Install for current user",
+    "remove": "Remove managed certificate",
+    "phone": "Phone certificate",
+    "phoneNote": "Watchtower Link checks the platform CA before HTTPS inspection. A missing certificate opens the installation flow. Android 11+ requires confirmation in system settings and is checked again on return. Certificate pinning or apps that reject user CAs require separate handling.",
+    "check": "Check again",
+    "close": "Close",
+    "confirmInstall": "Trust this platform HTTPS audit CA?",
+    "confirmRemove": "Remove this managed certificate?",
+    "confirmNote": "This changes the current Windows user trusted roots. Verify the fingerprint and use only for authorized assessment.",
+    "confirm": "Confirm",
+    "updated": "Certificate status updated"
+  },
+  "syncReadiness": {
+    "blocked": "Replacement sync needs an idle system: {types}",
+    "tasks": "{count} scan tasks",
+    "sessions": "{count} AI penetration sessions",
+    "schedules": "{count} enabled scheduled tasks",
+    "paused": " ({count} paused)",
+    "keepWork": "Only replacement sync requires finishing this work. Choose incremental sync to preserve existing tasks. Paused sessions are never stopped or deleted automatically.",
+    "receiverHelp": "How to sync data",
+    "receiverNote": "This system is the listening peer. Choose the direction on the system that connected here: Push sends its data here; Pull receives this system’s data there. To copy VM data to Windows, connect from Windows to the VM and choose Pull; no inbound Windows port is needed.",
+    "receiverStopped": "Windows receiver is not enabled",
+    "receiverStoppedNote": "Enable this page’s receiver port before creating a direct pairing Key. Alternatively, create the Key on the VM, connect from Windows, and choose Pull without opening an inbound Windows port.",
+    "taskBlock": "unfinished scan tasks",
+    "sessionBlock": "unfinished AI penetration sessions",
+    "scheduleBlock": "enabled scheduled tasks",
+    "unknownBlock": "unfinished business work",
+    "openTasks": "View local scan tasks",
+    "openSessions": "View local AI sessions",
+    "openSchedules": "View local schedules"
+  },
+  "repair128": {
+    "confirmCountdown": "Auto-reject in {seconds} seconds",
+    "requestSent": "Request sent. Waiting for peer approval.",
+    "restarting": "System is restarting",
+    "restartNote": "This closes when service is ready. Retry unfinished actions after recovery.",
+    "selectData": "Select local data",
+    "saveSystem": "Save to system",
+    "saved": "Saved to the corresponding list",
+    "search": "Search title, target or type",
+    "firewallBlocked": "Windows Firewall has an inbound block rule for this program",
+    "firewallNote": "The local port is listening, but some networks may be blocked. Review this program in Windows Firewall, connect from Windows and pull instead, or use a maintenance node.",
+    "fields": {
+      "target": "Target",
+      "url": "URL",
+      "site": "Site",
+      "component": "Component",
+      "vuln_type": "Vulnerability type",
+      "status": "Status",
+      "save_date": "Recorded",
+      "session_id": "Source session",
+      "source_session": "Source session",
+      "description": "Description",
+      "impact": "Impact",
+      "evidence": "Evidence",
+      "request": "Request",
+      "response": "Response",
+      "poc": "Proof of concept",
+      "content": "Report content",
+      "summary": "Summary",
+      "reproduce": "Reproduction",
+      "reproduce_steps": "Reproduction steps",
+      "severity": "Severity"
+    },
+    "severities": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low",
+      "info": "Info",
+      "none": "None",
+      "unknown": "Unrated"
+    },
+    "completeData": "Complete data"
+  },
+  "sessionRepair": {
+    "unknownTarget": "Unknown"
   }
 }

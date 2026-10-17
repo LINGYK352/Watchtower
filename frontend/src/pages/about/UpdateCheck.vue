@@ -97,8 +97,8 @@
         row-key="version" size="middle" data-testid="version-history" :pagination="{ pageSize: 10 }">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'version'">
-            <a-tag :color="record.version === version ? 'green' : 'blue'">{{ updateVersionLabel(record.version) }}</a-tag>
-            <a-tag v-if="record.version === version" color="green">{{ translate('ui.m_cb62ebd689ee') }}</a-tag>
+            <a-tag :color="record.version === displayVersion(version) ? 'green' : 'blue'">{{ displayVersion(record.version) }}</a-tag>
+            <a-tag v-if="record.version === displayVersion(version)" color="green">{{ translate('ui.m_cb62ebd689ee') }}</a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
             <a-button type="link" size="small" @click="viewChanges(record.version)">{{ translate('ui.m_582a8e42e44e') }}</a-button>
@@ -145,6 +145,8 @@
 </template>
 
 <script setup lang="ts">
+import {request} from '../../api/request'
+import {updateRestartPhase} from '../../composables/useRestartState'
 import { versionKey, displayVersion, isPatchVersion, patchLabel, updateVersionLabel } from '../../config/releaseVersion'
 import { t as translate } from '../../i18n'
 
@@ -186,16 +188,14 @@ function _cmpVer(a: string, b: string): number {
 // 模板可用包装：仅“严格低于当前版本”才是可回退目标（等于=当前，高于=前滚/升级不在此入口）。
 // 注：<script setup> 中以 _ 开头的绑定不暴露给模板，故用不带下划线的名字包一层给 v-if 用。
 function isOlderThanCurrent(v: string): boolean {
-  return _cmpVer(v, version.value) < 0
+  return _cmpVer(v, displayVersion(version.value)) < 0
 }
 
 // —— 历史版本与回退 ——
 const versions = ref<VersionItem[]>([])
-const visibleVersions=computed(()=>{
- const current=updateVersionLabel(version.value),selected=new Map<string,VersionItem>()
- for(const row of versions.value){const key=updateVersionLabel(row.version);if(!selected.has(key)||key===current&&row.version===version.value)selected.set(key,row)}
- return [...selected.values()]
-})
+// This table describes feature releases. Patch records stay in the signed
+// chain and dedicated patch UI, but must not become feature-history rows.
+const visibleVersions=computed(()=>versions.value.filter(row=>!isPatchVersion(row.version)))
 const loadingVersions = ref(false)
 const versionsHint = ref('')   // 空列表/不支持时的友好提示（不再弹 error）
 const fullRollback = ref(false)
@@ -267,10 +267,10 @@ onMounted(async () => {
   // 若后台仍在更新，重新挂上进度轮询（不丢进度、不用重新点更新）。
   try {
     const p = await getProgress()
-    if (p) progress.value = p
+    if (p) {progress.value = p;updateRestartPhase(p.phase)}
     if (p?.phase === 'error') updateError.value = p.error || translate('ui.update_paused')
     if (p && ['downloading', 'compiling', 'applying', 'checking', 'validating', 'restarting'].includes(p.phase)) {
-      progress.value = p
+      progress.value = p;updateRestartPhase(p.phase)
       updating.value = true
       updateError.value = ''
       pollProgress()
@@ -345,7 +345,7 @@ async function doCheck() {
       // Fetch changelog if update available
       if (r.has_update) {
         try {
-          const logs = await getChangelog()
+          const logs = await request<any[]>('/api/about/available-changelog?version='+encodeURIComponent(r.latest_version || latest.value))
           changelogs.value = (logs || [])
             .filter((l: any) => _cmpVer(l.ver, version.value) > 0)   // 数值比较：只留真正比当前(后端真实版本)新的
             .sort((a: any, b: any) => _cmpVer(b.ver, a.ver))   // 新→旧排序
@@ -381,7 +381,7 @@ function pollProgress() {
     polling = true
     try {
       const p = await getProgress()
-      progress.value = p
+      progress.value = p;updateRestartPhase(p.phase)
       networkLost.value = false; lastContact = Date.now()
       if (p.phase === 'idle') {
         updating.value = false
@@ -437,3 +437,5 @@ onUnmounted(() => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null 
 .change-file.changed { color: var(--dt-warning); }
 .change-file.removed { color: var(--dt-danger); }
 </style>
+
+<style scoped>.changelog-text{white-space:pre-line}</style>

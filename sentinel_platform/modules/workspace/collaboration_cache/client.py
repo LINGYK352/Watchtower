@@ -135,7 +135,8 @@ class NodeClient:
             crypto.verify(self.config['node_public'], receipt, result.get('signature'))
         return receipt
 
-    def download(self, oid, path):
+    def download(self, oid, path, guard=None):
+        guard=guard or (lambda:None);guard()
         meta = self.call('metadata', {'id': oid})
         if meta['bytes'] > MAX_PACKAGE + MIB:
             raise CacheError('托管对象超限 / Hosted object too large', 413)
@@ -150,7 +151,7 @@ class NodeClient:
         lease = self.call('begin_read', {'id': oid})['lease']
         from pathlib import Path
         path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
-        stage = path.with_name(path.name + '.partial')
+        stage = path.with_name(path.name + '.'+secrets.token_hex(8)+'.partial')
         completed = False
         try:
             # Local block files persist across a dropped route; verify each before skipping.
@@ -158,6 +159,7 @@ class NodeClient:
             digest = hashlib.sha256(); total = 0
             with stage.open('wb') as output:
                 for index in range(count):
+                    guard()
                     part = parts / ('%06d.bin' % index)
                     if part.is_file() and not part.is_symlink() and hashlib.sha256(part.read_bytes()).hexdigest() == hashes[index]:
                         raw = part.read_bytes()
@@ -170,16 +172,17 @@ class NodeClient:
                         with temporary.open('xb') as handle:
                             handle.write(raw); handle.flush()
                             import os; os.fsync(handle.fileno())
-                        temporary.replace(part)
+                        guard();temporary.replace(part)
                     output.write(raw); digest.update(raw); total += len(raw)
                 output.flush()
                 import os; os.fsync(output.fileno())
             if total != meta['bytes'] or digest.hexdigest() != meta['manifest']['sha256']:
                 raise CacheError('托管对象整体校验失败 / Hosted object checksum failed', 409)
-            stage.replace(path)
+            guard();stage.replace(path)
             completed = True; meta['read_lease'] = lease
             return meta
         finally:
+            stage.unlink(missing_ok=True)
             if not completed:
                 try:
                     self.call('end_read', {'id': oid, 'lease': lease})

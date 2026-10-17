@@ -32,6 +32,8 @@ class CacheService(DeliveryService):
         self.trust = self.repo.collection('collaboration_peer_trust')
         self.directory = managed_path(collaboration.directory / 'delivery')
         self.directory.mkdir(parents=True, exist_ok=True)
+        self.receive_locks=self.repo.collection('collaboration_receive_locks')
+        self.receive_locks.create_index('expires',expireAfterSeconds=0)
         self.received = self.repo.collection('collaboration_received')
         self.received.create_index([('owner', 1), ('group_id', 1), ('audience', 1), ('participants', 1), ('sequence', 1)])
         self.received.create_index([('owner',1),('group_id',1),('audience',1),('posted_at',-1),('item_id',-1)])
@@ -71,6 +73,22 @@ class CacheService(DeliveryService):
         known=self.trust.find_one({'owner':user['username'],'group_id':gid,'member_id':mid})
         return {'member_id':mid,'name':member['name'],'fingerprint':fingerprint,'verified':bool(known and known['fingerprint']==fingerprint),
                 'self_fingerprint':self.identity(user)['crypto_fingerprint']}
+
+    def pin_peer(self,gid,mid,user,public):
+        # The roster was obtained via the authenticated membership channel and
+        # verified host/service directory. First use is automatic; key changes
+        # still require explicit identity recovery, never an automatic overwrite.
+        fingerprint=crypto.fingerprint(public)
+        rid=hashlib.sha256((user['username']+':'+gid+':'+mid).encode()).hexdigest()
+        try:
+            self.trust.update_one({'_id':rid},{'$setOnInsert':{'owner':user['username'],'group_id':gid,'member_id':mid,'fingerprint':fingerprint,'verified_at':self.clock(),'method':'authenticated_roster'}},upsert=True)
+        except DuplicateKeyError:pass
+        known=self.trust.find_one({'_id':rid})
+        # Old manually verified rows may predate the deterministic identifier.
+        others=self.trust.find({'owner':user['username'],'group_id':gid,'member_id':mid})
+        if not known or any(row.get('fingerprint')!=fingerprint for row in others):
+            raise CacheError('成员通信身份发生变化，请重新核验 / Member cryptographic identity changed; verify before continuing',409)
+        return fingerprint
 
     def verify_peer(self,gid,mid,user,body):
         info=self.peer_identity(gid,mid,user)

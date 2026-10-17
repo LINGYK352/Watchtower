@@ -1,6 +1,7 @@
 """Persistent mandatory chain. OS lock owns work; readiness owns advancement."""
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from sentinel_platform.core.distribution_tls import urlopen
 from urllib.parse import urlencode
 import json
 import os

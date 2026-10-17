@@ -28,6 +28,7 @@
   "controlSync": {
     "steps": [
       "Enter a reachable IP or domain. Windows adds the receiver port automatically; explicit ports are accepted. Incomplete fields show a prompt. Node mode requires an endpoint, fingerprint and credential. Choose limited validity and categories before generating a link; no migration starts yet.",
+      "Paste the full invitation and approve pairing within30 seconds; request a concrete sync plan and await peer approval, with automatic timeout rejection.",
       "Click a record summary for its progress, stage, categories and results. Completed, failed, rejected or expired records can be removed; active or pending operations cannot. Imported business data and protocol retry receipts remain."
     ],
     "check": "Verify the saved state and results shown on the page."
@@ -38,7 +39,7 @@
       "Enter the independent workspace and choose group or direct conversation",
       "Manage members, names and cohost service separately from applications",
       "Stage files below the composer, remove unwanted files and send",
-      "Preview shared findings, reports or dormant session packages",
+      "Choose findings, reports or full sessions from the detailed list. Findings include AI, PoC and kernel scan sources. Both sides click the sent card to preview; recipients save it into the corresponding system list. Repeated saves are idempotent. Sessions remain paused with no AI call. Ordinary attachments use file download.",
       "Add a workspace node, verify its fingerprint, then select a delivery policy"
     ],
     "check": "Direct content is limited to the two participants. Viewing the latest message marks that conversation read. Cohost service requires consent and prepared public data; it does not grant administrative approval rights."

@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import {updateRestartPhase} from '../composables/useRestartState'
 import { versionKey, displayVersion, isPatchVersion, patchLabel, updateVersionLabel } from '../config/releaseVersion'
 import { t as translate } from '../i18n'
 
@@ -129,7 +130,7 @@ async function checkUpdate() {
       } catch { /* progress 查不到不阻断，继续按需弹 */ }
       latestVersion.value = res.latest_version
       try {
-        const logs = await request<any[]>('/api/about/changelog')
+        const logs = await request<any[]>('/api/about/available-changelog?version='+encodeURIComponent(res.latest_version))
         changelogs.value = (logs || [])
           .filter((l: any) => _cmpVer(l.ver, curVer) > 0)        // 只留比后端当前版本新的
           .sort((a: any, b: any) => _cmpVer(b.ver, a.ver))       // 新→旧排序
@@ -167,7 +168,7 @@ function pollProgress() {
     polling = true
     try {
       const p = await request<any>('/api/about/progress')
-      progress.value = p
+      progress.value = p;updateRestartPhase(p.phase)
       networkLost.value = false
       if (p.phase === 'done' && !p.chain_active) {
         if (pollTimer) clearInterval(pollTimer)
@@ -191,7 +192,7 @@ async function restoreStatus() {
   if (updating.value) return
   try {
     const p = await request<any>('/api/about/progress')
-    progress.value = p; networkLost.value = false
+    progress.value = p;updateRestartPhase(p.phase); networkLost.value = false
     if (p.chain_active || ['checking','downloading','validating','applying','restarting'].includes(p.phase)) { updating.value = true; pollProgress() }
     else if (p.resumable) updateError.value = p.error || translate('ui.update_paused')
   } catch { if (progress.value.chain_active || progress.value.resumable) networkLost.value = true }
@@ -231,3 +232,5 @@ defineExpose({ checkUpdate })
 .update-done { text-align: center; padding: 12px 0 }
 .update-error { text-align: center; padding: 12px 0 }
 </style>
+
+<style scoped>.changelog-text{white-space:pre-line}</style>

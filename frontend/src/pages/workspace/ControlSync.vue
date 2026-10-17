@@ -28,8 +28,9 @@
       </a-tab-pane>
       <a-tab-pane key="sync" :tab="t('control.syncTab')">
         <a-alert type="info" show-icon :message="t('control.syncNote')" class="page-alert" />
+        <a-alert v-if="mode==='overwrite' && state.admission?.blocked" type="warning" show-icon class="page-alert" data-testid="sync-admission-blocked" :message="syncBlockerTitle"><template #description><p>{{ syncBlockerText }}</p><a-space wrap><a-button v-for="item in syncBlockerLinks" :key="item.kind" size="small" @click="router.push(item.path)" :data-testid="'sync-blocker-'+item.kind">{{ t(item.label) }}</a-button></a-space></template></a-alert>
         <a-card v-if="state.listener?.available" class="page-card" :title="t('control.listenerTitle')">
-          <p>{{ t('control.listenerNote') }}</p><a-space wrap><a-input-number v-model:value="listenerPort" :min="1" :max="65535" data-testid="peer-listener-port" /><a-button :loading="working" @click="setListener(!state.listener?.enabled)" data-testid="peer-listener-toggle">{{ t(state.listener?.enabled ? 'control.disableListener' : 'control.enableListener') }}</a-button><a-tag :color="state.listener.running ? 'green' : 'default'">{{ t(state.listener.running ? 'control.listenerActive' : 'control.listenerInactive') }}</a-tag></a-space>
+          <p>{{ t('control.listenerNote') }}</p><a-alert v-if="state.listener.firewall?.state==='blocked'" type="warning" show-icon :message="t('repair128.firewallBlocked')" :description="t('repair128.firewallNote')" data-testid="receiver-firewall-blocked" style="margin-bottom:14px" /><a-space wrap><a-input-number v-model:value="listenerPort" :min="1" :max="65535" data-testid="peer-listener-port" /><a-button :loading="working" @click="setListener(!state.listener?.enabled)" data-testid="peer-listener-toggle">{{ t(state.listener?.enabled ? 'control.disableListener' : 'control.enableListener') }}</a-button><a-tag :color="state.listener.running ? 'green' : 'default'">{{ t(state.listener.running ? 'control.listenerActive' : 'control.listenerInactive') }}</a-tag></a-space>
           <div v-if="state.listener.running" class="target-history"><a-typography-paragraph v-for="address in state.listener.targets" :key="address" :copyable="{ text: address }">{{ address }}</a-typography-paragraph></div><a-alert v-if="state.listener.error" type="error" :message="state.listener.error" />
         </a-card>
         <div class="connect-grid">
@@ -60,28 +61,28 @@
         </div>
         <a-card class="page-card" :title="t('control.links')"><a-table :data-source="state.links" :columns="linkColumns" row-key="_id" :scroll="{ x: 860 }" :pagination="{ pageSize: 8 }"><template #bodyCell="{ column, record }">
           <template v-if="column.key === 'peer'">{{ record.target || record.remote?.name || t('control.waitingPeer') }}<div class="connect-muted">{{ record.remote?.platform }} {{ record.remote?.version }} · {{ t(record.route_mode==='node'?'control.routeNode':'control.routeDirect') }}</div><div v-if="record.node_error" class="connect-muted">{{ record.node_error }}</div><div v-if="record.peer_error" class="connect-muted" data-testid="sync-peer-offline"><a-tag color="gold">{{ t('invitationLink.peerUnavailable') }}</a-tag>{{ record.peer_error }} · {{ t('invitationLink.retryAfter') }} {{ date(record.peer_retry_at) }}</div></template>
-          <template v-else-if="column.key === 'state'"><a-tag :color="record.state === 'paired' ? 'green' : record.state === 'pending' ? 'gold' : 'default'">{{ t('control.states.' + record.state) }}</a-tag></template>
+          <template v-else-if="column.key === 'state'"><a-tag :color="record.state === 'paired' ? 'green' : ['pending','connecting'].includes(record.state) ? 'gold' : 'default'" data-testid="sync-link-state">{{ t('control.states.' + (['pending','connecting'].includes(record.state)?'pending':record.state)) }}</a-tag></template>
           <template v-else-if="column.key === 'expiry'">{{ date(record.connection_expires_at || record.pair_expires_at) }}</template>
-          <template v-else-if="column.key === 'actions'"><a-space><a-button size="small" :disabled="record.kind !== 'initiator' || record.state !== 'paired'" @click="selectLink(record)">{{ t('control.chooseSync') }}</a-button><a-button size="small" danger :disabled="['revoked','rejected','expired'].includes(record.state)" @click="revokeLink(record._id)">{{ t('control.revoke') }}</a-button><a-button danger size="small" :disabled="working" @click="deleteTarget=record;deleteError=''" data-testid="delete-pair-link">{{ t('control.delete') }}</a-button></a-space></template>
+          <template v-else-if="column.key === 'actions'"><a-space><a-button size="small" :disabled="record.state !== 'paired'" @click="selectLink(record)" data-testid="sync-direction">{{ t(record.kind==='receiver'?'syncReadiness.receiverHelp':'control.chooseSync') }}</a-button><a-button size="small" danger :disabled="['revoked','rejected','expired'].includes(record.state)" @click="revokeLink(record._id)">{{ t('control.revoke') }}</a-button><a-button danger size="small" :disabled="working" @click="deleteTarget=record;deleteError=''" data-testid="delete-pair-link">{{ t('control.delete') }}</a-button></a-space></template>
         </template></a-table></a-card>
         <a-card v-if="chosenLink" class="page-card" :title="t('control.newTransfer')" data-testid="sync-plan">
           <a-form layout="vertical" @submit.prevent="startTransfer">
             <div class="connect-grid compact"><a-form-item :label="t('control.direction')" required><a-select v-model:value="flow" :options="[{ value: 'push', label: t('control.push') }, { value: 'pull', label: t('control.pull') }]" /></a-form-item><a-form-item :label="t('control.mode')" required><a-select v-model:value="mode" :options="[{ value: 'incremental', label: t('control.incremental') }, { value: 'overwrite', label: t('control.overwrite') }]" /></a-form-item></div>
             <a-form-item :label="t('control.contents')" required><a-checkbox-group v-model:value="syncCategories" :options="chosenLink.categories.map(c => ({ value: c, label: t('control.categories.' + c) }))" class="permission-list" /></a-form-item>
-            <p class="connect-muted">{{ t(mode === 'overwrite' ? 'control.overwriteNote' : 'control.incrementalNote') }}</p>
+            <p class="connect-muted" data-testid="sync-mode-note">{{ t(mode === 'overwrite' ? 'control.overwriteNote' : 'control.incrementalNote') }}</p>
             <a-button type="primary" :loading="working" html-type="submit" data-testid="request-sync">{{ t('control.requestSync') }}</a-button>
           </a-form>
         </a-card>
         <a-card class="page-card" :title="t('control.transfers')">
           <a-empty v-if="!state.runs.length" :description="t('control.noTransfers')" />
           <div v-for="run in state.runs" :key="run._id" class="sync-history-row" data-testid="sync-run">
-            <button class="sync-record-open" @click="selectedRunId=run._id" data-testid="sync-record-open"><span><a-tag :color="run.state==='complete'?'green':run.state==='failed'?'red':'blue'">{{ t('control.states.'+run.state) }}</a-tag><b>{{ t('control.'+(run.flow==='push'?'push':'pull')) }} · {{ t('control.'+run.mode) }}</b></span><span class="connect-muted">{{ date(run.created_at||0) }} · {{ run._id.slice(0,8) }}</span><span class="connect-muted">{{ run.categories.map(c=>t('control.categories.'+c)).join(' / ') }}</span></button>
+            <button class="sync-record-open" @click="selectedRunId=run._id" data-testid="sync-record-open"><span><a-tag :color="run.state==='complete'?'green':run.state==='failed'?'red':'blue'">{{ t('control.states.'+run.state) }}</a-tag><b>{{ runDirection(run) }} · {{ t('control.'+run.mode) }}</b></span><span class="connect-muted">{{ date(run.created_at||0) }} · {{ run._id.slice(0,8) }}</span><span class="connect-muted">{{ run.categories.map(c=>t('control.categories.'+c)).join(' / ') }}</span></button>
             <a-popconfirm :title="t('revision17.deleteSyncNote')" :disabled="!deletable(run)" @confirm="deleteRun(run._id)"><a-button danger size="small" :disabled="working||!deletable(run)" data-testid="delete-sync-record">{{ t('control.delete') }}</a-button></a-popconfirm>
           </div>
         </a-card>
       </a-tab-pane>
     </a-tabs>
-    <a-drawer :open="!!selectedRun" :title="t('revision17.syncRecord')" width="min(680px,calc(100vw - 24px))" @close="selectedRunId=''" data-testid="sync-record-detail"><template v-if="selectedRun"><div class="transfer-row" v-for="run in [selectedRun]" :key="run._id"><p class="connect-muted">{{ run._id }} · {{ date(run.created_at||0) }}</p>          <div><a-tag :color="run.state === 'complete' ? 'green' : run.state === 'failed' ? 'red' : 'blue'">{{ t('control.states.' + run.state) }}</a-tag><strong>{{ t('control.' + (run.flow === 'push' ? 'push' : 'pull')) }}</strong> · {{ t('control.' + run.mode) }}</div>
+    <a-drawer :open="!!selectedRun" :title="t('revision17.syncRecord')" width="min(680px,calc(100vw - 24px))" @close="selectedRunId=''" data-testid="sync-record-detail"><template v-if="selectedRun"><div class="transfer-row" v-for="run in [selectedRun]" :key="run._id"><p class="connect-muted">{{ run._id }} · {{ date(run.created_at||0) }}</p>          <div><a-tag :color="run.state === 'complete' ? 'green' : run.state === 'failed' ? 'red' : 'blue'">{{ t('control.states.' + run.state) }}</a-tag><strong>{{ runDirection(run) }}</strong> · {{ t('control.' + run.mode) }}</div>
           <div class="connect-muted">{{ run.categories.map(c => t('control.categories.' + c)).join(' / ') }} · {{ run.summary?.bytes ? (run.summary.bytes / 1024).toFixed(1) + ' KiB' : '' }}</div>
           <a-progress :percent="run.state === 'complete' ? 100 : run.summary?.bytes ? Math.round((run.transferred_bytes || 0) / run.summary.bytes * 100) : 0" :status="run.state === 'failed' ? 'exception' : run.state === 'complete' ? 'success' : 'active'" />
           <div>{{ run.error || t('control.stages.' + (run.stage || 'ready')) }}</div><div v-if="run.result" class="connect-muted">{{ t('control.result') }} {{ JSON.stringify(run.result) }}</div>
@@ -99,7 +100,7 @@
       </a-form>
     </a-modal>
     <a-modal :open="!!revealedKey" :title="t('control.keyCreated')" :destroy-on-close="true" :footer="null" @cancel="revealedKey = ''" data-testid="created-key-dialog">
-      <a-alert type="warning" show-icon :message="t('control.showOnce')" /><p>{{ t('control.expiry') }} {{ date(revealedExpiry) }}</p><template v-if="pairLink"><a-textarea :value="pairLink" readonly :rows="3" data-testid="sync-generated-link" /><a-typography-paragraph :copyable="{text:pairLink}">{{ t('invitationLink.copyLink') }}</a-typography-paragraph><a-alert type="info" :message="t('invitationLink.linkSecret')" show-icon /></template><a-input :value="revealedKey" readonly data-testid="created-key-value" /><a-space style="margin-top:16px"><a-button type="primary" @click="copyKey">{{ t('control.copy') }}</a-button><a-button @click="revealedKey = ''">{{ t('control.close') }}</a-button></a-space>
+      <a-alert type="warning" show-icon :message="t('control.showOnce')" /><p>{{ t('control.expiry') }} {{ date(revealedExpiry) }}</p><template v-if="pairLink"><a-textarea :value="pairLink" readonly :rows="3" data-testid="sync-generated-link" /><a-typography-paragraph :copyable="{text:pairLink}">{{ t('invitationLink.copyLink') }}</a-typography-paragraph><a-alert type="info" :message="t('invitationLink.linkSecret')" show-icon /></template><a-input v-if="!pairLink" :value="revealedKey" readonly data-testid="created-key-value" /><a-space style="margin-top:16px"><a-button v-if="!pairLink" type="primary" @click="copyKey">{{ t('control.copy') }}</a-button><a-button @click="revealedKey = ''">{{ t('control.close') }}</a-button></a-space>
     </a-modal>
     <a-modal :open="!!deleteTarget" :title="t('control.deleteLink')" :confirm-loading="working" :mask-closable="!working" :keyboard="!working" :closable="!working" :ok-text="t('control.delete')" :ok-button-props="{danger:true}" @cancel="!working && (deleteTarget=null)" @ok="deleteLink">
       <a-alert v-if="deleteError" :message="deleteError" type="error" show-icon /><p data-testid="delete-pair-confirm">{{ deleteTarget?.name }}</p><p>{{ t('control.deleteLinkNote') }}</p>
@@ -108,6 +109,7 @@
 </template>
 
 <script setup lang="ts">
+import {suggestedReachable} from '../../utils/networkHint'
 import {downloadMaintenanceNode} from '../../api/nodeTool'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
@@ -117,6 +119,7 @@ import { appLocale, t, localizedError } from '../../i18n'
 import { controlSyncApi, type ControlState, type ControlKey, type SyncLink, type SyncRun } from '../../api/controlSync'
 const state = ref<ControlState>({ identity: {}, keys: [], links: [], history: [], runs: [], scopes: [], categories: [] })
 const selectedRunId=ref(''),selectedRun=computed(()=>state.value.runs.find(run=>run._id===selectedRunId.value)||null)
+function runDirection(run:SyncRun){const outgoing=(run.flow==='push')!==(run.kind==='receiver');return t(outgoing?'control.push':'control.pull')}
 function deletable(run:SyncRun){return ['complete','rejected','failed','expired'].includes(run.state)}
 async function deleteRun(id:string){await action(async()=>{await controlSyncApi.deleteRun(id);if(selectedRunId.value===id)selectedRunId.value=''})}
 const nodeDownloading=ref(false)
@@ -143,7 +146,7 @@ const linkColumns = computed(() => [{ title: t('control.name'), dataIndex: 'name
 function date(value: number) { return value ? new Date(value * 1000).toLocaleString(appLocale.value) : '—' }
 function keyStatus(key: ControlKey) { return key.revoked ? 'revoked' : key.expires_at <= now.value ? 'expired' : 'active' }
 let stateSerial=0,disposed=false
-async function load(force=false) { if (loading.value && !force) return;const serial=++stateSerial; loading.value = true; try { const result=await controlSyncApi.state();if(disposed || serial!==stateSerial)return;state.value=result; if(!initialAddressLoaded){publicTarget.value=result.preferences?.sync_target || '';initialAddressLoaded=true} if (!initialListenerLoaded && state.value.listener) { listenerPort.value = state.value.listener.port; initialListenerLoaded = true } } catch (e) { if(!disposed && serial===stateSerial)error.value = (e as Error).message } finally { if(serial===stateSerial)loading.value = false } }
+async function load(force=false) { if (loading.value && !force) return;const serial=++stateSerial; loading.value = true; try { const result=await controlSyncApi.state();if(disposed || serial!==stateSerial)return;state.value=result; if(chosenLink.value)chosenLink.value=result.links.find(link=>link._id===chosenLink.value?._id && link.state==='paired')||null; if(!initialAddressLoaded){publicTarget.value=result.preferences?.sync_target || suggestedReachable(result.preferences?.local_addresses,result.listener?.available?undefined:Number(location.port|| (location.protocol==='https:'?443:80)));initialAddressLoaded=true} if (!initialListenerLoaded && state.value.listener) { listenerPort.value = state.value.listener.port; initialListenerLoaded = true } } catch (e) { if(!disposed && serial===stateSerial)error.value = (e as Error).message } finally { if(serial===stateSerial)loading.value = false } }
 async function action(fn: () => Promise<unknown>) { if (working.value) return; working.value = true; error.value = ''; try { await fn(); await load(true) } catch (e) { error.value = localizedError(e) } finally { working.value = false } }
 async function deleteLink(){
  if(working.value || !deleteTarget.value)return
@@ -163,7 +166,12 @@ async function createControl() {
   } catch (e) { keyCreateError.value = (e as Error).message }
   finally { working.value = false }
 }
+const blockerKinds = computed(()=>new Set(state.value.admission?.reasons.map(row=>row.kind)||[]))
+const syncBlockerTitle=computed(()=>t('syncReadiness.blocked',{types:[['sessions','sessionBlock'],['tasks','taskBlock'],['schedules','scheduleBlock']].filter(([kind])=>blockerKinds.value.has(kind)).map(([,key])=>t('syncReadiness.'+key)).join(appLocale.value==='en-US'?', ':'、')||t('syncReadiness.unknownBlock')}))
+const syncBlockerLinks=computed(()=>[{kind:'sessions',path:'/pentest',label:'syncReadiness.openSessions'},{kind:'tasks',path:'/tasks',label:'syncReadiness.openTasks'},{kind:'schedules',path:'/task-schedule',label:'syncReadiness.openSchedules'}].filter(item=>blockerKinds.value.has(item.kind)))
+const syncBlockerText=computed(()=>state.value.admission?.reasons.map(row=>t('syncReadiness.'+row.kind,{count:row.count})+(row.paused?t('syncReadiness.paused',{count:row.paused}):'')).join('；')+' '+t('syncReadiness.keepWork'))
 const createPair=()=>action(async()=>{
+ if(routeMode.value==='direct' && state.value.listener?.available && !state.value.listener.running){Modal.warning({title:t('syncReadiness.receiverStopped'),content:t('syncReadiness.receiverStoppedNote')});return}
  let address='',node:Record<string,unknown>|undefined
  try{
   if(!pairName.value.trim()||!pairCategories.value.length||!pairMinutes.value||!linkMinutes.value)throw new Error('missing')
@@ -179,10 +187,24 @@ const createPair=()=>action(async()=>{
 const connect = () => action(async () => { await controlSyncApi.connect({ target: target.value, key: peerKey.value, name: target.value,...(nodeDescriptor.value?{node_descriptor:nodeDescriptor.value}:{}) }); peerKey.value = '';invitationInput.value='';nodeDescriptor.value=null;message.info(t('invitationLink.syncWaiting')) })
 const revokeKey = (id: string) => action(() => controlSyncApi.revokeKey(id))
 const deleteKey = (id: string) => action(() => controlSyncApi.deleteKey(id))
-const revokeLink = (id: string) => action(() => controlSyncApi.revokeLink(id))
+const revokeLink = (id: string) => action(async()=>{await controlSyncApi.revokeLink(id);if(chosenLink.value?._id===id){chosenLink.value=null;syncCategories.value=[]}})
 const setListener = (enabled: boolean) => action(() => controlSyncApi.listener({ enabled, port: listenerPort.value }))
-function selectLink(link: SyncLink) { chosenLink.value = link; syncCategories.value = link.categories.filter(c => c !== 'credentials') }
-const startTransfer = () => action(() => controlSyncApi.start({ link_id: chosenLink.value?._id, flow: flow.value, mode: mode.value, categories: syncCategories.value }))
+function selectLink(link: SyncLink) { if(link.kind==='receiver'){Modal.info({title:t('syncReadiness.receiverHelp'),content:t('syncReadiness.receiverNote')});return} chosenLink.value = link; syncCategories.value = link.categories.filter(c => c !== 'credentials') }
+let syncAttempt:{fingerprint:string;id:string}|undefined
+const startTransfer = () => action(async()=>{
+ const notice=message.loading(t('control.requestPreparing'),0)
+ try {
+ await load(true)
+ if(!chosenLink.value || chosenLink.value.state!=='paired')throw new Error(t('control.states.pending'))
+ if(mode.value==='overwrite' && state.value.admission?.blocked){Modal.warning({title:syncBlockerTitle.value,content:syncBlockerText.value});return}
+ const body={link_id:chosenLink.value?._id,flow:flow.value,mode:mode.value,categories:[...syncCategories.value].sort()}
+ const fingerprint=JSON.stringify(body)
+ if(!syncAttempt||syncAttempt.fingerprint!==fingerprint)syncAttempt={fingerprint,id:Array.from(crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,'0')).join('')}
+ const result=await controlSyncApi.start({...body,request_id:syncAttempt.id})
+ if(['failed','rejected','expired'].includes(result.state))throw new Error(result.error||t('control.states.'+result.state))
+ syncAttempt=undefined;window.dispatchEvent(new Event('watchtower:sync-requested'));message.info(t('repair128.requestSent'))
+ } finally {notice()}
+})
 const retry = (id: string) => action(() => controlSyncApi.advance(id))
 async function copyKey() { try { if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(revealedKey.value); else { const input = document.querySelector<HTMLInputElement>('[data-testid="created-key-value"]'); input?.select(); if (!document.execCommand('copy')) throw new Error('copy') }; message.success(t('control.copied')) } catch { message.error(t('control.copyManual')) } }
 function fillInvitation(){if(!invitationInput.value.trim()){nodeDescriptor.value=null;return}try{const parsed=parseInvitationLink(invitationInput.value,'sync');target.value=parsed.target;peerKey.value=parsed.key;nodeDescriptor.value=parsed.node_descriptor || null;error.value=''}catch(e){nodeDescriptor.value=null;error.value=localizedError(e)}}

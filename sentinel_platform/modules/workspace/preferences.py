@@ -9,7 +9,8 @@ def key(user):
 
 def get(repo, user):
     row = repo.collection('control_sync_identity').find_one({'_id': key(user), 'owner': user['username']}) or {}
-    return {field: row.get(field, '') for field in ('group_target', 'sync_target')}
+    from .network_hints import addresses
+    return {**{field: row.get(field, '') for field in ('group_target', 'sync_target')},'local_addresses':addresses()}
 
 
 def save(repo, user, field, value):

@@ -57,6 +57,12 @@ def transport(target: str, action: str, packet: dict, prefix="/api/control_sync/
         if len(raw) > MAX_PACKET:
             raise ControlSyncError("同步响应过大 / Sync response too large", 413)
         if response.status != 200:
+            # Surface a closed protocol reason, never arbitrary peer text/HTML.
+            try: peer_error = json.loads(raw)
+            except (ValueError, UnicodeError): peer_error = {}
+            if response.status == 409 and isinstance(peer_error, dict) and peer_error.get("reason") == "sync_not_idle":
+                from .security import idle_error
+                raise idle_error(peer_error.get("blockers"), peer=True)
             status=409 if response.status in (400,401,403,404,409,410) else 502
             raise ControlSyncError(f"对端拒绝请求（HTTP {response.status}）；请检查工作组/连接是否已关闭、凭证期限及版本 / Peer rejected request (HTTP {response.status}); check group/link closure, credential expiry and version",status)
         try:result=json.loads(raw)
@@ -65,8 +71,14 @@ def transport(target: str, action: str, packet: dict, prefix="/api/control_sync/
         return result
     except ControlSyncError:
         raise
+    except ssl.SSLCertVerificationError:
+        raise ControlSyncError("对端HTTPS证书校验失败，请核对证书链和域名 / Peer HTTPS certificate verification failed; check its chain and hostname", 502) from None
+    except (TimeoutError, socket.timeout):
+        raise ControlSyncError("连接同步目标超时：请检查接收端监听及防火墙；若Windows无法接收入站连接，可让Windows主动连接VM并拉取数据 / Peer connection timed out. Check receiver and firewall; Windows can instead connect to the VM and pull data", 502, reason="peer_network") from None
+    except ConnectionRefusedError:
+        raise ControlSyncError("同步目标拒绝连接：接收端口未监听或地址/端口不正确 / Peer connection refused; check the listening port and address", 502, reason="peer_network") from None
     except (OSError, ValueError, http.client.HTTPException):
-        raise ControlSyncError("无法连接同步目标，请检查地址、端口和防火墙 / Cannot connect to peer; check address, port and firewall", 502) from None
+        raise ControlSyncError("无法连接同步目标，请检查地址、端口和防火墙 / Cannot connect to peer; check address, port and firewall", 502, reason="peer_network") from None
     finally:
         connection.close()
 
@@ -117,17 +129,33 @@ class Pairings:
         preferences.save(self.repo,user,'sync_target',public_target)
         return {**self.public(doc), "key": f"wt_pair.{link_id}.{secret}"}
 
+    def expire_confirmations(self):
+        # Mongo is authoritative across workers and browser refreshes. Older
+        # pending links receive one deadline; an established pair is untouched.
+        now = self.clock()
+        # Never trust a legacy optimistic paired state without both approvals.
+        self.links.update_many({"state":"paired","$or":[{"source_confirmed":{"$ne":True}},{"receiver_confirmed":{"$ne":True}}]},
+            {"$set":{"state":"pending","confirm_expires_at":now+30},"$unset":{"paired_at":"","connection_expires_at":""}})
+        self.links.update_many({'state':'pending','confirm_expires_at':{'$exists':False}},
+                               {'$set':{'confirm_expires_at':now+30}})
+        self.links.update_many({'state':'pending','confirm_expires_at':{'$lte':now}},
+                               {'$set':{'state':'rejected','reject_reason':'confirmation_timeout'}})
+
     def public(self, doc):
-        out = {k: doc.get(k) for k in ("_id", "kind", "name", "state", "owner", "local", "remote", "target", "created_at", "pair_expires_at", "connection_expires_at", "categories", "source_confirmed", "receiver_confirmed", "paired_at", "peer_error", "peer_retry_at")}
+        out = {k: doc.get(k) for k in ("_id", "kind", "name", "state", "owner", "local", "remote", "target", "created_at", "pair_expires_at", "connection_expires_at", "categories", "source_confirmed", "receiver_confirmed", "paired_at", "peer_error", "peer_retry_at", "confirm_expires_at", "reject_reason")}
+        if doc.get("state")=="paired" and not (doc.get("source_confirmed") is True and doc.get("receiver_confirmed") is True):
+            out["state"]="pending"
         expiry = doc.get("connection_expires_at") if doc.get("state") == "paired" else doc.get("pair_expires_at")
         if expiry is not None and self.clock() >= expiry and doc.get("state") not in ("rejected", "revoked"):
             out["state"] = "expired"
+        out['confirmation_remaining']=max(0,min(30,(doc.get('confirm_expires_at') or 0)-self.clock()))
         out['route_mode']=doc.get('route_mode','direct')
         out['node_error']=doc.get('node_error') or ''
         if doc.get('kind')=='receiver' and doc.get('route_mode')=='node' and out['state']=='available':out['node_descriptor']=self.node_routes.descriptor(doc)
         return out
 
     def list(self):
+        self.expire_confirmations()
         return [self.public(d) for d in self.links.find({'deleted_at':{'$exists':False}}).sort("created_at", -1).limit(200)]
 
     def remember(self, target, label):
@@ -160,6 +188,7 @@ class Pairings:
         local = {"_id": link_id, "kind": "initiator", "name": text(body.get("name", target), 100), "owner": user["username"],
                  "local": self.identity(), "remote": remote["local"], "target": target,
                  "state": "pending", "created_at": self.clock(), "pair_expires_at": remote["pair_expires_at"],
+                 "confirm_expires_at": self.clock()+max(0,min(30,remote.get("confirmation_remaining",30))),
                  "connection_expires_at": None, "categories": remote["categories"], "source_confirmed": False, "receiver_confirmed": False,
                  "channel": self.secrets.seal(channel, link_id + ":channel")}
         try:
@@ -176,6 +205,7 @@ class Pairings:
         return self.secrets.open(doc[field], doc["_id"] + (":pair" if pair else ":channel"))
 
     def require_link(self, link_id, paired=False):
+        self.expire_confirmations()
         doc = self.links.find_one({"_id": text(link_id, 32)})
         states = ("paired",) if paired else ("pending", "paired")
         if not doc or doc.get("state") not in states:
@@ -207,10 +237,22 @@ class Pairings:
                 self.request(fresh,'status',{})
                 fresh=self.require_link(fresh['_id'],paired=True)
         secret = self.secret_for(fresh)
-        packet = encode_peer(secret, fresh["_id"], action, body, self.clock)
-        answer=self.node_routes.send(fresh,action,packet) if fresh.get('route_mode')=='node' else self.send(fresh['target'],action,packet)
+        # Retry only idempotent protocol operations, with a new authenticated
+        # nonce each time. Stable run/chunk IDs retain the original receipt.
+        attempts=2 if action in ('status','confirm','reject','prepare','cancel_prepare','propose','run_status','chunk_status','export_chunk','receive_chunk','receive_commit') else 1
+        for attempt in range(attempts):
+            packet=encode_peer(secret,fresh['_id'],action,body,self.clock)
+            try:
+                answer=self.node_routes.send(fresh,action,packet) if fresh.get('route_mode')=='node' else self.send(fresh['target'],action,packet)
+                break
+            except ControlSyncError as exc:
+                if exc.reason!='peer_network' or attempt+1>=attempts:raise
+                time.sleep(.25)
         response = decode_peer(secret,answer,action+':response',self.clock)
         if response.get("error"):
+            if response.get("reason") == "sync_not_idle":
+                from .security import idle_error
+                raise idle_error(response.get("blockers"), peer=True)
             raise ControlSyncError(response["error"], response.get("status", 400))
         if fresh.get('route_mode')=='node':self.node_routes.remember(fresh,response.get('node_config'))
         return response
@@ -223,16 +265,17 @@ class Pairings:
             return self.public(doc)
         def fetch(current):
             status=self.request(current,'status',{})['link']
-            return {k:status.get(k) for k in ('state','source_confirmed','receiver_confirmed','connection_expires_at','paired_at')}
+            return {k:status.get(k) for k in ('state','source_confirmed','receiver_confirmed','connection_expires_at','paired_at','reject_reason')}
         return refresh_peer(self.links,doc,fetch,self.public,self.clock,background)
 
     def advance(self, link_id):
+        self.expire_confirmations()
         now = self.clock()
         doc = self.links.find_one({"_id": link_id})
         if not doc:
             raise ControlSyncError("连接不存在 / Link not found", 404)
         self.links.find_one_and_update({"_id": link_id, "state": "pending", "pair_expires_at": {"$gt": now},
-                                       "source_confirmed": True, "receiver_confirmed": True},
+                                       "source_confirmed": True, "receiver_confirmed": True, "confirm_expires_at":{"$gt":now}},
                                       {"$set": {"state": "paired", "paired_at": now, "connection_expires_at": now + doc["connection_duration"]},
                                        "$unset": {"pair_secret": "", "pair_hash": ""}}, return_document=ReturnDocument.AFTER)
         return self.links.find_one({"_id": link_id})
@@ -241,10 +284,10 @@ class Pairings:
         doc = self.require_link(link_id)
         if doc["kind"] == "initiator":
             status = self.request(doc, "confirm", {})["link"]
-            self.links.update_one({"_id": doc["_id"], "state": {"$nin": ["revoked", "rejected"]}}, {"$set": {k: status.get(k) for k in ("state", "source_confirmed", "receiver_confirmed", "connection_expires_at", "paired_at")}})
+            self.links.update_one({"_id": doc["_id"], "state": {"$nin": ["revoked", "rejected"]}}, {"$set": {k: status.get(k) for k in ("state", "source_confirmed", "receiver_confirmed", "connection_expires_at", "paired_at", "reject_reason")}})
         else:
             # This method is reachable only through the logged-in administrator UI route.
-            self.links.update_one({"_id": doc["_id"], "state": "pending", "pair_expires_at": {"$gt": self.clock()}},
+            self.links.update_one({"_id": doc["_id"], "state": "pending", "pair_expires_at": {"$gt": self.clock()}, "confirm_expires_at":{"$gt":self.clock()}},
                                   {"$set": {"receiver_confirmed": True, "receiver_confirmed_by": user["username"]}})
             self.advance(doc["_id"])
         return self.public(self.links.find_one({"_id": doc["_id"]}))
@@ -306,6 +349,7 @@ class Pairings:
             {'$set':{'state':'rejected','stage':'link_revoked','error':'连接已撤销 / Link revoked'}})
 
     def handle_peer(self, action, packet, via_peer=None):
+        self.expire_confirmations()
         pair = action == "pair"
         link_id = text((packet or {}).get("id"), 32)
         doc = self.links.find_one({"_id": link_id, "kind": "receiver"})
@@ -313,7 +357,7 @@ class Pairings:
             raise ControlSyncError("同步认证失败 / Sync authentication failed", 401)
         self.require_owner(doc)
         if pair:
-            if (doc['state']!='available' and not (doc.get('route_mode')=='node' and doc['state']=='pending')) or self.clock()>=doc['pair_expires_at']:
+            if doc['state'] not in ('available','pending') or self.clock()>=doc['pair_expires_at']:
                 raise ControlSyncError("配对Key已过期或已使用 / Pairing key expired or already used", 401)
         elif action not in ("status", "confirm", "reject"):
             doc = self.require_link(link_id, paired=True)
@@ -339,11 +383,11 @@ class Pairings:
                     raise ControlSyncError("对端系统标识无效 / Invalid peer identity")
                 channel = text(body.get("channel"), 43)
                 if doc['state']=='pending':
-                    if body.get('request_id')!=doc.get('node_pair_request') or channel!=self.secret_for(doc) or body.get('transport_public')!=doc.get('remote_crypto'):
+                    if channel!=self.secret_for(doc) or identity.get('instance_id')!=(doc.get('remote') or {}).get('instance_id') or (doc.get('route_mode')=='node' and (body.get('request_id')!=doc.get('node_pair_request') or body.get('transport_public')!=doc.get('remote_crypto'))):
                         raise ControlSyncError('配对Key已被其它申请消费 / Pairing key consumed by a different request',401)
                     new=doc
                 else:new = self.links.find_one_and_update({"_id": link_id, "state": "available", "pair_expires_at": {"$gt": self.clock()}},
-                                                     {"$set": {"state": "pending", "remote": {k: identity.get(k) for k in ("instance_id", "platform", "version", "name")},
+                                                     {"$set": {"state": "pending", "confirm_expires_at":self.clock()+30, "remote": {k: identity.get(k) for k in ("instance_id", "platform", "version", "name")},
                                                                **({'remote_crypto':body['transport_public'],'node_pair_request':text(body.get('request_id'),32)} if doc.get('route_mode')=='node' else {}),
                                                                "channel": self.secrets.seal(channel, link_id + ":channel")}}, return_document=ReturnDocument.AFTER)
                 if not new:
@@ -355,7 +399,7 @@ class Pairings:
             elif action == "status":
                 result = {"link": self.public(self.links.find_one({"_id": link_id}))}
             elif action == "confirm":
-                self.links.update_one({"_id": link_id, "state": "pending", "pair_expires_at": {"$gt": self.clock()}}, {"$set": {"source_confirmed": True}})
+                self.links.update_one({"_id": link_id, "state": "pending", "pair_expires_at": {"$gt": self.clock()}, "confirm_expires_at":{"$gt":self.clock()}}, {"$set": {"source_confirmed": True}})
                 result = {"link": self.public(self.advance(link_id))}
             elif action == "reject":
                 self.links.update_one({"_id": link_id}, {"$set": {"state": "rejected"}, "$unset": {"pair_secret": "", "pair_hash": ""}})
@@ -367,7 +411,7 @@ class Pairings:
             else:
                 raise ControlSyncError("同步操作不支持 / Unsupported sync action", 404)
         except ControlSyncError as exc:
-            result = {"error": str(exc), "status": exc.status}
+            result = {"error": str(exc), "status": exc.status, **({"reason": exc.reason, "blockers": getattr(exc,"blockers",[])} if exc.reason == "sync_not_idle" else {})}
         if not result.get('error') and doc.get('route_mode')=='node':
             config=self.node_routes.response_config(self.links.find_one({'_id':link_id}))
             if config:result['node_config']=config

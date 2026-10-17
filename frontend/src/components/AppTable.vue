@@ -8,6 +8,7 @@
     :row-selection="selectable ? rowSelection : undefined"
     :custom-row="customRow"
     :scroll="scroll"
+    :table-layout="tableLayout"
     size="middle"
     :bordered="false"
     @change="onChange"
@@ -33,6 +34,7 @@ const props = withDefaults(defineProps<{
   preserveSelectedRowKeys?: boolean
   selectedRowKeys?: string[]
   scroll?: { x?: number | string; y?: number | string }
+  tableLayout?: 'auto' | 'fixed'
   customRow?: (record: any, index?: number) => Record<string, unknown>
 }>(), { rowKey: '_id', page: 1, size: 10, total: 0, selectable: false, selectedRowKeys: () => [] })
 

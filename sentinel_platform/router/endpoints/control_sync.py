@@ -60,8 +60,21 @@ class State(Resource):
             from sentinel_platform.modules.workspace import preferences
             s.snapshots.recover()
             return {"identity": s.pairing.identity(), "keys": s.control.list(), "links": s.pairing.list(),
-                    "history": s.pairing.history_list(), "runs": s.transfers.list(), "listener": s.listener.public(), "scopes": SCOPES, "categories": list(CATEGORIES),"preferences":preferences.get(s.repo,u)}
+                    "history": s.pairing.history_list(), "runs": s.transfers.list(), "listener": s.listener.public(), "scopes": SCOPES, "categories": list(CATEGORIES),"preferences":preferences.get(s.repo,u),"admission":s.snapshots.readiness()}
         return _call(state)
+
+
+@ns.route('/pending')
+class PendingApprovals(Resource):
+    def get(self):
+        # No snapshot recovery/export, credentials or inventory read on this
+        # latency-sensitive endpoint. Network transfer progression is separate.
+        def pending(s,u):
+            now=s.pairing.clock()
+            links=[s.pairing.public(doc) for doc in s.pairing.links.find({'deleted_at':{'$exists':False},'state':{'$in':['paired','pending','connecting']}}).sort('created_at',-1).limit(200)]
+            runs=[s.transfers.public(doc) for doc in s.transfers.runs.find({'history_deleted_at':{'$exists':False},'state':{'$in':['preparing','pending','ready','transferring']},'expires_at':{'$gt':now}}).sort('created_at',-1).limit(200) if (doc.get('state')!='preparing' or doc.get('prepare_expires_at',0)>now) and (doc.get('kind')!='receiver' or doc.get('state')!='pending' or doc.get('confirm_expires_at',0)>now)]
+            return {'links':links,'runs':runs,'server_time':now}
+        return _call(pending)
 
 
 @ns.route("/keys")
@@ -91,7 +104,11 @@ class KeyDelete(Resource):
 @ns.route("/pair-key")
 class PairKey(Resource):
     def post(self):
-        return _call(lambda s, u: s.pairing.create(u, _body()))
+        def create(s, u):
+            body = _body()
+            s.listener.require_pairing_ready(body)
+            return s.pairing.create(u, body)
+        return _call(create)
 
 
 @ns.route("/connect")
@@ -200,7 +217,7 @@ def peer(action):
             raise ControlSyncError("Invalid peer request")
         return jsonify(_service().pairing.handle_peer(action, packet))
     except ControlSyncError as exc:
-        return jsonify({"error": str(exc)}), exc.status
+        return jsonify({"error": str(exc), **({"reason": exc.reason,"blockers":getattr(exc,"blockers",[])} if exc.reason == "sync_not_idle" else {})}), exc.status
     except Exception:
         from sentinel_platform.core import get_logger
         get_logger().exception("control sync peer request failed")

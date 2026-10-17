@@ -236,9 +236,11 @@ class DashboardServiceImpl:
         # 新模型：总分 = 三维加权(连续 0-100，任一维变化实时体现) 与 最弱维分 融合(弱项拖低总分、
         # 不被均值稀释成"充裕")；再叠加物理"见底硬闸"守告急红线——磁盘绝对见底会写失败、内存 0 slots
         # 停投，这类硬风险加权表达不了，必须封顶（守禁删信号维铁律，不重演恒22/恒76）。
-        W_CPU, W_MEM, W_DISK = 0.35, 0.35, 0.30
+        # 177B-2：CPU/内存各45%、磁盘10%；短板融合由40%降为30%。
+        # 低盘硬闸、清理提示和调度准入保持原阈值，不会因降低权重忽略写入风险。
+        W_CPU, W_MEM, W_DISK = 0.45, 0.45, 0.10
         weighted = W_CPU * cpu_s + W_MEM * mem_s + W_DISK * disk_s
-        raw = 0.6 * weighted + 0.4 * float(min(cpu_s, mem_s, disk_s))   # 加权主体 + 最弱维拖低
+        raw = 0.7 * weighted + 0.3 * float(min(cpu_s, mem_s, disk_s))   # CPU/内存为主，保留短板与物理红线
 
         # 取真实水位档（仅用于 critical 停投硬闸 + 展示 wl_level，不再定分数区间）
         wl = ""

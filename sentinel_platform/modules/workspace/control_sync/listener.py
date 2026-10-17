@@ -35,9 +35,17 @@ class PeerListener:
                 addresses += [a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None, family=socket.AF_INET, type=socket.SOCK_STREAM) if a[4][0] != "127.0.0.1"]
             except OSError:
                 pass
-        return {"available": self.available, "enabled": bool(settings.get("enabled")), "port": settings.get("port", 5588),
+        from .firewall_status import status
+        firewall=status(settings.get('port',5588)) if self.available and self.server is not None else {'state':'inactive'}
+        return {"firewall":firewall,"available": self.available, "enabled": bool(settings.get("enabled")), "port": settings.get("port", 5588),
                 "running": self.server is not None, "error": self.error,
                 "targets": [f"http://{ip}:{settings.get('port', 5588)}" for ip in sorted(set(addresses))]}
+
+    def require_pairing_ready(self, body):
+        if self.available and body.get("node") is None:
+            state = self.public()
+            if not state["enabled"] or not state["running"]:
+                raise ControlSyncError("Windows同步接收端口尚未启用或启动失败，请先启用接收端口；也可让Windows主动连接VM并选择拉取 / Windows receiver is not running. Enable it first, or connect from Windows and pull the VM data", 409)
 
     def configure(self, body):
         if not self.available or self.app is None:

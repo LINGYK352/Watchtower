@@ -540,12 +540,12 @@
     "body": "On the Control Key tab, Give another AI the HTTP guide URL and Key, or use the dedicated endpoint in an MCP client. Replace example IPs with a caller-reachable address."
   },
   "controlSync_3": {
-    "title": "Receiver pairing links",
-    "body": "Enter a reachable IP or domain. Windows adds the receiver port automatically; explicit ports are accepted. Incomplete fields show a prompt. Node mode requires an endpoint, fingerprint and credential. Choose limited validity and categories before generating a link; no migration starts yet."
+    "title": "Generate the listener pairing link",
+    "body": "Saved addresses take priority; otherwise a configured network address is suggested. You can edit it. Windows adds its receiver port. Enable listening and allow inbound access, or connect from Windows and pull/use a maintenance node. Copy the complete invitation link."
   },
   "controlSync_4": {
     "title": "Paste, connect and confirm",
-    "body": "The initiator pastes the link to fill editable address/Key, then connects. Both sides confirm in dialogs. The initiator polls; reverse connectivity is not required. Reuse history targets and revoke/delete connections."
+    "body": "Paste the link and connect. Both sides approve pairing within30 seconds or it is rejected. Then choose direction, contents and mode and request sync. The peer approves that concrete plan within30 seconds. Brief disconnects resume reconciliation without duplicating the same submission."
   },
   "controlSync_5": {
     "title": "One record per sync operation",
@@ -557,11 +557,11 @@
   },
   "collaboration_1": {
     "title": "Create and invite",
-    "body": "Create from the list’s right-hand button with a reachable host address. Invitations default to no expiry, with optional expiry, member cap and approval. Share the credential-bearing link only with intended members."
+    "body": "Creation suggests a saved or configured network address. Edit it to an address members can reach. Invitations support duration/use limits. Copy the complete link, which contains credentials, only to intended members."
   },
   "collaboration_2": {
     "title": "Join and approval",
-    "body": "Paste into Join to fill editable address/Key. Connect explicitly and wait while this client polls. The host approves/rejects/removes from Members. Permanent invitations do not remove membership expiry."
+    "body": "Paste the link to apply. The host reviews applications separately from member actions. Long-lived invitations do not remove membership expiry. Authenticated member keys are negotiated and pinned in the background; a key change stops sending."
   },
   "collaboration_3": {
     "title": "Shared, direct and messages",
@@ -569,7 +569,7 @@
   },
   "collaboration_4": {
     "title": "Findings, reports and handoff",
-    "body": "Share existing findings, reports or complete sessions to the current room. Preview received packages. Restoring selects a local model and creates a standby session without starting the original."
+    "body": "Choose findings, reports or full sessions from the detailed list. Findings include AI, PoC and kernel scan sources. Both sides click the sent card to preview; recipients save it into the corresponding system list. Repeated saves are idempotent. Sessions remain paused with no AI call. Ordinary attachments use file download."
   },
   "collaboration_5": {
     "title": "Rotate, close and delete",
@@ -859,7 +859,7 @@
   },
   "collaborationWorkspace_4": {
     "title": "Share materials",
-    "body": "Share findings, reports or a complete inactive session package. Preview before restoring; restoration does not auto-execute. Individual files must not exceed 20 MiB."
+    "body": "Choose findings, reports or full sessions from the detailed list. Findings include AI, PoC and kernel scan sources. Both sides click the sent card to preview; recipients save it into the corresponding system list. Repeated saves are idempotent. Sessions remain paused with no AI call. Ordinary attachments use file download."
   },
   "collaborationWorkspace_5": {
     "title": "Maintenance nodes and cached delivery",

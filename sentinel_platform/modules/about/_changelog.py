@@ -4,7 +4,10 @@ import json,re,os,tempfile
 
 def _version(value):
     match=re.fullmatch(r'v?(\d+)\.(\d+)\.(\d+)(?:-(\d+))?',str(value or ''))
-    return (*map(int,match.groups()[:3]),int(match[4]) if match[4] else float('inf')) if match else None
+    if not match:return None
+    from sentinel_platform.core import release_version
+    try:return release_version.key('v'+str(value).lstrip('vV'))
+    except ValueError:return None
 
 def _read_version(root):
     try:return (Path(root)/'version.txt').read_text(encoding='utf-8').strip()

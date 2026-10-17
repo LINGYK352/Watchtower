@@ -244,7 +244,7 @@
         <a-row :gutter="16">
           <a-col :xs="24" :sm="8">
             <a-form-item :label="translate('ui.m_7f72f06a8877')">
-              <a-select :disabled="promptForm.builtin" v-model:value="promptForm.scene" :options="sceneOptions" />
+              <a-select :disabled="promptForm.builtin" v-model:value="promptForm.scene" :options="promptForm.builtin ? sceneOptions : sceneOptions.filter(item=>item.value==='custom' || item.value===promptForm.scene)" />
             </a-form-item>
           </a-col>
           <a-col :xs="24" :sm="8"><a-form-item :label="translate('ui.m_b55134fb6456')"><a-input v-model:value="promptForm.name" :disabled="promptForm.builtin" data-testid="prompt-name" /></a-form-item></a-col>
@@ -525,12 +525,12 @@ async function removeProvider(id: string) {
 
 // Prompt 编辑
 const promptOpen = ref(false)
-const promptForm = reactive<Partial<AIPrompt>>({ scene: 'pentest_exec', name: '', content: '', provider_id: '', enabled: true })
+const promptForm = reactive<Partial<AIPrompt>>({ scene: 'custom', name: '', content: '', provider_id: '', enabled: true })
 async function openPrompt(record?: AIPrompt) {
   const accepted = await new Promise<boolean>(resolve => Modal.confirm({title:translate('requestApproval.promptEditTitle'),content:translate('requestApproval.promptEditNotice'),onOk:()=>resolve(true),onCancel:()=>resolve(false)}))
   if(!accepted)return
   if (record) Object.assign(promptForm, { ...record, provider_id: record.provider_id || '' })
-  else Object.assign(promptForm, { _id: undefined, builtin:false, scene: 'pentest_exec', name: '', content: '', provider_id: '', enabled: true })
+  else Object.assign(promptForm, { _id: undefined, builtin:false, scene: 'custom', name: '', content: '', provider_id: '', enabled: true })
   promptOpen.value = true
 }
 async function resetPrompt(record:AIPrompt) {
