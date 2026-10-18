@@ -1,84 +1,90 @@
-# 瞭望塔 Watchtower
+# Watchtower
 
-Web与Windows当前正式版本：**v1.21.178**。原创代码GPL-3.0-only。
+## Downloads and updates
 
-[官网与下载](https://watchtowers.info/) · [English](README.en.md) · [178更新与修复安装](docs/release178.md)
+Download installers, Docker images and all future updates from the [official Watchtower website](https://watchtowers.info).
+GitHub Releases provide release notes and download instructions. Program and patch packages are distributed through the official website.
 
-178合并177全部已发布补丁与本轮修复：Windows下载统一另存为、证书与更新兼容、首次协议签署保持；配对确认/撤销清理、增量同步业务身份合并、内置环节仅覆盖同步及重复清理；旧/迁移会话受闸刀监管的挂机模式与入口；工作区多进程收信租约和独立临时目录修复并发503，后台重连保留消息和草稿；修复重启遮罩鉴权和页面不可点击、Windows99%状态与更新恢复互斥，完整安装器新增保留账号配置/业务资料的修复安装；新建会话模式选中态、多目录ZIP解压后由用户选入口（本地和云端）、未填目标显示未知且继续待命；专有SKILL在同步/流式/后台会话中沿实际模型及环节传给工具，兼容显式备用、网络重试及绑定撤销。
 
-178为双端新安装基板及回退下限。177、177B-1、177B-2直接升级178，保留账号、配置、任务、会话与证据；旧175/176沿既有签名功能链升级。安装包统一由官网分发，Windows支持修复现有安装。Windows10未完成实机验收。
+Web and Windows: **v1.21.178**, GPL-3.0-only.
+
+[Website and downloads](https://watchtowers.info/) · [中文](README.zh-CN.md)
+
+178 consolidates all published177 patches and current fixes: native Save As downloads and TLS/update compatibility; preserved agreement acceptance; pairing/cancellation and insert-only identity-aware migration; replacement-only builtin stages and duplicate repair; guarded unattended defaults for old/imported sessions; fenced concurrent workspace receipt and reconnect-safe drafts; authenticated restart overlay and Windows update finalization/recovery; preserving repair installation; visible operation modes, user-selected nested ZIP entries locally and in cloud review, unknown blank targets remaining dormant, and actual model/stage SKILL context across all console paths and explicit fallback.
+
+178 is the new installation base and rollback floor.177/B-1/B-2 update directly to178 while retaining user state; older175/176 keep their signed feature chain. The complete Windows installer includes preserving repair. Windows10 has not been physically tested.
 
 
 <!-- watchtower-ui-gallery:start -->
-## 功能界面 · 示例数据
+## Product interface · sample data
 
-以下为177实际界面与隔离示例数据，不对应真实客户、真实设备连接或实际评估结果。安装包和补丁统一在[分发系统](https://watchtowers.info/)下载。
+Actual177 interface rendered with isolated, synthetic samples. These images do not represent real customers, live device connections or completed assessments. All installation and patch packages are available from the [distribution website](https://watchtowers.info/).
 
-### 01 · 跨端协作
+### 01 · Cross-platform collaboration
 
-Linux与Windows在独立工作区交接会话、证据与附件。
+Hand off sessions, evidence and files between Linux and Windows in an isolated workspace.
 
-![Watchtower 跨端协作 · sample data](assets/screenshots/177/collaboration.png)
+![Watchtower Cross-platform collaboration · sample data](assets/screenshots/177/collaboration.png)
 
-### 02 · 漏洞中心
+### 02 · Findings center
 
-统一查看AI渗透、内核扫描与工作组发现，关联验证状态与证据。
+Review AI, scanner and workspace findings with verification status and evidence.
 
-![Watchtower 漏洞中心 · sample data](assets/screenshots/177/findings.png)
+![Watchtower Findings center · sample data](assets/screenshots/177/findings.png)
 
-### 03 · 公开情报
+### 03 · Public intelligence
 
-查看情报来源、风险等级、组件与同步状态，快速筛选相关线索。
+Explore sources, severity, affected components and synchronization status.
 
-![Watchtower 公开情报 · sample data](assets/screenshots/177/public-intelligence.png)
+![Watchtower Public intelligence · sample data](assets/screenshots/177/public-intelligence.png)
 
-### 04 · APP渗透
+### 04 · APP assessment
 
-管理有线与无线设备，连接移动端评估与平台会话。
+Manage wired and wireless devices and connect mobile assessment to platform sessions.
 
-![Watchtower APP渗透 · sample data](assets/screenshots/177/app-pentest.png)
+![Watchtower APP assessment · sample data](assets/screenshots/177/app-pentest.png)
 
-### 05 · APP流量
+### 05 · APP traffic
 
-按设备查看HTTPS、WebSocket与TCP/TLS流量及请求响应。
+Inspect HTTPS, WebSocket and TCP/TLS traffic with request and response details.
 
-![Watchtower APP流量 · sample data](assets/screenshots/177/app-traffic.png)
+![Watchtower APP traffic · sample data](assets/screenshots/177/app-traffic.png)
 
-### 06 · 报告编辑
+### 06 · Report editing
 
-直接编辑报告内容并实时预览，整理证据、风险与修复建议。
+Edit reports with a live preview, evidence, risk descriptions and remediation advice.
 
-![Watchtower 报告编辑 · sample data](assets/screenshots/177/report-editor.png)
+![Watchtower Report editing · sample data](assets/screenshots/177/report-editor.png)
 
-### 07 · 报告生成
+### 07 · Report generation
 
-按任务、会话或单个漏洞选择来源，使用Word模板生成交付报告。
+Select a task, session or individual finding and generate a report using a Word template.
 
-![Watchtower 报告生成 · sample data](assets/screenshots/177/report-generation.png)
+![Watchtower Report generation · sample data](assets/screenshots/177/report-generation.png)
 
-### 08 · AI会话台
+### 08 · AI session console
 
-在同一会话查看上下文、工具调用、关联漏洞与协作接续结果。
+Follow context, tool calls, linked findings and collaborative handoffs in one session.
 
-![Watchtower AI会话台 · sample data](assets/screenshots/177/ai-console.png)
+![Watchtower AI session console · sample data](assets/screenshots/177/ai-console.png)
 
-### 09 · Burps历史记录
+### 09 · Burps history
 
-在AI会话台内查看HTTP/HTTPS历史、HaE标记与原始报文。
+Inspect HTTP/HTTPS history, HaE tags and raw packets inside the AI console.
 
-![Watchtower Burps历史记录 · sample data](assets/screenshots/177/burps-history.png)
+![Watchtower Burps history · sample data](assets/screenshots/177/burps-history.png)
 
-### 10 · Burps重放
+### 10 · Burps Repeater
 
-将历史请求送入Repeater，在同一窗口对照请求与响应。
+Send a captured request to Repeater and compare its request and response side by side.
 
-![Watchtower Burps重放 · sample data](assets/screenshots/177/burps-repeater.png)
+![Watchtower Burps Repeater · sample data](assets/screenshots/177/burps-repeater.png)
 
 <!-- watchtower-ui-gallery:end -->
 
 
-## 联系作者
+## Contact the author
 
-遇到问题可扫码添加我的微信，请附版本号、操作步骤和报错信息。
+Scan the QR code to contact me on WeChat. Include the version, reproduction steps and error details.
 
 <img src="assets/contact/wechat.png" alt="WeChat QR code" width="300">
