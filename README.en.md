@@ -1,8 +1,14 @@
 # Watchtower
 
+## Downloads and updates
+
+Download installers, Docker images and all future updates from the [official Watchtower website](https://watchtowers.info).
+GitHub Releases provide release notes and download instructions. Program and patch packages are distributed through the official website.
+
+
 Web and Windows: **v1.21.178**, GPL-3.0-only.
 
-[Website and downloads](https://watchtowers.info/) · [中文](README.md)
+[Website and downloads](https://watchtowers.info/) · [中文](README.zh-CN.md)
 
 178 consolidates all published177 patches and current fixes: native Save As downloads and TLS/update compatibility; preserved agreement acceptance; pairing/cancellation and insert-only identity-aware migration; replacement-only builtin stages and duplicate repair; guarded unattended defaults for old/imported sessions; fenced concurrent workspace receipt and reconnect-safe drafts; authenticated restart overlay and Windows update finalization/recovery; preserving repair installation; visible operation modes, user-selected nested ZIP entries locally and in cloud review, unknown blank targets remaining dormant, and actual model/stage SKILL context across all console paths and explicit fallback.
 
