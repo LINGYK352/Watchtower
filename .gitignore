@@ -105,3 +105,6 @@ source-validation/
 
 # Independent distribution/registration service and its private data
 Watchtower-distribution/
+
+# Project documentation is maintained locally, outside the public repository.
+/docs/

@@ -18,67 +18,91 @@ Web and Windows: **v1.21.178**, GPL-3.0-only.
 <!-- watchtower-ui-gallery:start -->
 ## Product interface · sample data
 
-Actual177 interface rendered with isolated, synthetic samples. These images do not represent real customers, live device connections or completed assessments. All installation and patch packages are available from the [distribution website](https://watchtowers.info/).
+Screenshots show the 178-series client interface with synthetic demonstration data, including UI improvements delivered through website updates. They do not represent real customers, live device connections, measured performance or completed assessments. The interface is shown in Chinese. Get installers and updates from the [official website](https://watchtowers.info/).
 
-### 01 · Cross-platform collaboration
+### 01 · Cross-platform workspaces
 
-Hand off sessions, evidence and files between Linux and Windows in an isolated workspace.
+Hand off messages, complete sessions, evidence and files between Windows and Linux workspaces.
 
-![Watchtower Cross-platform collaboration · sample data](assets/screenshots/177/collaboration.png)
+![Watchtower Cross-platform workspaces · sample data](assets/screenshots/178/collaboration.png)
 
-### 02 · Findings center
+### 02 · AI session console
 
-Review AI, scanner and workspace findings with verification status and evidence.
+Follow the attack surface, session progress, tool calls and findings in one console.
 
-![Watchtower Findings center · sample data](assets/screenshots/177/findings.png)
+![Watchtower AI session console · sample data](assets/screenshots/178/ai-console.png)
 
-### 03 · Public intelligence
+### 03 · Burps traffic history
 
-Explore sources, severity, affected components and synchronization status.
+Inspect captured HTTP/HTTPS records, HaE highlights and request/response data.
 
-![Watchtower Public intelligence · sample data](assets/screenshots/177/public-intelligence.png)
+![Watchtower Burps traffic history · sample data](assets/screenshots/178/burps-history.png)
 
-### 04 · APP assessment
+### 04 · Burps Repeater
 
-Manage wired and wireless devices and connect mobile assessment to platform sessions.
+Send a captured request to Repeater for editing, replay and response comparison.
 
-![Watchtower APP assessment · sample data](assets/screenshots/177/app-pentest.png)
+![Watchtower Burps Repeater · sample data](assets/screenshots/178/burps-repeater.png)
 
-### 05 · APP traffic
+### 05 · APP device connections
 
-Inspect HTTPS, WebSocket and TCP/TLS traffic with request and response details.
+Manage USB and wireless devices with separate traffic capture and accessibility control capabilities.
 
-![Watchtower APP traffic · sample data](assets/screenshots/177/app-traffic.png)
+![Watchtower APP device connections · sample data](assets/screenshots/178/app-pentest.png)
 
-### 06 · Report editing
+### 06 · APP traffic
 
-Edit reports with a live preview, evidence, risk descriptions and remediation advice.
+Inspect mobile connections and capture records. HTTPS plaintext visibility depends on certificate trust and decoding conditions.
 
-![Watchtower Report editing · sample data](assets/screenshots/177/report-editor.png)
+![Watchtower APP traffic · sample data](assets/screenshots/178/app-traffic.png)
 
-### 07 · Report generation
+### 07 · Mini-program assessment
 
-Select a task, session or individual finding and generate a report using a Word template.
+Import wxapkg main and subpackage materials, then configure an assessment session.
 
-![Watchtower Report generation · sample data](assets/screenshots/177/report-generation.png)
+![Watchtower Mini-program assessment · sample data](assets/screenshots/178/miniapp.png)
 
-### 08 · AI session console
+### 08 · Public vulnerability intelligence
 
-Follow context, tool calls, linked findings and collaborative handoffs in one session.
+Search by component, severity and source, with local capability and synchronization information.
 
-![Watchtower AI session console · sample data](assets/screenshots/177/ai-console.png)
+![Watchtower Public vulnerability intelligence · sample data](assets/screenshots/178/public-intelligence.png)
 
-### 09 · Burps history
+### 09 · Findings center
 
-Inspect HTTP/HTTPS history, HaE tags and raw packets inside the AI console.
+Manage findings by source, severity and status, with links back to supporting evidence.
 
-![Watchtower Burps history · sample data](assets/screenshots/177/burps-history.png)
+![Watchtower Findings center · sample data](assets/screenshots/178/findings.png)
 
-### 10 · Burps Repeater
+### 10 · Report editing
 
-Send a captured request to Repeater and compare its request and response side by side.
+Edit reports with a live preview, supporting evidence, impact and remediation guidance.
 
-![Watchtower Burps Repeater · sample data](assets/screenshots/177/burps-repeater.png)
+![Watchtower Report editing · sample data](assets/screenshots/178/report-editor.png)
+
+### 11 · Report generation
+
+Search and select a session or other supported source before configuring report generation.
+
+![Watchtower Report generation · sample data](assets/screenshots/178/report-generation.png)
+
+### 12 · Dashboard
+
+Review assets, tasks, AI sessions, token usage and runtime resources.
+
+![Watchtower Dashboard · sample data](assets/screenshots/178/dashboard.png)
+
+### 13 · Resource-aware task budgeting
+
+Estimate task admission from available physical memory, reserves and resource pressure, with runtime trends.
+
+![Watchtower Resource-aware task budgeting · sample data](assets/screenshots/178/resource-waterline.png)
+
+### 14 · Model and stage SKILL bindings
+
+Bind an entry document and supporting SKILL files to a named model configuration and selected stages.
+
+![Watchtower Model and stage SKILL bindings · sample data](assets/screenshots/178/model-skills.png)
 
 <!-- watchtower-ui-gallery:end -->
 

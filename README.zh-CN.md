@@ -2,7 +2,7 @@
 
 Web与Windows当前正式版本：**v1.21.178**。原创代码GPL-3.0-only。
 
-[官网与下载](https://watchtowers.info/) · [English](README.en.md) · [178更新与修复安装](docs/release178.md)
+[官网与下载](https://watchtowers.info/) · [English](README.en.md) · [178更新与修复安装](https://watchtowers.info/)
 
 178合并177全部已发布补丁与本轮修复：Windows下载统一另存为、证书与更新兼容、首次协议签署保持；配对确认/撤销清理、增量同步业务身份合并、内置环节仅覆盖同步及重复清理；旧/迁移会话受闸刀监管的挂机模式与入口；工作区多进程收信租约和独立临时目录修复并发503，后台重连保留消息和草稿；修复重启遮罩鉴权和页面不可点击、Windows99%状态与更新恢复互斥，完整安装器新增保留账号配置/业务资料的修复安装；新建会话模式选中态、多目录ZIP解压后由用户选入口（本地和云端）、未填目标显示未知且继续待命；专有SKILL在同步/流式/后台会话中沿实际模型及环节传给工具，兼容显式备用、网络重试及绑定撤销。
 
@@ -12,67 +12,91 @@ Web与Windows当前正式版本：**v1.21.178**。原创代码GPL-3.0-only。
 <!-- watchtower-ui-gallery:start -->
 ## 功能界面 · 示例数据
 
-以下为177实际界面与隔离示例数据，不对应真实客户、真实设备连接或实际评估结果。安装包和补丁统一在[分发系统](https://watchtowers.info/)下载。
+以下是178系列实际客户端界面的演示截图，包含通过官网更新交付的界面改进。目标、设备、会话、情报和统计值均为示例，不代表真实客户、设备连接、性能测试或评估结果。安装包和更新统一在[官网](https://watchtowers.info/)获取。
 
-### 01 · 跨端协作
+### 01 · 跨端工作组
 
-Linux与Windows在独立工作区交接会话、证据与附件。
+在独立工作区交接消息、完整会话、证据和附件。
 
-![Watchtower 跨端协作 · sample data](assets/screenshots/177/collaboration.png)
+![Watchtower 跨端工作组 · sample data](assets/screenshots/178/collaboration.png)
 
-### 02 · 漏洞中心
+### 02 · AI控制台
 
-统一查看AI渗透、内核扫描与工作组发现，关联验证状态与证据。
+在同一会话查看攻击面、工作进展、工具调用与漏洞线索。
 
-![Watchtower 漏洞中心 · sample data](assets/screenshots/177/findings.png)
+![Watchtower AI控制台 · sample data](assets/screenshots/178/ai-console.png)
 
-### 03 · 公开情报
+### 03 · Burps流量历史
 
-查看情报来源、风险等级、组件与同步状态，快速筛选相关线索。
+查看HTTP/HTTPS记录、HaE标签与原始请求响应。
 
-![Watchtower 公开情报 · sample data](assets/screenshots/177/public-intelligence.png)
+![Watchtower Burps流量历史 · sample data](assets/screenshots/178/burps-history.png)
 
-### 04 · APP渗透
+### 04 · Burps重放
 
-管理有线与无线设备，连接移动端评估与平台会话。
+把选中的请求发送到Repeater，调整并对照响应。
 
-![Watchtower APP渗透 · sample data](assets/screenshots/177/app-pentest.png)
+![Watchtower Burps重放 · sample data](assets/screenshots/178/burps-repeater.png)
 
-### 05 · APP流量
+### 05 · APP设备接入
 
-按设备查看HTTPS、WebSocket与TCP/TLS流量及请求响应。
+管理USB与无线设备，区分流量采集和无障碍控制权限。
 
-![Watchtower APP流量 · sample data](assets/screenshots/177/app-traffic.png)
+![Watchtower APP设备接入 · sample data](assets/screenshots/178/app-pentest.png)
 
-### 06 · 报告编辑
+### 06 · APP流量
 
-直接编辑报告内容并实时预览，整理证据、风险与修复建议。
+查看设备业务连接、协议和采集记录；HTTPS解析取决于信任与解码条件。
 
-![Watchtower 报告编辑 · sample data](assets/screenshots/177/report-editor.png)
+![Watchtower APP流量 · sample data](assets/screenshots/178/app-traffic.png)
 
-### 07 · 报告生成
+### 07 · 小程序渗透
 
-按任务、会话或单个漏洞选择来源，使用Word模板生成交付报告。
+导入wxapkg主包与子包材料，再按模式和模型发起会话。
 
-![Watchtower 报告生成 · sample data](assets/screenshots/177/report-generation.png)
+![Watchtower 小程序渗透 · sample data](assets/screenshots/178/miniapp.png)
 
-### 08 · AI会话台
+### 08 · 公开情报
 
-在同一会话查看上下文、工具调用、关联漏洞与协作接续结果。
+按组件、等级和来源检索情报，查看本地可利用与同步状态。
 
-![Watchtower AI会话台 · sample data](assets/screenshots/177/ai-console.png)
+![Watchtower 公开情报 · sample data](assets/screenshots/178/public-intelligence.png)
 
-### 09 · Burps历史记录
+### 09 · 漏洞中心
 
-在AI会话台内查看HTTP/HTTPS历史、HaE标记与原始报文。
+结合来源、级别和状态管理发现，并回到相应证据复核。
 
-![Watchtower Burps历史记录 · sample data](assets/screenshots/177/burps-history.png)
+![Watchtower 漏洞中心 · sample data](assets/screenshots/178/findings.png)
 
-### 10 · Burps重放
+### 10 · 报告编辑
 
-将历史请求送入Repeater，在同一窗口对照请求与响应。
+编辑报告内容并预览，整理风险、复核材料与修复建议。
 
-![Watchtower Burps重放 · sample data](assets/screenshots/177/burps-repeater.png)
+![Watchtower 报告编辑 · sample data](assets/screenshots/178/report-editor.png)
+
+### 11 · 报告生成
+
+搜索和选择会话等来源，再配置相应报告选项。
+
+![Watchtower 报告生成 · sample data](assets/screenshots/178/report-generation.png)
+
+### 12 · 态势总览
+
+集中查看资产、任务、AI会话、Token及资源状态。
+
+![Watchtower 态势总览 · sample data](assets/screenshots/178/dashboard.png)
+
+### 13 · 资源水位调控
+
+根据物理内存、预留预算和资源压力估算并发，查看变化趋势。
+
+![Watchtower 资源水位调控 · sample data](assets/screenshots/178/resource-waterline.png)
+
+### 14 · 专有SKILL
+
+按模型配置名称、入口文档与任务环节绑定专有SKILL。
+
+![Watchtower 专有SKILL · sample data](assets/screenshots/178/model-skills.png)
 
 <!-- watchtower-ui-gallery:end -->
 
